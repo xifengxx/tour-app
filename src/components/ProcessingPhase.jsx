@@ -28,11 +28,10 @@ export default function ProcessingPhase({
     const check = async () => {
       if (!draftTourId) return;
       try {
-        const url = `${import.meta.env.VITE_SUPABASE_URL}/rest/v1/locations?select=id&tour_id=eq.${draftTourId}&limit=1`;
-        const res = await fetch(url, {
+        const res = await fetch(`https://qxunedraoviaonjdanag.supabase.co/rest/v1/locations?select=id&tour_id=eq.${draftTourId}&limit=1`, {
           headers: {
-            apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
-            Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+            apikey: 'sb_publishable_Pp21-3ssB3rSxwFnA-WZZw_eUHmF31E',
+            Authorization: 'Bearer sb_publishable_Pp21-3ssB3rSxwFnA-WZZw_eUHmF31E',
           },
         });
         if (!res.ok) return;
