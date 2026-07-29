@@ -125,14 +125,10 @@ export default function TourEdit() {
       setPhase('processing');
       setSaveMsg(`✅ 草稿已保存 (ID: ${uuid})`);
 
-      // Trigger AI processing
-      const { data: { session } } = await supabase.auth.getSession();
-      fetch('/api/process-tour', {
+      // Trigger Supabase Edge Function
+      fetch('https://qxunedraoviaonjdanag.supabase.co/functions/v1/process-tour', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${session?.access_token || ''}`,
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ tourId: uuid }),
       }).catch(() => {});
     } catch (e) {
