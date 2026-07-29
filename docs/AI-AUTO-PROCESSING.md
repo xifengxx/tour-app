@@ -142,6 +142,22 @@ TourEdit 保存草稿 → await fetch(Edge Function) ──→ 成功：window.l
 修复：`supabase secrets set SB_SERVICE_ROLE_KEY=<legacy service_role JWT>`。
 验证：E2E 测试 5 地点 + 3 路线 + status=done 全部落库（已清理测试数据）。
 
+## 2026-07-30 第三根因：路线写入静默失败（叠加问题）
+
+真实导览跑完后 locations 落库但 routes 为 0，函数却返回 success。日志显示
+"Writing 17 locs + 3 routes" → "Done!"。逐层排查出三个叠加问题：
+
+1. **写入不检查 res.ok**：fetch 对 4xx 不抛异常，409/400 全部静默丢弃。
+2. **主键全局冲突**：DeepSeek 每条路线都返回 "r1"/"r2"/"r3"，而 routes.id 是
+   全局主键，与其他导览（种子数据）冲突 → 409。locations 的 slug id 同理。
+   修复：id 统一加 tourId 前缀做命名空间（`{tourId前8位}-{slug}`）。
+3. **stops 格式漂移**：DeepSeek 把 stops 返回成 `[{day,order,poi}]` 对象数组，
+   且 poi 是路线步骤自造的 slug，与提取步骤的 id 对不上。
+   修复：prompt 明确要求 stops 为地点 id 字符串数组；代码兼容对象格式并做
+   slug/中文名/包含关系三重匹配，匹配不上的站点丢弃。
+
+验证：真实导览重跑 → 10 地点 + 3 路线（7/5/5 站点）+ 0 无效引用 + status=done。
+
 ## 已排除的变量
 
 - PWA Service Worker（已从构建中移除）

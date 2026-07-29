@@ -22,6 +22,26 @@ async function setStatus(tourId: string, status: string) {
   }).catch(() => {});
 }
 
+// Write helper — fetch does NOT throw on 4xx/5xx, so check res.ok explicitly.
+// (An earlier version silently dropped all writes when a payload was malformed.)
+async function postRows(table: string, rows: any[]) {
+  if (!rows.length) return;
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}`, {
+    method: "POST",
+    headers: hdr,
+    body: JSON.stringify(rows),
+  });
+  if (!res.ok) throw new Error(`POST ${table}: ${res.status} ${await res.text()}`);
+}
+
+async function deleteRows(table: string, tourId: string) {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}?tour_id=eq.${tourId}`, {
+    method: "DELETE",
+    headers: hdr,
+  });
+  if (!res.ok) throw new Error(`DELETE ${table}: ${res.status} ${await res.text()}`);
+}
+
 async function gaode(name: string, city: string) {
   const kw = encodeURIComponent(`${city} ${name}`);
   const r = await fetch(`https://restapi.amap.com/v3/place/text?keywords=${kw}&key=${GAODE_KEY}&types=风景名胜|旅游景点`);
@@ -84,28 +104,53 @@ Deno.serve(async (req: Request) => {
       l.layers = cd.layers || {}; l.reflection = cd.reflection || ""; l.practical = cd.practical || {};
     }
 
+    // DeepSeek ids (slugs like "r1", "yujing-feng") are NOT globally unique,
+    // but locations.id / routes.id are global primary keys. Scope them per tour
+    // or writes collide with other tours (409 duplicate key).
+    const scope = tourId.slice(0, 8);
+    const slugToDbId = new Map(locs.map(l => [l.id, `${scope}-${l.id}`]));
+
+    // DeepSeek's route step may reference stops by slug, Chinese name, or a
+    // variant ("玉京峰景区") — resolve all of these back to the location db id.
+    const resolveStop = (s: any) => {
+      const key = String(s).trim();
+      if (!key) return undefined;
+      if (slugToDbId.has(key)) return slugToDbId.get(key);
+      const hit = locs.find(l => l.name === key || key.includes(l.name) || l.name.includes(key));
+      return hit ? slugToDbId.get(hit.id) : undefined;
+    };
+
     // 4. Routes
     const rr = await deepseek([
       { role: "system", content: "你是旅游路线规划师。只返回JSON。" },
-      { role: "user", content: `${destName}路线。地点: ${locs.map(l => `${l.id}:${l.name}`).join(",")}\n\n3条（2日/1日/主题）。JSON: {"routes":[{"id":"r1","day_label":"2日游","title":"","stops":[],"narrative":"","sort_order":0}]}` },
+      { role: "user", content: `${destName}路线。可选地点（id: 名称）: ${locs.map(l => `${l.id}: ${l.name}`).join(", ")}\n\n规划3条路线（2日游/1日游/主题游）。注意：stops 必须是由上面地点的 id 组成的字符串数组，如 ["yujing-feng","sanqing-palace"]，严禁返回对象或使用地点以外的 id。JSON: {"routes":[{"day_label":"2日游","title":"","stops":["id1","id2"],"narrative":""}]}` },
     ]);
-    const routes = (rr.routes || []).map((r: any, i: number) => ({ id: r.id, day_label: r.day_label || "", title: r.title, stops: r.stops || [], narrative: r.narrative || "", sort_order: i }));
+    // Normalize payloads: DeepSeek may return non-string fields or a stops
+    // string instead of an array — PostgREST rejects those and the write fails.
+    const routes = (rr.routes || []).map((r: any, i: number) => ({
+      id: `${scope}-r${i + 1}`,
+      day_label: String(r.day_label || ""),
+      title: String(r.title || `路线${i + 1}`),
+      stops: (Array.isArray(r.stops) ? r.stops : [])
+        .map((s: any) => resolveStop(s && typeof s === "object" ? (s.poi ?? s.id ?? s.name) : s))
+        .filter(Boolean),
+      narrative: typeof r.narrative === "string" ? r.narrative : "",
+      sort_order: i,
+    })).filter(r => r.stops.length > 0);
 
     // 5. Write
     console.log(`Writing ${locs.length} locs + ${routes.length} routes`);
-    await fetch(`${SUPABASE_URL}/rest/v1/locations?tour_id=eq.${tourId}`, { method: "DELETE", headers: hdr });
-    await fetch(`${SUPABASE_URL}/rest/v1/routes?tour_id=eq.${tourId}`, { method: "DELETE", headers: hdr });
-    for (const l of locs) {
-      await fetch(`${SUPABASE_URL}/rest/v1/locations`, { method: "POST", headers: hdr, body: JSON.stringify({ id: l.id, tour_id: tourId, name: l.name, lat: l.lat, lng: l.lng, elevation: l.elevation, importance: l.importance, tags: l.tags, layers: l.layers, reflection: l.reflection, practical: l.practical, sort_order: l.sort_order }) });
-    }
-    await fetch(`${SUPABASE_URL}/rest/v1/content_layers?tour_id=eq.${tourId}`, { method: "DELETE", headers: hdr });
-    for (const ly of [
+    await deleteRows("locations", tourId);
+    await deleteRows("routes", tourId);
+    await postRows("locations", locs.map(l => ({ id: slugToDbId.get(l.id), tour_id: tourId, name: l.name, lat: l.lat, lng: l.lng, elevation: l.elevation, importance: l.importance, tags: l.tags, layers: l.layers, reflection: l.reflection, practical: l.practical, sort_order: l.sort_order })));
+    await deleteRows("content_layers", tourId);
+    await postRows("content_layers", [
       { layer_key: "novel", name: "文学意境", icon: "📖", color: "#c0392b", sort_order: 0 },
       { layer_key: "history", name: "历史掌故", icon: "🏛", color: "#d35400", sort_order: 1 },
       { layer_key: "folklore", name: "民间传说", icon: "🐉", color: "#27ae60", sort_order: 2 },
       { layer_key: "customs", name: "地域文化", icon: "🎭", color: "#2980b9", sort_order: 3 },
-    ]) { await fetch(`${SUPABASE_URL}/rest/v1/content_layers`, { method: "POST", headers: hdr, body: JSON.stringify({ ...ly, tour_id: tourId }) }); }
-    for (const r of routes) { await fetch(`${SUPABASE_URL}/rest/v1/routes`, { method: "POST", headers: hdr, body: JSON.stringify({ id: r.id, tour_id: tourId, day_label: r.day_label, title: r.title, stops: r.stops, narrative: r.narrative, sort_order: r.sort_order }) }); }
+    ].map(ly => ({ ...ly, tour_id: tourId })));
+    await postRows("routes", routes.map(r => ({ id: r.id, tour_id: tourId, day_label: r.day_label, title: r.title, stops: r.stops, narrative: r.narrative, sort_order: r.sort_order })));
 
     console.log("Done!");
     await setStatus(tourId, "done");
