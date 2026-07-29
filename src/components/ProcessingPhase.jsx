@@ -29,8 +29,9 @@ export default function ProcessingPhase({
       if (!draftTourId) return;
       const { count, error } = await supabase
         .from('locations')
-        .select('id', { count: 'exact', head: true })
-        .eq('tour_id', draftTourId);
+        .select('id', { count: 'exact', head: false })
+        .eq('tour_id', draftTourId)
+        .limit(1);
       if (error) return;
       setPollCount(prev => prev + 1);
       if (count > 0) {

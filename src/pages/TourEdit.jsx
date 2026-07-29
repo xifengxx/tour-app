@@ -109,13 +109,13 @@ export default function TourEdit() {
     try {
       let uuid = draftTourId;
       if (!uuid) {
-        const { data: newTour, error } = await supabase
+        const { data, error } = await supabase
           .from('tours')
           .insert({ ...tourData, user_id: user.id })
-          .select()
-          .single();
-        if (error) throw error;
-        uuid = newTour.id;
+          .select('id');
+        if (error) { console.error('Insert fail:', error); throw error; }
+        if (!data || data.length === 0) throw new Error('保存失败');
+        uuid = data[0].id;
         setDraftTourId(uuid);
         navigate(`/tour/${uuid}/edit`, { replace: true });
       } else {
