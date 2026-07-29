@@ -1,0 +1,34 @@
+@import "tailwindcss";
+
+/* shadcn/ui theming — Tailwind CSS v4 */
+@theme {
+  --color-background: #0f0f1a;
+  --color-foreground: #c8c8d8;
+  --color-card: #1c1c32;
+  --color-card-foreground: #c8c8d8;
+  --color-primary: #dc2626;
+  --color-primary-foreground: #ffffff;
+  --color-secondary: #242444;
+  --color-secondary-foreground: #c8c8d8;
+  --color-muted: #ffffff0d;
+  --color-muted-foreground: #6b7280;
+  --color-accent: #ffffff0d;
+  --color-accent-foreground: #c8c8d8;
+  --color-destructive: #ef4444;
+  --color-destructive-foreground: #ffffff;
+  --color-border: #ffffff0d;
+  --color-input: #ffffff0d;
+  --color-ring: #dc2626;
+  --radius: 0.75rem;
+}
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", "Noto Sans SC", sans-serif;
+  background: var(--color-background);
+  color: var(--color-foreground);
+}
+#root { min-height: 100vh; }
+
+/* AMap container fixes */
+.amap-container { background: #0f0f1a !important; }

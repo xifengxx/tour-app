@@ -1,0 +1,34 @@
+const ROUTE_COLORS = ['#e74c3c', '#f39c12', '#3498db', '#2ecc71', '#9b59b6'];
+
+export default function RouteBar({ routes, currentRouteId, onSelectRoute }) {
+  if (!routes || routes.length === 0) return null;
+
+  return (
+    <div className="absolute top-28 left-0 right-0 z-10 px-4 flex gap-2 overflow-x-auto pointer-events-none">
+      {routes.filter(r => r.id !== 'extra').map((route, i) => {
+        const color = ROUTE_COLORS[i % ROUTE_COLORS.length];
+        const active = currentRouteId === route.id;
+        return (
+          <button
+            key={route.id}
+            onClick={() => onSelectRoute(route)}
+            className={`pointer-events-auto px-4 py-2 rounded-full text-xs font-semibold whitespace-nowrap backdrop-blur border transition-all flex items-center gap-1.5
+              ${active ? 'text-white border-transparent' : 'bg-[#1c1c32]/90 text-gray-400 border-white/10'}`}
+            style={active ? { background: color } : {}}
+          >
+            <span className="w-2 h-2 rounded-full" style={{ background: color }} />
+            {route.day} {route.title}
+          </button>
+        );
+      })}
+      {currentRouteId && (
+        <button
+          onClick={() => onSelectRoute(null)}
+          className="pointer-events-auto px-3 py-2 rounded-full text-xs bg-white/10 text-gray-300 whitespace-nowrap"
+        >
+          ✕ 清除筛选
+        </button>
+      )}
+    </div>
+  );
+}

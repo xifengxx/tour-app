@@ -1,0 +1,266 @@
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
+import { useTourData } from '../hooks/useTourData';
+import { useAuth } from '../contexts/AuthContext';
+import NavBar from '../components/NavBar';
+import { Button } from '@/components/ui/button';
+import RouteBar from '../components/RouteBar';
+import ContentCard from '../components/ContentCard';
+import DetailModal from '../components/DetailModal';
+import { Share2, Check } from 'lucide-react';
+
+const ROUTE_COLORS = ['#e74c3c','#f39c12','#3498db','#2ecc71','#9b59b6'];
+const IMPORTANCE_COLORS = ['#95a5a6','#95a5a6','#3498db','#f39c12','#e74c3c','#e74c3c'];
+
+export default function TourView() {
+  const { tourId } = useParams();
+  const navigate = useNavigate();
+  const { user } = useAuth();
+  const mapRef = useRef(null);
+  const mapInstance = useRef(null);
+  const markersRef = useRef([]);
+  const routePolylinesRef = useRef({});
+  const locByIdRef = useRef({});
+
+  const [currentLoc, setCurrentLoc] = useState(null);
+  const [currentLayer, setCurrentLayer] = useState('novel');
+  const [currentRouteId, setCurrentRouteId] = useState(null);
+  const [showCard, setShowCard] = useState(true);
+  const [showDetail, setShowDetail] = useState(false);
+  const [toast, setToast] = useState(null);
+
+  const { tour, loading } = useTourData(tourId);
+
+  // Init map
+  useEffect(() => {
+    if (!tour || mapInstance.current) return;
+    const init = () => {
+      if (typeof window.AMap === 'undefined') { setTimeout(init, 200); return; }
+      const bounds = tour.destination.bounds;
+      const map = new window.AMap.Map(mapRef.current, {
+        center: [(bounds[0][1] + bounds[1][1]) / 2, (bounds[0][0] + bounds[1][0]) / 2],
+        zoom: 12, resizeEnable: true,
+        mapStyle: 'amap://styles/normal'
+      });
+      mapInstance.current = map;
+
+      // Place markers
+      tour.locations.forEach((loc) => {
+        locByIdRef.current[loc.id] = loc;
+        const color = IMPORTANCE_COLORS[Math.min(loc.importance || 0, 5)];
+        const size = (loc.importance || 0) >= 4 ? 32 : 26;
+        const m = new window.AMap.Marker({
+          position: [loc.lng, loc.lat],
+          title: loc.name,
+          icon: new window.AMap.Icon({
+            size: new window.AMap.Size(size, size + 10),
+            imageSize: new window.AMap.Size(size, size + 10),
+            image: 'data:image/svg+xml,' + encodeURIComponent(
+              `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size + 10}" viewBox="0 0 ${size} ${size + 10}">` +
+              `<filter id="s"><feDropShadow dx="0" dy="1" stdDeviation="1.5" flood-opacity="0.4"/></filter>` +
+              `<path d="M${size / 2} 0 C${size * 0.23} 0 0 ${size * 0.23} 0 ${size / 2} C0 ${size * 0.77} ${size / 2} ${size + 6} ${size / 2} ${size + 6}z" fill="${color}" filter="url(#s)"/>` +
+              `<circle cx="${size / 2}" cy="${size / 2}" r="${size * 0.22}" fill="#fff" opacity="0.9"/>` +
+              `</svg>`
+            )
+          }),
+          offset: new window.AMap.Pixel(-size / 2, -(size + 10)),
+          zIndex: 100 + (loc.importance || 0)
+        });
+        m._locData = loc;
+        m.on('click', () => { selectLoc(loc); });
+        map.add(m);
+        markersRef.current.push(m);
+      });
+
+      // Draw routes
+      (tour.routes || []).forEach((route, ri) => {
+        if (route.id === 'extra') return;
+        const path = route.stops.map(id => {
+          const l = locByIdRef.current[id];
+          return l ? [l.lng, l.lat] : null;
+        }).filter(Boolean);
+        if (path.length > 1) {
+          const poly = new window.AMap.Polyline({
+            path, map,
+            strokeColor: ROUTE_COLORS[ri % ROUTE_COLORS.length],
+            strokeWeight: 4, strokeOpacity: 0.6,
+          });
+          routePolylinesRef.current[route.id] = {
+            polyline: poly, route,
+            color: ROUTE_COLORS[ri % ROUTE_COLORS.length]
+          };
+        }
+      });
+
+      map.setFitView();
+      setTimeout(() => setShowCard(true), 500);
+    };
+    init();
+  }, [tour]);
+
+  // ── Actions ──
+  const handleShare = () => {
+    const url = window.location.href;
+    navigator.clipboard.writeText(url).then(() => {
+      setToast('已复制链接');
+      setTimeout(() => setToast(null), 2000);
+    }).catch(() => {
+      setToast('复制失败，请手动复制');
+      setTimeout(() => setToast(null), 2000);
+    });
+  };
+
+  const selectLoc = useCallback((loc) => {
+    setCurrentLoc(loc);
+    setCurrentLayer('novel');
+    setShowCard(true);
+    if (mapInstance.current) {
+      mapInstance.current.setCenter([loc.lng, loc.lat]);
+      mapInstance.current.setZoom(16);
+    }
+  }, []);
+
+  const selectRoute = useCallback((route) => {
+    if (!route || !route.stops || route.stops.length === 0) {
+      setCurrentRouteId(null);
+      setCurrentLoc(null);
+      markersRef.current.forEach(m => m.setOptions({ opacity: 1 }));
+      Object.values(routePolylinesRef.current).forEach(rp => {
+        rp.polyline.setOptions({ strokeOpacity: 0.6, strokeWeight: 4 });
+        rp.polyline.show();
+      });
+      if (mapInstance.current) mapInstance.current.setFitView();
+      return;
+    }
+
+    const newId = currentRouteId === route.id ? null : route.id;
+    setCurrentRouteId(newId);
+    const firstStop = newId ? locByIdRef.current[route.stops[0]] : null;
+    setCurrentLoc(firstStop);
+    if (firstStop) { setCurrentLayer('novel'); setShowCard(true); }
+
+    Object.entries(routePolylinesRef.current).forEach(([rid, rp]) => {
+      if (!newId || rid === newId) {
+        rp.polyline.setOptions({ strokeOpacity: 0.8, strokeWeight: 5 });
+        rp.polyline.show();
+      } else {
+        rp.polyline.setOptions({ strokeOpacity: 0.15, strokeWeight: 2 });
+      }
+    });
+
+    if (newId) {
+      const stopIds = route.stops;
+      markersRef.current.forEach(m => {
+        m.setOptions({ opacity: stopIds.includes(m._locData?.id) ? 1 : 0.2 });
+      });
+      const map = mapInstance.current;
+      if (!map) return;
+      const firstLoc = locByIdRef.current[route.stops[0]];
+      if (firstLoc) {
+        map.setZoomAndCenter(14, [firstLoc.lng, firstLoc.lat]);
+      }
+    } else {
+      markersRef.current.forEach(m => m.setOptions({ opacity: 1 }));
+      if (mapInstance.current) mapInstance.current.setFitView();
+    }
+  }, [currentRouteId]);
+
+  // ── Computed ──
+  const filteredLocations = currentRouteId
+    ? (tour?.routes.find(r => r.id === currentRouteId)?.stops || [])
+        .map(id => locByIdRef.current[id]).filter(Boolean)
+    : (tour?.locations || []);
+
+  // ── Render ──
+  if (loading) return <div className="min-h-screen bg-[#0f0f1a] flex items-center justify-center text-gray-400">加载中...</div>;
+  if (!tour) return <div className="min-h-screen bg-[#0f0f1a] flex items-center justify-center text-gray-400">未找到导览</div>;
+
+  return (
+    <div className="h-screen flex flex-col bg-[#0f0f1a] relative">
+      {/* NavBar + subtitle */}
+      <div className="absolute top-0 left-0 right-0 z-20">
+        <NavBar
+          title={tour.meta.title}
+          rightContent={
+            <div className="flex items-center gap-1">
+              <Button variant="ghost" size="icon" onClick={handleShare} title="分享链接">
+                <Share2 className="h-4 w-4" />
+              </Button>
+              {user && tour.userId === user.id && (
+                <Button variant="secondary" size="sm" onClick={() => navigate(`/tour/${tourId}/edit`)}>
+                  编辑
+                </Button>
+              )}
+            </div>
+          }
+        />
+        <div className="px-4 pb-2 bg-gradient-to-b from-[#0f0f1a] to-transparent">
+          <p className="text-gray-400 text-xs">{tour.meta.subtitle}</p>
+        </div>
+      </div>
+
+      <RouteBar routes={tour.routes} currentRouteId={currentRouteId} onSelectRoute={selectRoute} />
+
+      {/* Map */}
+      <div ref={mapRef} className="flex-1" />
+
+      {/* Bottom card zone */}
+      <div className="absolute bottom-0 left-0 right-0 z-20 bg-[#1c1c32] rounded-t-3xl max-h-[50vh] flex flex-col shadow-2xl">
+        <div className="flex justify-center py-2 cursor-pointer" onClick={() => setShowCard(s => !s)}>
+          <div className="w-8 h-1 rounded-full bg-white/20" />
+        </div>
+
+        {showCard && (
+          <>
+            {/* Location strip */}
+            <div className="flex gap-2 px-4 pb-2 overflow-x-auto">
+              {filteredLocations.map(loc => (
+                <button
+                  key={loc.id}
+                  onClick={() => selectLoc(loc)}
+                  className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs whitespace-nowrap transition-colors
+                    ${currentLoc?.id === loc.id ? 'bg-red-600/20 text-red-400 border border-red-600/30' : 'bg-white/5 text-gray-400 border border-transparent'}`}
+                >
+                  {'⭐'.repeat(loc.importance || 1)} {loc.name}
+                </button>
+              ))}
+            </div>
+
+            {currentLoc ? (
+              <ContentCard
+                loc={currentLoc}
+                layer={currentLayer}
+                layers={tour.contentLayers}
+                onLayerChange={setCurrentLayer}
+                onShowDetail={setShowDetail}
+              />
+            ) : (
+              <div className="flex-1 flex items-center justify-center text-center px-4 pb-6">
+                <div>
+                  <div className="text-4xl mb-3">🗺️</div>
+                  <p className="text-gray-400 text-sm">点击地图标记或上方地点<br/>查看此地的小说场景与人文故事</p>
+                </div>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+
+      {showDetail && (
+        <DetailModal
+          loc={currentLoc}
+          layers={tour.contentLayers}
+          onClose={() => setShowDetail(false)}
+        />
+      )}
+
+      {/* Toast */}
+      {toast && (
+        <div className="fixed top-16 left-1/2 -translate-x-1/2 z-50 px-4 py-2 bg-card border border-border rounded-xl shadow-lg flex items-center gap-2 animate-in fade-in slide-in-from-top-2">
+          <Check className="h-4 w-4 text-green-400" />
+          <span className="text-sm text-white">{toast}</span>
+        </div>
+      )}
+    </div>
+  );
+}
