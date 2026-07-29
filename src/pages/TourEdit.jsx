@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
@@ -59,6 +59,9 @@ export default function TourEdit() {
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState('');
   const [draftTourId, setDraftTourId] = useState(tourId);
+  const [processingError, setProcessingError] = useState('');
+  // Token to invalidate a stale AI run (user went back / skipped / retried)
+  const aiRunRef = useRef(0);
 
   // Populate from loaded tour
   useEffect(() => {
@@ -125,15 +128,32 @@ export default function TourEdit() {
       setPhase('processing');
       setSaveMsg(`✅ 草稿已保存 (ID: ${uuid})`);
 
-      // Trigger Supabase Edge Function
-      fetch('https://qxunedraoviaonjdanag.supabase.co/functions/v1/process-tour', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-        },
-        body: JSON.stringify({ tourId: uuid }),
-      }).catch(() => {});
+      // Trigger Supabase Edge Function and await the result directly.
+      // (No client-side polling — a single long-lived request is far more
+      // resilient on flaky networks than repeated polls during the POST.)
+      const runId = ++aiRunRef.current;
+      setProcessingError('');
+      try {
+        const res = await fetch('https://qxunedraoviaonjdanag.supabase.co/functions/v1/process-tour', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+          },
+          body: JSON.stringify({ tourId: uuid }),
+        });
+        const result = await res.json().catch(() => ({}));
+        if (aiRunRef.current !== runId) return; // user left the processing screen
+        if (res.ok && result.success) {
+          // Reload to pull fresh locations/routes from Supabase
+          window.location.reload();
+        } else {
+          setProcessingError(result.error || `服务器返回错误 (${res.status})，请重试`);
+        }
+      } catch (e) {
+        if (aiRunRef.current !== runId) return;
+        setProcessingError(`网络请求失败：${e.message || '无法连接服务器'}。草稿已保存，可直接重试。`);
+      }
     } catch (e) {
       setSaveMsg(`❌ ${e.message}`);
     } finally {
@@ -416,14 +436,10 @@ export default function TourEdit() {
             novelTitle={novelTitle}
             novelAuthor={novelAuthor}
             sourceText={sourceText}
-            onCheckDone={(hasLocations) => {
-              if (hasLocations) {
-                // Reload the page to get fresh data from Supabase
-                window.location.reload();
-              }
-            }}
-            onSkip={() => setPhase('review')}
-            onBack={() => setPhase('input')}
+            error={processingError}
+            onRetry={() => { setProcessingError(''); handleSaveDraft(); }}
+            onSkip={() => { aiRunRef.current++; setPhase('review'); }}
+            onBack={() => { aiRunRef.current++; setProcessingError(''); setPhase('input'); }}
           />
         )}
 

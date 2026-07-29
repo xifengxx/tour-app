@@ -14,6 +14,14 @@ const hdr = {
   Prefer: "return=representation",
 };
 
+async function setStatus(tourId: string, status: string) {
+  await fetch(`${SUPABASE_URL}/rest/v1/tours?id=eq.${tourId}`, {
+    method: "PATCH",
+    headers: hdr,
+    body: JSON.stringify({ status }),
+  }).catch(() => {});
+}
+
 async function gaode(name: string, city: string) {
   const kw = encodeURIComponent(`${city} ${name}`);
   const r = await fetch(`https://restapi.amap.com/v3/place/text?keywords=${kw}&key=${GAODE_KEY}&types=风景名胜|旅游景点`);
@@ -36,14 +44,17 @@ Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: cors() });
   if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
 
+  let tourId: string | undefined;
   try {
-    const { tourId } = await req.json();
+    ({ tourId } = await req.json());
     if (!tourId) return json({ error: "Missing tourId" }, 400);
 
     // 1. Fetch draft (use REST directly since service_role bypasses RLS)
     const rows = await fetch(`${SUPABASE_URL}/rest/v1/tours?id=eq.${tourId}&select=*`, { headers: hdr }).then(r => r.json());
     const tour = Array.isArray(rows) ? rows[0] : rows;
     if (!tour) return json({ error: "Tour not found" }, 404);
+
+    await setStatus(tourId, "processing");
 
     const destName = tour.destination?.name || "";
     const destRegion = tour.destination?.region || "";
@@ -97,9 +108,11 @@ Deno.serve(async (req: Request) => {
     for (const r of routes) { await fetch(`${SUPABASE_URL}/rest/v1/routes`, { method: "POST", headers: hdr, body: JSON.stringify({ id: r.id, tour_id: tourId, day_label: r.day_label, title: r.title, stops: r.stops, narrative: r.narrative, sort_order: r.sort_order }) }); }
 
     console.log("Done!");
+    await setStatus(tourId, "done");
     return json({ success: true, locations: locs.length, routes: routes.length });
   } catch (e: any) {
     console.error(e);
+    if (tourId) await setStatus(tourId, "error");
     return json({ error: e.message }, 500);
   }
 });

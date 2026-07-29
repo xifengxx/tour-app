@@ -104,10 +104,29 @@ const id = setInterval(() => {
 
 | 问题 | 状态 | 说明 |
 |------|------|------|
-| ProcessingPhase 轮询 ERR_INTERNET_DISCONNECTED | 🔴 未解决 | console 手动 fetch 正常，但 useEffect+setInterval 中 fetch 失败 |
+| ProcessingPhase 轮询 ERR_INTERNET_DISCONNECTED | ✅ 已解决（2026-07-29） | 根因：长时挂起的 Edge Function POST 与每 5s 轮询 GET 并发，国内网络下长连接被重置。方案：移除轮询，前端直接 await Edge Function 响应；tours 表新增 status 字段（draft/processing/done/error） |
 | Edge Function 函数调用 | ✅ 正常 | curl 直接调用返回正确数据 |
 | 草稿保存 | ✅ 正常 | POST 到 Supabase 成功 |
 | 主页加载 | ✅ 正常 | Supabase 查询 tours 表成功 |
+
+## 2026-07-29 架构调整：await 响应替代轮询
+
+原设计在触发 Edge Function 后由 ProcessingPhase 每 5 秒轮询 locations 表检测完成。
+在国内网络环境下，长时挂起的 POST（1-5 分钟）与高频轮询并发，连接被重置后
+Chrome 对轮询请求报 `net::ERR_INTERNET_DISCONNECTED`（请求未发出，与应用层无关）。
+
+现架构：
+
+```
+TourEdit 保存草稿 → await fetch(Edge Function) ──→ 成功：window.location.reload()
+                                                  └─→ 失败：ProcessingPhase 显示错误 + 重试按钮
+```
+
+同时 `tours.status` 字段记录处理状态（Edge Function 写入），供后续"关闭页面后回来查看进度"使用。
+
+部署注意：
+1. 数据库执行：`ALTER TABLE tours ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'draft';`
+2. 重新部署函数：`npx supabase functions deploy process-tour --project-ref qxunedraoviaonjdanag --no-verify-jwt`
 
 ## 已排除的变量
 

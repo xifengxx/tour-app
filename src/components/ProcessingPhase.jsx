@@ -1,9 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
-import { supabase } from '../lib/supabase';
 
 /**
  * Shown after user saves a draft and triggers automated AI processing.
- * Polls Supabase to detect when AI has finished writing locations.
+ * Pure waiting UI — the Edge Function request is awaited by TourEdit,
+ * which reloads the page on success or passes an error here for retry.
  */
 export default function ProcessingPhase({
   draftTourId,
@@ -13,50 +13,13 @@ export default function ProcessingPhase({
   novelTitle,
   novelAuthor,
   sourceText,
-  onCheckDone,
+  error,
+  onRetry,
   onSkip,
   onBack,
 }) {
-  const [pollCount, setPollCount] = useState(0);
-  const [hasResult, setHasResult] = useState(false);
   const [elapsed, setElapsed] = useState(0);
-  const intervalRef = useRef(null);
   const timerRef = useRef(null);
-
-  // Poll Supabase every 5 seconds to check if AI has written locations
-  useEffect(() => {
-    const check = async () => {
-      if (!draftTourId) return;
-      try {
-        const res = await fetch(`https://qxunedraoviaonjdanag.supabase.co/rest/v1/locations?select=id&tour_id=eq.${draftTourId}&limit=1`, {
-          headers: {
-            apikey: 'sb_publishable_Pp21-3ssB3rSxwFnA-WZZw_eUHmF31E',
-            Authorization: 'Bearer sb_publishable_Pp21-3ssB3rSxwFnA-WZZw_eUHmF31E',
-          },
-        });
-        if (!res.ok) return;
-        const data = await res.json();
-        setPollCount(prev => prev + 1);
-        if (Array.isArray(data) && data.length > 0) {
-          setHasResult(true);
-          if (intervalRef.current) clearInterval(intervalRef.current);
-          if (timerRef.current) clearInterval(timerRef.current);
-          setTimeout(() => onCheckDone(true), 1500);
-        }
-      } catch {
-        // network error, ignore and retry
-      }
-    };
-
-    const initial = setTimeout(check, 3000);
-    intervalRef.current = setInterval(check, 5000);
-
-    return () => {
-      clearTimeout(initial);
-      if (intervalRef.current) clearInterval(intervalRef.current);
-      if (timerRef.current) clearInterval(timerRef.current);
-    };
-  }, [draftTourId, onCheckDone]);
 
   // Elapsed time counter
   useEffect(() => {
@@ -71,14 +34,34 @@ export default function ProcessingPhase({
     return `${m} 分 ${sec} 秒`;
   };
 
-  if (hasResult) {
+  if (error) {
     return (
       <div className="space-y-4">
-        <section className="bg-green-600/10 border border-green-600/20 rounded-2xl p-8 text-center">
-          <div className="text-6xl mb-6">✅</div>
-          <h2 className="text-green-400 font-bold text-lg mb-2">AI 处理完成！</h2>
-          <p className="text-gray-400 text-sm">正在加载结果...</p>
+        <section className="bg-red-600/10 border border-red-600/20 rounded-2xl p-8 text-center">
+          <div className="text-6xl mb-6">⚠️</div>
+          <h2 className="text-red-400 font-bold text-lg mb-2">AI 处理失败</h2>
+          <p className="text-gray-400 text-sm mb-6 break-all">{error}</p>
+          <div className="flex gap-2 max-w-sm mx-auto">
+            <button
+              onClick={onBack}
+              className="flex-1 py-3 bg-white/5 text-muted-foreground rounded-xl text-sm hover:bg-white/10 transition-colors"
+            >
+              ← 返回修改
+            </button>
+            <button
+              onClick={onRetry}
+              className="flex-1 py-3 bg-red-600 text-white rounded-xl text-sm hover:bg-red-500 transition-colors"
+            >
+              🔄 重试
+            </button>
+          </div>
         </section>
+        <button
+          onClick={onSkip}
+          className="w-full py-3 bg-white/5 text-muted-foreground rounded-xl text-sm hover:bg-white/10 transition-colors"
+        >
+          跳过 → 手动编辑
+        </button>
       </div>
     );
   }
@@ -103,8 +86,6 @@ export default function ProcessingPhase({
           </div>
           <span>·</span>
           <div>已等待 {formatElapsed(elapsed)}</div>
-          <span>·</span>
-          <div>已检测 {pollCount} 次</div>
         </div>
 
         {/* Time estimate */}

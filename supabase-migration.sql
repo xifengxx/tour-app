@@ -178,3 +178,10 @@ CREATE POLICY "Users can manage tips of own tours"
   USING (
     EXISTS (SELECT 1 FROM tours WHERE id = tour_id AND user_id = auth.uid())
   );
+
+-- ============================================================
+-- AI 处理状态（2026-07-29 新增）
+-- draft → processing → done / error，由 Edge Function 写入
+-- 若 tours 表已存在，单独在 SQL Editor 运行下面这一句即可
+-- ============================================================
+ALTER TABLE tours ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'draft';
