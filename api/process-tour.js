@@ -12,18 +12,19 @@
  */
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
-const SUPABASE_KEY = process.env.VITE_SUPABASE_ANON_KEY;
-const DEEPSEEK_KEY = process.env.DEEPSEEK_API_KEY;
-const GAODE_KEY = '2ff1bf71b26aed0a92eb4ab63657bb25';
+const SUPABASE_ANON_KEY = process.env.VITE_SUPABASE_ANON_KEY;
 
-function supabaseHeaders() {
+function supabaseHeaders(userToken) {
   return {
-    apikey: SUPABASE_KEY,
-    Authorization: `Bearer ${SUPABASE_KEY}`,
+    apikey: SUPABASE_ANON_KEY,
+    Authorization: `Bearer ${userToken || SUPABASE_ANON_KEY}`,
     'Content-Type': 'application/json',
     Prefer: 'return=representation',
   };
 }
+const DEEPSEEK_KEY = process.env.DEEPSEEK_API_KEY;
+const GAODE_KEY = '2ff1bf71b26aed0a92eb4ab63657bb25';
+
 
 async function fetchGaodeCoord(name, city) {
   const kw = encodeURIComponent(`${city || ''} ${name}`);
@@ -72,11 +73,17 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'Missing tourId' });
   }
 
+  // Extract user's JWT from request
+  const authHeader = req.headers.authorization || '';
+  const userToken = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
+
+  const headers = supabaseHeaders(userToken);
+
   try {
     // ── 1. Fetch tour draft ──
     const tourRes = await fetch(
       `${SUPABASE_URL}/rest/v1/tours?id=eq.${tourId}&select=*`,
-      { headers: supabaseHeaders() }
+      { headers }
     );
     const tours = await tourRes.json();
     if (!tours || tours.length === 0) {
@@ -239,10 +246,10 @@ ${locations.map(l => `- ${l.name} (重要性: ${l.importance}/5)`).join('\n')}
 
     // Delete old data
     await fetch(`${SUPABASE_URL}/rest/v1/locations?tour_id=eq.${tourId}`, {
-      method: 'DELETE', headers: supabaseHeaders(),
+      method: 'DELETE', headers: headers,
     });
     await fetch(`${SUPABASE_URL}/rest/v1/routes?tour_id=eq.${tourId}`, {
-      method: 'DELETE', headers: supabaseHeaders(),
+      method: 'DELETE', headers: headers,
     });
 
     // Insert locations
@@ -263,7 +270,7 @@ ${locations.map(l => `- ${l.name} (重要性: ${l.importance}/5)`).join('\n')}
       };
       await fetch(`${SUPABASE_URL}/rest/v1/locations`, {
         method: 'POST',
-        headers: supabaseHeaders(),
+        headers: headers,
         body: JSON.stringify(body),
       });
     }
@@ -284,13 +291,13 @@ ${locations.map(l => `- ${l.name} (重要性: ${l.importance}/5)`).join('\n')}
         ];
 
     await fetch(`${SUPABASE_URL}/rest/v1/content_layers?tour_id=eq.${tourId}`, {
-      method: 'DELETE', headers: supabaseHeaders(),
+      method: 'DELETE', headers: headers,
     });
 
     for (const layer of layerDefs) {
       await fetch(`${SUPABASE_URL}/rest/v1/content_layers`, {
         method: 'POST',
-        headers: supabaseHeaders(),
+        headers: headers,
         body: JSON.stringify({ ...layer, tour_id: tourId }),
       });
     }
@@ -308,7 +315,7 @@ ${locations.map(l => `- ${l.name} (重要性: ${l.importance}/5)`).join('\n')}
       };
       await fetch(`${SUPABASE_URL}/rest/v1/routes`, {
         method: 'POST',
-        headers: supabaseHeaders(),
+        headers: headers,
         body: JSON.stringify(body),
       });
     }
