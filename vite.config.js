@@ -50,6 +50,16 @@ export default defineConfig({
               expiration: { maxEntries: 200, maxAgeSeconds: 60 * 60 * 24 * 7 },
             },
           },
+          {
+            // Don't cache Supabase API calls — always go to network
+            urlPattern: /^https:\/\/.*\.supabase\.co\/.*/,
+            handler: 'NetworkOnly',
+          },
+          {
+            // Don't cache Gaode REST API
+            urlPattern: /^https:\/\/restapi\.amap\.com\/.*/,
+            handler: 'NetworkOnly',
+          },
         ],
       },
     }),
