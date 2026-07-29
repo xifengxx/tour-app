@@ -27,14 +27,14 @@ export default function ProcessingPhase({
   useEffect(() => {
     const check = async () => {
       if (!draftTourId) return;
-      const { count, error } = await supabase
+      const { data, error } = await supabase
         .from('locations')
-        .select('id', { count: 'exact', head: false })
+        .select('id')
         .eq('tour_id', draftTourId)
         .limit(1);
       if (error) return;
       setPollCount(prev => prev + 1);
-      if (count > 0) {
+      if (data && data.length > 0) {
         setHasResult(true);
         if (intervalRef.current) clearInterval(intervalRef.current);
         if (timerRef.current) clearInterval(timerRef.current);
