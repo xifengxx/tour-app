@@ -124,6 +124,13 @@ export default function TourEdit() {
 
       setPhase('processing');
       setSaveMsg(`✅ 草稿已保存 (ID: ${uuid})`);
+
+      // Trigger AI processing (fire and forget)
+      fetch('/api/process-tour', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tourId: uuid }),
+      }).catch(() => {});
     } catch (e) {
       setSaveMsg(`❌ ${e.message}`);
     } finally {
