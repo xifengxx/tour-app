@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 
 const STATIC_DATA = {
@@ -14,14 +14,18 @@ export function useTourData(tourId) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [source, setSource] = useState(null); // 'supabase' | 'static'
+  const mountedRef = useRef(true);
 
   useEffect(() => {
-    if (!tourId) { setLoading(false); return; }
-    let cancelled = false;
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
 
-    async function load() {
-      setLoading(true);
-
+  // Returns the loaded tour, or null on failure. Safe to call repeatedly.
+  const load = useCallback(async () => {
+    if (!tourId) { setLoading(false); return null; }
+    setLoading(true);
+    try {
       // Try Supabase first
       const { data: supabaseTour, error: sbErr } = await supabase
         .from('tours')
@@ -30,38 +34,40 @@ export function useTourData(tourId) {
         .single();
 
       if (!sbErr && supabaseTour) {
-        if (!cancelled) {
-          setTour(normalizeTour(supabaseTour));
+        const t = normalizeTour(supabaseTour);
+        if (mountedRef.current) {
+          setTour(t);
           setSource('supabase');
+          setError(null);
           setLoading(false);
         }
-        return;
+        return t;
       }
 
       // Fall back to static JSON
       const file = STATIC_DATA[tourId];
       if (file) {
-        try {
-          const res = await fetch(file);
-          const data = await res.json();
-          if (!cancelled) {
-            setTour(data);
-            setSource('static');
-            setLoading(false);
-          }
-        } catch (e) {
-          if (!cancelled) { setError(e.message); setLoading(false); }
+        const res = await fetch(file);
+        const data = await res.json();
+        if (mountedRef.current) {
+          setTour(data);
+          setSource('static');
+          setError(null);
+          setLoading(false);
         }
-      } else {
-        if (!cancelled) { setError('Tour not found'); setLoading(false); }
+        return data;
       }
+      if (mountedRef.current) { setError('Tour not found'); setLoading(false); }
+      return null;
+    } catch (e) {
+      if (mountedRef.current) { setError(e.message); setLoading(false); }
+      return null;
     }
-
-    load();
-    return () => { cancelled = true; };
   }, [tourId]);
 
-  return { tour, loading, error, source };
+  useEffect(() => { load(); }, [load]);
+
+  return { tour, loading, error, source, reload: load };
 }
 
 /**

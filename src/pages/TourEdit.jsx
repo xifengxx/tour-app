@@ -17,7 +17,7 @@ const DEFAULT_LAYERS = [
 
 export default function TourEdit() {
   const { tourId } = useParams();
-  const { tour, loading, source: dataSource } = useTourData(tourId);
+  const { tour, loading, source: dataSource, reload: reloadTour } = useTourData(tourId);
   const { user } = useAuth();
   const navigate = useNavigate();
 
@@ -60,8 +60,25 @@ export default function TourEdit() {
   const [saveMsg, setSaveMsg] = useState('');
   const [draftTourId, setDraftTourId] = useState(tourId);
   const [processingError, setProcessingError] = useState('');
+  // 'ai' = retry reruns AI processing; 'reload' = AI done, just refetch results
+  const [retryMode, setRetryMode] = useState('ai');
   // Token to invalidate a stale AI run (user went back / skipped / retried)
   const aiRunRef = useRef(0);
+
+  // Refetch results after AI completes — no full-page reload, so a flaky
+  // network can never kill the page with ERR_INTERNET_DISCONNECTED.
+  const loadResults = async (runId) => {
+    const fresh = await reloadTour();
+    if (aiRunRef.current !== runId) return true; // user left; stay silent
+    if (fresh && fresh.locations && fresh.locations.length > 0) {
+      setProcessingError('');
+      setPhase('review');
+      return true;
+    }
+    setRetryMode('reload');
+    setProcessingError('AI 处理已完成，但网络异常导致结果加载失败。点「重试」重新加载（不会重复调用 AI）。');
+    return false;
+  };
 
   // Populate from loaded tour
   useEffect(() => {
@@ -145,13 +162,14 @@ export default function TourEdit() {
         const result = await res.json().catch(() => ({}));
         if (aiRunRef.current !== runId) return; // user left the processing screen
         if (res.ok && result.success) {
-          // Reload to pull fresh locations/routes from Supabase
-          window.location.reload();
+          await loadResults(runId);
         } else {
+          setRetryMode('ai');
           setProcessingError(result.error || `服务器返回错误 (${res.status})，请重试`);
         }
       } catch (e) {
         if (aiRunRef.current !== runId) return;
+        setRetryMode('ai');
         setProcessingError(`网络请求失败：${e.message || '无法连接服务器'}。草稿已保存，可直接重试。`);
       }
     } catch (e) {
@@ -437,7 +455,23 @@ export default function TourEdit() {
             novelAuthor={novelAuthor}
             sourceText={sourceText}
             error={processingError}
-            onRetry={() => { setProcessingError(''); handleSaveDraft(); }}
+            onRetry={async () => {
+              setProcessingError('');
+              // Always try a cheap refetch first — the AI may have finished
+              // server-side even if the POST request itself failed.
+              const runId = aiRunRef.current;
+              const fresh = await reloadTour();
+              if (aiRunRef.current !== runId) return;
+              if (fresh && fresh.locations && fresh.locations.length > 0) {
+                setPhase('review');
+                return;
+              }
+              if (retryMode === 'reload') {
+                setProcessingError('结果仍未加载成功，请检查网络连接后再试。');
+                return;
+              }
+              handleSaveDraft();
+            }}
             onSkip={() => { aiRunRef.current++; setPhase('review'); }}
             onBack={() => { aiRunRef.current++; setProcessingError(''); setPhase('input'); }}
           />
