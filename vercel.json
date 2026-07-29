@@ -1,11 +1,5 @@
 {
-  "routes": [
-    { "src": "/api/(.*)", "dest": "/api/$1" },
-    { "src": "/(.*)", "dest": "/" }
-  ],
-  "functions": {
-    "api/process-tour.js": {
-      "maxDuration": 60
-    }
-  }
+  "rewrites": [
+    { "source": "/((?!api/).*)", "destination": "/" }
+  ]
 }
