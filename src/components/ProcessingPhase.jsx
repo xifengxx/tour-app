@@ -2,9 +2,8 @@ import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 
 /**
- * Shown after user saves a draft and triggers AI processing.
+ * Shown after user saves a draft and triggers automated AI processing.
  * Polls Supabase to detect when AI has finished writing locations.
- * Provides clear guidance on what's happening and what to do.
  */
 export default function ProcessingPhase({
   draftTourId,
@@ -20,7 +19,6 @@ export default function ProcessingPhase({
 }) {
   const [pollCount, setPollCount] = useState(0);
   const [hasResult, setHasResult] = useState(false);
-  const [copied, setCopied] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const intervalRef = useRef(null);
   const timerRef = useRef(null);
@@ -29,11 +27,11 @@ export default function ProcessingPhase({
   useEffect(() => {
     const check = async () => {
       if (!draftTourId) return;
-      const { data } = await supabase
+      const { count, error } = await supabase
         .from('locations')
         .select('id', { count: 'exact', head: true })
         .eq('tour_id', draftTourId);
-      const count = data ?? (Array.isArray(data) ? data.length : 0);
+      if (error) return;
       setPollCount(prev => prev + 1);
       if (count > 0) {
         setHasResult(true);
@@ -43,9 +41,7 @@ export default function ProcessingPhase({
       }
     };
 
-    // Initial check after 3s
     const initial = setTimeout(check, 3000);
-    // Then poll every 5s
     intervalRef.current = setInterval(check, 5000);
 
     return () => {
@@ -61,14 +57,6 @@ export default function ProcessingPhase({
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
   }, []);
 
-  const copyId = () => {
-    if (!draftTourId) return;
-    navigator.clipboard.writeText(draftTourId).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    }).catch(() => {});
-  };
-
   const formatElapsed = (s) => {
     if (s < 60) return `${s} 秒`;
     const m = Math.floor(s / 60);
@@ -82,7 +70,7 @@ export default function ProcessingPhase({
         <section className="bg-green-600/10 border border-green-600/20 rounded-2xl p-8 text-center">
           <div className="text-6xl mb-6">✅</div>
           <h2 className="text-green-400 font-bold text-lg mb-2">AI 处理完成！</h2>
-          <p className="text-gray-400 text-sm">正在刷新页面以加载结果...</p>
+          <p className="text-gray-400 text-sm">正在加载结果...</p>
         </section>
       </div>
     );
@@ -91,19 +79,20 @@ export default function ProcessingPhase({
   return (
     <div className="space-y-4">
       {/* Main processing card */}
-      <section className="bg-[#1c1c32] rounded-2xl p-6 border border-white/5 text-center">
+      <section className="bg-card rounded-2xl p-6 border border-border text-center">
         {/* Spinner */}
         <div className="mb-4">
-          <div className="inline-block w-16 h-16 border-4 border-white/10 border-t-red-600 rounded-full animate-spin" />
+          <div className="inline-block w-16 h-16 border-4 border-white/10 border-t-primary rounded-full animate-spin" />
         </div>
 
         <h2 className="text-white font-bold text-lg mb-2">🤖 AI 正在分析处理</h2>
+        <p className="text-muted-foreground text-sm mb-4">服务器正在自动调用 AI 提取地点、生成内容、规划路线</p>
 
         {/* Status info */}
-        <div className="flex items-center justify-center gap-4 text-xs text-gray-400 mb-5">
+        <div className="flex items-center justify-center gap-4 text-xs text-muted-foreground mb-5">
           <div className="flex items-center gap-1">
             <span className="w-2 h-2 rounded-full bg-yellow-500 animate-pulse" />
-            等待 AI 处理
+            处理中
           </div>
           <span>·</span>
           <div>已等待 {formatElapsed(elapsed)}</div>
@@ -112,119 +101,88 @@ export default function ProcessingPhase({
         </div>
 
         {/* Time estimate */}
-        <div className="bg-[#0f0f1a] rounded-xl px-4 py-3 mb-5 max-w-sm mx-auto">
-          <div className="text-gray-400 text-xs mb-2">⏱ 预估时间</div>
+        <div className="bg-background rounded-xl px-4 py-3 mb-5 max-w-sm mx-auto">
+          <div className="text-muted-foreground text-xs mb-2">⏱ 预估时间</div>
           <div className="flex justify-between text-xs">
-            <div className="text-center">
+            <div className="text-center px-2">
+              <div className="text-white font-bold">30–60 秒</div>
+              <div className="text-muted-foreground">简单导览</div>
+            </div>
+            <div className="w-px bg-border" />
+            <div className="text-center px-2">
               <div className="text-white font-bold">1–2 分钟</div>
-              <div className="text-gray-500">简单导览<br/>(地点少/文本短)</div>
+              <div className="text-muted-foreground">完整导览</div>
             </div>
-            <div className="w-px bg-white/10" />
-            <div className="text-center">
-              <div className="text-white font-bold">3–5 分钟</div>
-              <div className="text-gray-500">完整导览<br/>(多地点+四层内容)</div>
-            </div>
-            <div className="w-px bg-white/10" />
-            <div className="text-center">
-              <div className="text-white font-bold">5–10 分钟</div>
-              <div className="text-gray-500">大型导览<br/>(长篇+复杂路线)</div>
+            <div className="w-px bg-border" />
+            <div className="text-center px-2">
+              <div className="text-white font-bold">2–5 分钟</div>
+              <div className="text-muted-foreground">大型导览</div>
             </div>
           </div>
         </div>
 
-        {/* How it works */}
-        <div className="text-left bg-[#0f0f1a] rounded-xl p-4 mb-5">
-          <h3 className="text-white text-xs font-bold mb-3">📋 处理流程</h3>
+        {/* Processing steps */}
+        <div className="text-left bg-background rounded-xl p-4 mb-5">
+          <h3 className="text-white text-xs font-bold mb-3">📋 AI 自动处理流程</h3>
           <div className="space-y-2">
             {[
-              { done: true, text: '草稿已保存到数据库' },
-              { done: true, text: 'Claude 读取源材料（小说文本/标题）' },
-              { done: false, text: '提取小说中涉及的地点' },
-              { done: false, text: '通过高德地图查找精确坐标' },
-              { done: false, text: '生成四层内容（小说场景/历史掌故/民间传说/民俗风情）' },
-              { done: false, text: '搜索网络，规划真实徒步路线' },
-              { done: false, text: '写入数据库，自动刷新页面' },
-            ].map((step, i) => (
+              '草稿已保存到数据库',
+              'DeepSeek AI 分析源材料，提取地点',
+              '高德地图 API 查找精确坐标',
+              'AI 生成四层内容（文学/历史/传说/民俗）',
+              'AI 规划游览路线',
+              '数据写入数据库，页面自动刷新',
+            ].map((text, i) => (
               <div key={i} className="flex items-center gap-2 text-xs">
-                <span className={step.done ? 'text-green-400' : 'text-gray-600'}>
-                  {step.done ? '●' : '○'}
+                <span className={i < 2 ? 'text-green-400' : 'text-muted-foreground'}>
+                  {i < 2 ? '●' : '○'}
                 </span>
-                <span className={step.done ? 'text-green-400/80' : 'text-gray-500'}>{step.text}</span>
+                <span className={i < 2 ? 'text-green-400/80' : 'text-muted-foreground'}>{text}</span>
               </div>
             ))}
           </div>
         </div>
 
-        {/* Tour ID for Claude */}
-        {draftTourId && (
-          <div className="bg-gradient-to-r from-red-600/10 to-purple-600/10 border border-red-600/20 rounded-xl p-4 mb-5">
-            <div className="text-gray-400 text-xs mb-2">将此 ID 发给 Claude 开始处理：</div>
-            <div className="flex items-center gap-2 justify-center">
-              <code className="text-green-400 text-sm font-mono bg-[#0f0f1a] px-3 py-1.5 rounded-lg select-all">
-                {draftTourId}
-              </code>
-              <button
-                onClick={copyId}
-                className="px-3 py-1.5 bg-white/10 text-white rounded-lg text-xs hover:bg-white/20 transition-colors"
-              >
-                {copied ? '✓ 已复制' : '📋 复制'}
-              </button>
-            </div>
-            <div className="text-gray-500 text-xs mt-2">
-              在 Claude Code 对话中输入：「处理导览 {draftTourId.substring(0, 8)}...」
-            </div>
-          </div>
-        )}
-
         {/* Submitted summary */}
-        <div className="text-left bg-[#0f0f1a] rounded-xl p-4 mb-5">
-          <h3 className="text-gray-400 text-xs mb-2">📦 已提交的材料</h3>
+        <div className="text-left bg-background rounded-xl p-4 mb-5">
+          <h3 className="text-muted-foreground text-xs mb-2">📦 已提交的材料</h3>
           <div className="space-y-1.5 text-xs">
             {title && <div className="text-white"><strong>标题：</strong>{title}</div>}
             {destName && <div className="text-white"><strong>目的地：</strong>{destName}{destRegion ? `（${destRegion}）` : ''}</div>}
             {novelTitle && <div className="text-white"><strong>作品：</strong>{novelTitle}{novelAuthor ? ` — ${novelAuthor}` : ''}</div>}
-            {sourceText && <div className="text-gray-400"><strong>文本：</strong>已粘贴 {sourceText.length} 字</div>}
-            {!sourceText && !novelTitle && <div className="text-yellow-400">⚠️ 未提供源材料，AI 只能依据标题和目的地做基础分析</div>}
+            {sourceText && <div className="text-muted-foreground"><strong>文本：</strong>已粘贴 {sourceText.length} 字</div>}
+            {!sourceText && !novelTitle && <div className="text-yellow-400">⚠️ 未提供源材料，AI 只能做基础分析</div>}
           </div>
         </div>
+
+        {/* Tour ID (for reference) */}
+        {draftTourId && (
+          <div className="text-muted-foreground text-xs mb-4">
+            导览 ID：<code className="text-muted-foreground/60">{draftTourId}</code>
+          </div>
+        )}
       </section>
 
       {/* Action buttons */}
-      <div className="space-y-2">
-        {draftTourId && (
-          <button
-            onClick={copyId}
-            className="w-full py-3 bg-red-600 text-white rounded-xl text-sm font-semibold"
-          >
-            {copied ? '✓ 已复制导览 ID' : '📋 复制导览 ID，发给 Claude'}
-          </button>
-        )}
-        <div className="flex gap-2">
-          <button
-            onClick={onBack}
-            className="flex-1 py-3 bg-white/5 text-gray-400 rounded-xl text-sm"
-          >
-            ← 返回修改信息
-          </button>
-          <button
-            onClick={onSkip}
-            className="flex-1 py-3 bg-white/5 text-gray-400 rounded-xl text-sm"
-          >
-            跳过 → 手动编辑
-          </button>
-        </div>
+      <div className="flex gap-2">
         <button
-          onClick={() => window.location.href = '/'}
-          className="w-full py-2 text-gray-500 text-xs hover:text-gray-400 transition-colors"
+          onClick={onBack}
+          className="flex-1 py-3 bg-white/5 text-muted-foreground rounded-xl text-sm hover:bg-white/10 transition-colors"
         >
-          先回首页看看其他导览 →
+          ← 返回修改
+        </button>
+        <button
+          onClick={onSkip}
+          className="flex-1 py-3 bg-white/5 text-muted-foreground rounded-xl text-sm hover:bg-white/10 transition-colors"
+        >
+          跳过 → 手动编辑
         </button>
       </div>
 
-      {/* Auto-detection hint */}
-      <p className="text-gray-600 text-xs text-center">
-        💡 AI 处理完成后本页将自动刷新，无需手动操作。<br/>
-        你也可以随时关闭此页面，稍后从首页重新进入。
+      {/* Hint */}
+      <p className="text-muted-foreground text-xs text-center">
+        💡 AI 处理完成后页面将自动刷新。<br />
+        你也可以关闭此页面，稍后从「我的导览」中查看结果。
       </p>
     </div>
   );
