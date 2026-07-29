@@ -4,7 +4,7 @@
 
 const GAODE_KEY = "2ff1bf71b26aed0a92eb4ab63657bb25";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
-const SR_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+const SR_KEY = Deno.env.get("SB_SERVICE_ROLE_KEY")!;
 const DEEPSEEK_KEY = Deno.env.get("DEEPSEEK_API_KEY")!;
 
 const hdr = {
