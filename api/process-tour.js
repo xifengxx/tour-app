@@ -1,333 +1,109 @@
 /**
  * Vercel Serverless Function — AI 自动处理导览
- *
- * POST /api/process-tour  { tourId }
- *
- * 流程：
- *   1. 读取 Supabase 中的导览草稿
- *   2. 调用 DeepSeek API 提取地点 + 查坐标 + 生成四层内容 + 规划路线
- *   3. 写入 Supabase（locations, content_layers, routes）
- *
- * 部署时需在 Vercel 添加环境变量：DEEPSEEK_API_KEY
  */
-
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
 const SUPABASE_ANON_KEY = process.env.VITE_SUPABASE_ANON_KEY;
-
-function supabaseHeaders(userToken) {
-  return {
-    apikey: SUPABASE_ANON_KEY,
-    Authorization: `Bearer ${userToken || SUPABASE_ANON_KEY}`,
-    'Content-Type': 'application/json',
-    Prefer: 'return=representation',
-  };
-}
 const DEEPSEEK_KEY = process.env.DEEPSEEK_API_KEY;
 const GAODE_KEY = '2ff1bf71b26aed0a92eb4ab63657bb25';
 
+export default {
+  async fetch(request) {
+    if (request.method !== 'POST') {
+      return Response.json({ error: 'Method not allowed' }, { status: 405 });
+    }
 
-async function fetchGaodeCoord(name, city) {
+    let body;
+    try { body = await request.json(); } catch { return Response.json({ error: 'Invalid JSON' }, { status: 400 }); }
+    const { tourId } = body;
+    if (!tourId) return Response.json({ error: 'Missing tourId' }, { status: 400 });
+
+    // Use user's JWT for RLS, or fall back to anon key
+    const auth = request.headers.get('authorization') || '';
+    const userToken = auth.startsWith('Bearer ') ? auth.slice(7) : null;
+    const h = (t) => ({ apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${t || SUPABASE_ANON_KEY}`, 'Content-Type': 'application/json', Prefer: 'return=representation' });
+    const headers = h(userToken);
+
+    try {
+      // 1. Fetch draft
+      const tours = await fetch(`${SUPABASE_URL}/rest/v1/tours?id=eq.${tourId}&select=*`, { headers }).then(r => r.json());
+      const tour = Array.isArray(tours) ? tours[0] : tours;
+      if (!tour) return Response.json({ error: 'Tour not found' }, { status: 404 });
+
+      const destName = tour.destination?.name || '';
+      const destRegion = tour.destination?.region || '';
+      const sourceText = tour.source?.rawText || '';
+      console.log(`Processing: ${tour.title}, ${sourceText.length} chars`);
+
+      // 2. Extract locations via DeepSeek
+      const locData = await deepseek([
+        { role: 'system', content: '你是中国旅游规划专家。只返回JSON。' },
+        { role: 'user', content: `目的地：${destName}（${destRegion}）\n文本：${sourceText.slice(0, 6000)}\n\n提取所有值得探访的地点。返回JSON：{"locations":[{"id":"py-id","name":"地点","importance":1-5,"elevation":"","tags":[]}]}` },
+      ]);
+
+      const locations = [];
+      for (const l of (locData.locations || [])) {
+        const coord = await gaodeCoord(l.name, destRegion);
+        locations.push({ id: l.id, name: l.name, lat: coord?.lat || 0, lng: coord?.lng || 0, elevation: l.elevation || '', importance: l.importance || 3, tags: l.tags || [], sort_order: locations.length });
+      }
+      console.log(`${locations.length} locations`);
+
+      // 3. Generate content
+      const contentData = await deepseek([
+        { role: 'system', content: '你是文学旅游内容创作者。只返回JSON。' },
+        { role: 'user', content: `为以下地点生成四层内容（文学意境📖/历史掌故🏛/民间传说🐉/地域文化🎭）。\n${locations.map(l => `- ${l.id}: ${l.name}`).join('\n')}\n参考：${sourceText.slice(0, 4000)}\n\n每层150-250字。加reflection和practical。返回JSON：{"locations":[{"id":"","layers":{"novel":{"text":""},"history":{"text":""},"folklore":{"text":""},"customs":{"text":""}},"reflection":"","practical":{"access":"","difficulty":"","bestTime":"","tip":""}}]}` },
+      ]);
+      for (const l of locations) {
+        const cd = (contentData.locations || []).find(c => c.id === l.id) || {};
+        l.layers = cd.layers || {}; l.reflection = cd.reflection || ''; l.practical = cd.practical || {};
+      }
+
+      // 4. Plan routes
+      const routeData = await deepseek([
+        { role: 'system', content: '你是旅游路线规划师。只返回JSON。' },
+        { role: 'user', content: `规划${destName}游览路线。地点：${locations.map(l => `${l.id}:${l.name}`).join(',')}\n\n3条路线（2日/1日/主题）。返回JSON：{"routes":[{"id":"r1","day_label":"2日游","title":"","stops":[],"narrative":"","sort_order":0}]}` },
+      ]);
+      const routes = (routeData.routes || []).map((r, i) => ({ id: r.id, day_label: r.day_label || '', title: r.title, stops: r.stops || [], narrative: r.narrative || '', sort_order: i }));
+
+      // 5. Write to Supabase
+      console.log(`Writing ${locations.length} locs + ${routes.length} routes`);
+      await fetch(`${SUPABASE_URL}/rest/v1/locations?tour_id=eq.${tourId}`, { method: 'DELETE', headers });
+      await fetch(`${SUPABASE_URL}/rest/v1/routes?tour_id=eq.${tourId}`, { method: 'DELETE', headers });
+      for (const l of locations) {
+        await fetch(`${SUPABASE_URL}/rest/v1/locations`, { method: 'POST', headers, body: JSON.stringify({ id: l.id, tour_id: tourId, name: l.name, lat: l.lat, lng: l.lng, elevation: l.elevation, importance: l.importance, tags: l.tags, layers: l.layers, reflection: l.reflection, practical: l.practical, sort_order: l.sort_order }) });
+      }
+      await fetch(`${SUPABASE_URL}/rest/v1/content_layers?tour_id=eq.${tourId}`, { method: 'DELETE', headers });
+      const layers = [
+        { layer_key: 'novel', name: '文学意境', icon: '📖', color: '#c0392b', sort_order: 0 },
+        { layer_key: 'history', name: '历史掌故', icon: '🏛', color: '#d35400', sort_order: 1 },
+        { layer_key: 'folklore', name: '民间传说', icon: '🐉', color: '#27ae60', sort_order: 2 },
+        { layer_key: 'customs', name: '地域文化', icon: '🎭', color: '#2980b9', sort_order: 3 },
+      ];
+      for (const ly of layers) { await fetch(`${SUPABASE_URL}/rest/v1/content_layers`, { method: 'POST', headers, body: JSON.stringify({ ...ly, tour_id: tourId }) }); }
+      for (const r of routes) { await fetch(`${SUPABASE_URL}/rest/v1/routes`, { method: 'POST', headers, body: JSON.stringify({ id: r.id, tour_id: tourId, day_label: r.day_label, title: r.title, stops: r.stops, narrative: r.narrative, sort_order: r.sort_order }) }); }
+
+      console.log('Done!');
+      return Response.json({ success: true, locations: locations.length, routes: routes.length });
+    } catch (e) {
+      console.error(e);
+      return Response.json({ error: e.message }, { status: 500 });
+    }
+  },
+};
+
+async function gaodeCoord(name, city) {
   const kw = encodeURIComponent(`${city || ''} ${name}`);
-  const url = `https://restapi.amap.com/v3/place/text?keywords=${kw}&key=${GAODE_KEY}&types=风景名胜|旅游景点`;
-  const res = await fetch(url);
-  const data = await res.json();
-  if (data.pois && data.pois.length > 0) {
-    const [lng, lat] = data.pois[0].location.split(',').map(Number);
-    return { lng, lat, address: data.pois[0].name };
-  }
+  const res = await fetch(`https://restapi.amap.com/v3/place/text?keywords=${kw}&key=${GAODE_KEY}&types=风景名胜|旅游景点`);
+  const d = await res.json();
+  if (d.pois?.length) { const [lng, lat] = d.pois[0].location.split(',').map(Number); return { lng, lat }; }
   return null;
 }
 
-async function callDeepSeek(messages, jsonMode = true) {
-  const body = {
-    model: 'deepseek-chat',
-    messages,
-    temperature: 0.7,
-    max_tokens: 8192,
-  };
-  if (jsonMode) body.response_format = { type: 'json_object' };
-
+async function deepseek(messages) {
   const res = await fetch('https://api.deepseek.com/v1/chat/completions', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${DEEPSEEK_KEY}`,
-    },
-    body: JSON.stringify(body),
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${DEEPSEEK_KEY}` },
+    body: JSON.stringify({ model: 'deepseek-chat', messages, temperature: 0.7, max_tokens: 8192, response_format: { type: 'json_object' } }),
   });
-  if (!res.ok) {
-    const err = await res.text();
-    throw new Error(`DeepSeek API error: ${res.status} ${err.substring(0, 300)}`);
-  }
-  const data = await res.json();
-  return JSON.parse(data.choices[0].message.content);
-}
-
-export default async function handler(req, res) {
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
-  }
-
-  const { tourId } = req.body || {};
-  if (!tourId) {
-    return res.status(400).json({ error: 'Missing tourId' });
-  }
-
-  // Extract user's JWT from request
-  const authHeader = req.headers.authorization || '';
-  const userToken = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
-
-  const headers = supabaseHeaders(userToken);
-
-  try {
-    // ── 1. Fetch tour draft ──
-    const tourRes = await fetch(
-      `${SUPABASE_URL}/rest/v1/tours?id=eq.${tourId}&select=*`,
-      { headers }
-    );
-    const tours = await tourRes.json();
-    if (!tours || tours.length === 0) {
-      return res.status(404).json({ error: 'Tour not found' });
-    }
-    const tour = tours[0];
-    const destName = tour.destination?.name || '';
-    const destRegion = tour.destination?.region || '';
-    const sourceText = tour.source?.rawText || '';
-    const novelTitle = tour.source?.title || '';
-    const novelAuthor = tour.source?.author || '';
-
-    console.log(`Processing tour: ${tour.title}, source length: ${sourceText.length}`);
-
-    // ── 2. Step 1: Extract locations ──
-    const locPrompt = `你是一个文学旅游规划专家。根据以下文本，提取所有值得实地探访的地点。
-
-目的地：${destName}（${destRegion}）
-文本内容：${sourceText.substring(0, 6000)}
-
-请返回JSON格式（只返回JSON，不要其他文字）：
-{
-  "locations": [
-    {
-      "id": "拼音-英文id",
-      "name": "地点名",
-      "importance": 1-5的数字（5最重要）,
-      "elevation": "海拔高度（如'1545m'，不确定写''）",
-      "tags": ["标签1", "标签2"],
-      "reason": "为什么值得去，与文本的关联"
-    }
-  ]
-}`;
-
-    const locResult = await callDeepSeek([
-      { role: 'system', content: '你是一个专业的中国旅游规划专家，熟悉文学和历史景点。只返回JSON。' },
-      { role: 'user', content: locPrompt },
-    ]);
-
-    const rawLocations = locResult.locations || [];
-    console.log(`Found ${rawLocations.length} locations`);
-
-    // ── 3. Step 2: Look up coordinates ──
-    const locations = [];
-    for (const loc of rawLocations) {
-      const coord = await fetchGaodeCoord(loc.name, destRegion);
-      locations.push({
-        id: loc.id,
-        name: loc.name,
-        lat: coord?.lat || 0,
-        lng: coord?.lng || 0,
-        elevation: loc.elevation || '',
-        importance: loc.importance || 3,
-        tags: loc.tags || [],
-        sort_order: locations.length,
-      });
-      console.log(`  ${loc.name} → ${coord ? `${coord.lng},${coord.lat}` : 'no coord'}`);
-    }
-
-    // ── 4. Step 3: Generate content layers ──
-    const contentPrompt = `你是一个文学旅游内容创作者。为以下地点生成四层内容。
-
-目的地类型：${tour.destination?.type || 'mountain'}
-${tour.destination?.type === 'mountain' || !tour.destination?.type ? `
-第1层：文学意境 📖 — 与小说/文本中此地的关联场景、原文引用
-第2层：历史掌故 🏛 — 此地的真实历史事件和人物
-第3层：民间传说 🐉 — 当地的民间故事和神话
-第4层：地域文化 🎭 — 当地民俗、饮食、风土人情
-` : `
-第1层：历史现场 🏛 — 历史事件在此地的具体发生场景
-第2层：帝王足迹 👑 — 相关帝王的事迹和遗迹
-第3层：民间传说 🐉 — 当地的民间故事和神话
-第4层：考古发现 ⛏ — 此地的考古发现和学术价值
-`}
-
-地点列表：
-${locations.map(l => `- ${l.name} (重要性: ${l.importance}/5)`).join('\n')}
-
-源文本参考：${sourceText.substring(0, 4000)}
-
-对每个地点，每层写150-250字，要求有故事性、具体细节、有人情味，不要写百科词条式的说明。
-为每个地点写一句reflection（引导读者在此地思考的问题，15-30字）。
-为每个地点写practical（到达方式、难度、最佳时间、贴士，每个10-20字）。
-
-返回JSON（只返回JSON）：
-{
-  "locations": [
-    {
-      "id": "地点id",
-      "layers": {
-        "novel": {"text": "第一层内容"},
-        "history": {"text": "第二层内容"},
-        "folklore": {"text": "第三层内容"},
-        "customs": {"text": "第四层内容"}
-      },
-      "reflection": "反思问题",
-      "practical": {"access": "到达方式", "difficulty": "难度", "bestTime": "最佳时间", "tip": "贴士"}
-    }
-  ]
-}`;
-
-    const contentResult = await callDeepSeek([
-      { role: 'system', content: '你是一个专业的文学旅游内容创作者，擅长写有温度、有故事感的景点介绍。只返回JSON。' },
-      { role: 'user', content: contentPrompt },
-    ]);
-
-    const contentData = contentResult.locations || [];
-
-    // Merge content into locations
-    for (const loc of locations) {
-      const cd = contentData.find(c => c.id === loc.id) || {};
-      loc.layers = cd.layers || {
-        novel: { text: '' },
-        history: { text: '' },
-        folklore: { text: '' },
-        customs: { text: '' },
-      };
-      loc.reflection = cd.reflection || '';
-      loc.practical = cd.practical || {};
-    }
-
-    // ── 5. Step 4: Plan routes ──
-    const routePrompt = `为以下地点规划游览路线。
-
-目的地：${destName}（${destRegion}）
-地点列表：${locations.map(l => `- ${l.id}: ${l.name} (重要性${l.importance})`).join('\n')}
-
-规划2-3条路线：
-- 路线1：完整路线（主要地点，2日游）
-- 路线2：精简路线（核心4-6个地点，1日游）
-- 路线3：主题路线（根据目的地特点：日出/文化/亲子）
-
-每条路线包含 stops 数组（用location的id），narrative写50-100字的路线描述。
-
-返回JSON（只返回JSON）：
-{
-  "routes": [
-    {"id": "route-full", "day": "2日游", "title": "路线名", "stops": ["id1","id2"], "narrative": "描述", "sort_order": 0},
-    {"id": "route-compact", "day": "1日游", "title": "路线名", "stops": ["id1","id3"], "narrative": "描述", "sort_order": 1},
-    {"id": "route-theme", "day": "主题", "title": "路线名", "stops": ["id2","id4"], "narrative": "描述", "sort_order": 2}
-  ]
-}`;
-
-    const routeResult = await callDeepSeek([
-      { role: 'system', content: '你是一个专业的旅游路线规划师。只返回JSON。' },
-      { role: 'user', content: routePrompt },
-    ]);
-
-    const routes = (routeResult.routes || []).map((r, i) => ({
-      id: r.id,
-      day: r.day || '',
-      title: r.title,
-      stops: r.stops || [],
-      narrative: r.narrative || '',
-      sort_order: i,
-    }));
-
-    // ── 6. Write to Supabase ──
-    console.log(`Writing ${locations.length} locations + ${routes.length} routes to Supabase...`);
-
-    // Delete old data
-    await fetch(`${SUPABASE_URL}/rest/v1/locations?tour_id=eq.${tourId}`, {
-      method: 'DELETE', headers: headers,
-    });
-    await fetch(`${SUPABASE_URL}/rest/v1/routes?tour_id=eq.${tourId}`, {
-      method: 'DELETE', headers: headers,
-    });
-
-    // Insert locations
-    for (const loc of locations) {
-      const body = {
-        id: loc.id,
-        tour_id: tourId,
-        name: loc.name,
-        lat: loc.lat,
-        lng: loc.lng,
-        elevation: loc.elevation || '',
-        importance: loc.importance || 3,
-        tags: loc.tags || [],
-        layers: loc.layers || {},
-        reflection: loc.reflection || '',
-        practical: loc.practical || {},
-        sort_order: loc.sort_order || 0,
-      };
-      await fetch(`${SUPABASE_URL}/rest/v1/locations`, {
-        method: 'POST',
-        headers: headers,
-        body: JSON.stringify(body),
-      });
-    }
-
-    // Insert content_layers
-    const layerDefs = tour.destination?.type === 'mountain' || !tour.destination?.type
-      ? [
-          { layer_key: 'novel', name: '文学意境', icon: '📖', color: '#c0392b', sort_order: 0 },
-          { layer_key: 'history', name: '历史掌故', icon: '🏛', color: '#d35400', sort_order: 1 },
-          { layer_key: 'folklore', name: '民间传说', icon: '🐉', color: '#27ae60', sort_order: 2 },
-          { layer_key: 'customs', name: '地域文化', icon: '🎭', color: '#2980b9', sort_order: 3 },
-        ]
-      : [
-          { layer_key: 'novel', name: '历史现场', icon: '🏛', color: '#c0392b', sort_order: 0 },
-          { layer_key: 'history', name: '帝王足迹', icon: '👑', color: '#d35400', sort_order: 1 },
-          { layer_key: 'folklore', name: '民间传说', icon: '🐉', color: '#27ae60', sort_order: 2 },
-          { layer_key: 'customs', name: '考古发现', icon: '⛏', color: '#2980b9', sort_order: 3 },
-        ];
-
-    await fetch(`${SUPABASE_URL}/rest/v1/content_layers?tour_id=eq.${tourId}`, {
-      method: 'DELETE', headers: headers,
-    });
-
-    for (const layer of layerDefs) {
-      await fetch(`${SUPABASE_URL}/rest/v1/content_layers`, {
-        method: 'POST',
-        headers: headers,
-        body: JSON.stringify({ ...layer, tour_id: tourId }),
-      });
-    }
-
-    // Insert routes
-    for (const route of routes) {
-      const body = {
-        id: route.id,
-        tour_id: tourId,
-        day_label: route.day || '',
-        title: route.title,
-        stops: route.stops || [],
-        narrative: route.narrative || '',
-        sort_order: route.sort_order || 0,
-      };
-      await fetch(`${SUPABASE_URL}/rest/v1/routes`, {
-        method: 'POST',
-        headers: headers,
-        body: JSON.stringify(body),
-      });
-    }
-
-    console.log('Done!');
-    return res.status(200).json({
-      success: true,
-      locations: locations.length,
-      routes: routes.length,
-    });
-  } catch (error) {
-    console.error('Process tour error:', error);
-    return res.status(500).json({ error: error.message });
-  }
+  if (!res.ok) throw new Error(`DeepSeek: ${res.status}`);
+  return JSON.parse((await res.json()).choices[0].message.content);
 }

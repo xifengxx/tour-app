@@ -125,7 +125,7 @@ export default function TourEdit() {
       setPhase('processing');
       setSaveMsg(`✅ 草稿已保存 (ID: ${uuid})`);
 
-      // Trigger AI processing with user auth token
+      // Trigger AI processing
       const { data: { session } } = await supabase.auth.getSession();
       fetch('/api/process-tour', {
         method: 'POST',
