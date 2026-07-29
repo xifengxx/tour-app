@@ -20,7 +20,7 @@ npm run dev        # http://localhost:5173
 | 前端 | React 19 + Vite + Tailwind CSS 4 |
 | 地图 | 高德 JS API v2.0 (GCJ-02) |
 | 后端 | Supabase (PostgreSQL + Auth) |
-| AI | Claude (对话中处理) |
+| AI | DeepSeek API + Supabase Edge Function（自动处理） |
 
 ## 项目结构
 
@@ -48,6 +48,7 @@ tour-app/
 
 详细流程见 **[APP-DOCS.md](./APP-DOCS.md)**，包括：
 - 密钥配置
-- 新增导览标准执行清单
+- 新增导览（自动化流程）
+- AI 自动处理架构：**[docs/AI-AUTO-PROCESSING.md](./docs/AI-AUTO-PROCESSING.md)**
 - 数据写入方法对比
 - 常见问题与解决方案
