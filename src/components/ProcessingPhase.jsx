@@ -27,18 +27,25 @@ export default function ProcessingPhase({
   useEffect(() => {
     const check = async () => {
       if (!draftTourId) return;
-      const { data, error } = await supabase
-        .from('locations')
-        .select('id')
-        .eq('tour_id', draftTourId)
-        .limit(1);
-      if (error) return;
-      setPollCount(prev => prev + 1);
-      if (data && data.length > 0) {
-        setHasResult(true);
-        if (intervalRef.current) clearInterval(intervalRef.current);
-        if (timerRef.current) clearInterval(timerRef.current);
-        setTimeout(() => onCheckDone(true), 1500);
+      try {
+        const url = `${import.meta.env.VITE_SUPABASE_URL}/rest/v1/locations?select=id&tour_id=eq.${draftTourId}&limit=1`;
+        const res = await fetch(url, {
+          headers: {
+            apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
+            Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+          },
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        setPollCount(prev => prev + 1);
+        if (Array.isArray(data) && data.length > 0) {
+          setHasResult(true);
+          if (intervalRef.current) clearInterval(intervalRef.current);
+          if (timerRef.current) clearInterval(timerRef.current);
+          setTimeout(() => onCheckDone(true), 1500);
+        }
+      } catch {
+        // network error, ignore and retry
       }
     };
 
