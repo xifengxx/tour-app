@@ -128,6 +128,20 @@ TourEdit 保存草稿 → await fetch(Edge Function) ──→ 成功：window.l
 1. 数据库执行：`ALTER TABLE tours ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'draft';`
 2. 重新部署函数：`npx supabase functions deploy process-tour --project-ref qxunedraoviaonjdanag --no-verify-jwt`
 
+## 2026-07-29 第二根因：Edge Function 的 service_role 密钥失效
+
+修复轮询后端到端测试发现：函数返回 `success:true` 但数据库零写入。
+根因是 secret `SB_SERVICE_ROLE_KEY` 的值无效，函数内所有 REST 调用 401。
+**注意：fetch 收到 4xx 不会抛异常**，代码未检查响应状态，导致全部静默失败——
+连读取草稿都失败（得到错误对象而非数组），DeepSeek 只能拿到空文本。
+
+教训：
+- 函数内所有 fetch 必须检查 `res.ok`，失败要显式抛错
+- 端到端验证必须查数据库确认真实写入，不能只看函数返回值
+
+修复：`supabase secrets set SB_SERVICE_ROLE_KEY=<legacy service_role JWT>`。
+验证：E2E 测试 5 地点 + 3 路线 + status=done 全部落库（已清理测试数据）。
+
 ## 已排除的变量
 
 - PWA Service Worker（已从构建中移除）
