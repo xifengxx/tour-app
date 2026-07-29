@@ -128,7 +128,10 @@ export default function TourEdit() {
       // Trigger Supabase Edge Function
       fetch('https://qxunedraoviaonjdanag.supabase.co/functions/v1/process-tour', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+        },
         body: JSON.stringify({ tourId: uuid }),
       }).catch(() => {});
     } catch (e) {
