@@ -111,12 +111,30 @@ function normalizeTour(row) {
     },
     theme: row.theme || { primaryColor: '#c0392b' },
     source: row.source || {},
-    destination: row.destination || {},
+    destination: {
+      ...(row.destination || {}),
+      bounds: row.destination?.bounds || computeBounds(locations),
+    },
     contentLayers: layers,
     locations,
     routes,
     tips: (row.tips || []).map(t => ({ text: t.text })),
   };
+}
+
+/**
+ * Derive map bounds from location coordinates (drafts created in the app
+ * don't store destination.bounds). Returns null when no usable coords.
+ */
+function computeBounds(locations) {
+  const pts = locations.filter(l => l.lat && l.lng);
+  if (pts.length === 0) return null;
+  const lats = pts.map(l => l.lat);
+  const lngs = pts.map(l => l.lng);
+  return [
+    [Math.min(...lats), Math.min(...lngs)],
+    [Math.max(...lats), Math.max(...lngs)],
+  ];
 }
 
 /**

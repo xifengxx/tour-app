@@ -36,9 +36,12 @@ export default function TourView() {
     if (!tour || mapInstance.current) return;
     const init = () => {
       if (typeof window.AMap === 'undefined') { setTimeout(init, 200); return; }
-      const bounds = tour.destination.bounds;
+      const bounds = tour.destination?.bounds;
+      const center = bounds
+        ? [(bounds[0][1] + bounds[1][1]) / 2, (bounds[0][0] + bounds[1][0]) / 2]
+        : [104.0, 35.0]; // no coords yet (e.g. draft tour): default to China overview
       const map = new window.AMap.Map(mapRef.current, {
-        center: [(bounds[0][1] + bounds[1][1]) / 2, (bounds[0][0] + bounds[1][0]) / 2],
+        center,
         zoom: 12, resizeEnable: true,
         mapStyle: 'amap://styles/normal'
       });
