@@ -432,7 +432,18 @@ export default function TourEdit() {
             novelTitle={novelTitle}
             novelAuthor={novelAuthor}
             sourceText={sourceText}
-            onCheckDone={() => setPhase('review')}
+            onCheckDone={async () => {
+              // Load tour data BEFORE entering review, so user never sees blank error page
+              for (let i = 0; i < 5; i++) {
+                const fresh = await reloadTour();
+                if (fresh && fresh.locations && fresh.locations.length > 0) {
+                  setPhase('review');
+                  return;
+                }
+                if (i < 4) await new Promise(r => setTimeout(r, (i + 1) * 2000));
+              }
+              setPhase('review'); // fallback: show error+retry UI
+            }}
             onSkip={() => setPhase('review')}
             onBack={() => setPhase('input')}
           />
