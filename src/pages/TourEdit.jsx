@@ -445,7 +445,17 @@ export default function TourEdit() {
         {/* ════════════════════════════════════════════════ */}
         {/* PHASE 3: Review — locations, content, routes */}
         {/* ════════════════════════════════════════════════ */}
-        {phase === 'review' && (
+        {phase === 'review' && loading && (
+          <div className="text-center py-16 text-gray-400">加载数据中...</div>
+        )}
+        {phase === 'review' && !loading && (!tour || (!locations.length && !routes.length)) && (
+          <div className="text-center py-16 space-y-4">
+            <div className="text-4xl">📡</div>
+            <p className="text-gray-400">数据加载失败，请检查网络后重试</p>
+            <button onClick={() => reloadTour()} className="px-6 py-2 bg-red-600 text-white rounded-xl text-sm">🔄 重试加载</button>
+          </div>
+        )}
+        {phase === 'review' && !loading && tour && (locations.length > 0 || routes.length > 0) && (
           <div className="space-y-4">
             {/* Step indicator */}
             <div className="flex items-center gap-2 mb-2">
