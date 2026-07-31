@@ -46,8 +46,29 @@ async function gaode(name: string, city: string) {
   const kw = encodeURIComponent(`${city} ${name}`);
   const r = await fetch(`https://restapi.amap.com/v3/place/text?keywords=${kw}&key=${GAODE_KEY}&types=风景名胜|旅游景点`);
   const d = await r.json();
-  if (d.pois?.length) { const [lng, lat] = d.pois[0].location.split(",").map(Number); return { lng, lat }; }
+  if (d.pois?.length) { const [lng, lat] = d.pois[0].location.split(",").map(Number); return { lng, lat, name: d.pois[0].name }; }
   return null;
+}
+
+// Regeo: verify a coordinate is actually in the expected city/province
+async function regeo(lng: number, lat: number) {
+  const r = await fetch(`https://restapi.amap.com/v3/geocode/regeo?location=${lng},${lat}&key=${GAODE_KEY}`);
+  const d = await r.json();
+  if (d.status === "1" && d.regeocode?.addressComponent) {
+    const ac = d.regeocode.addressComponent;
+    return { province: ac.province, city: ac.city, district: ac.district, adcode: ac.adcode };
+  }
+  return null;
+}
+
+// Check if a location is plausibly in the expected region
+function regionMatch(geo: { province: string; city: string }, targetRegion: string): boolean {
+  if (!geo) return false;
+  // Extract city/province keywords from target region (e.g., "湖北省武汉市" → ["湖北","武汉"])
+  const kw = targetRegion.replace(/[省市自治区]$/g, "");
+  const cityPart = geo.city || geo.province || "";
+  const provPart = geo.province || "";
+  return cityPart.includes(kw) || kw.includes(cityPart) || provPart.includes(kw);
 }
 
 async function deepseek(messages: { role: string; content: string }[]) {
@@ -87,12 +108,25 @@ Deno.serve(async (req: Request) => {
       { role: "user", content: `目的地：${destName}（${destRegion}）\n文本：${src.slice(0, 6000)}\n\n提取所有值得探访的地点。JSON: {"locations":[{"id":"en-id","name":"地点","importance":1-5,"elevation":"","tags":[]}]}` },
     ]);
 
+    const warnings: string[] = [];
     const locs: any[] = [];
     for (const l of (lr.locations || [])) {
       const c = await gaode(l.name, destRegion);
-      locs.push({ id: l.id, name: l.name, lat: c?.lat || 0, lng: c?.lng || 0, elevation: l.elevation || "", importance: l.importance || 3, tags: l.tags || [], sort_order: locs.length });
+      if (!c || !c.lat) {
+        warnings.push(`⚠️ "${l.name}" 未找到坐标，已跳过`);
+        continue;
+      }
+      // Verify coordinate is in the target region
+      const geo = await regeo(c.lng, c.lat);
+      if (geo && !regionMatch(geo, destRegion)) {
+        warnings.push(`⚠️ "${l.name}" 坐标(${c.lng},${c.lat})位于 ${geo.province}${geo.city || ''}，不在 ${destRegion}，已跳过`);
+        continue;
+      }
+      // Use Gaode's official name if available
+      const displayName = c.name && c.name !== l.name ? c.name : l.name;
+      locs.push({ id: l.id, name: displayName, lat: c.lat, lng: c.lng, elevation: l.elevation || "", importance: l.importance || 3, tags: l.tags || [], sort_order: locs.length });
     }
-    console.log(`${locs.length} locations`);
+    console.log(`${locs.length} locations (${warnings.length} warnings)`);
 
     // 3. Content
     const cr = await deepseek([
@@ -125,18 +159,25 @@ Deno.serve(async (req: Request) => {
       { role: "system", content: "你是旅游路线规划师。只返回JSON。" },
       { role: "user", content: `${destName}路线。可选地点（id: 名称）: ${locs.map(l => `${l.id}: ${l.name}`).join(", ")}\n\n规划3条路线（2日游/1日游/主题游）。注意：stops 必须是由上面地点的 id 组成的字符串数组，如 ["yujing-feng","sanqing-palace"]，严禁返回对象或使用地点以外的 id。JSON: {"routes":[{"day_label":"2日游","title":"","stops":["id1","id2"],"narrative":""}]}` },
     ]);
-    // Normalize payloads: DeepSeek may return non-string fields or a stops
-    // string instead of an array — PostgREST rejects those and the write fails.
-    const routes = (rr.routes || []).map((r: any, i: number) => ({
-      id: `${scope}-r${i + 1}`,
-      day_label: String(r.day_label || ""),
-      title: String(r.title || `路线${i + 1}`),
-      stops: (Array.isArray(r.stops) ? r.stops : [])
-        .map((s: any) => resolveStop(s && typeof s === "object" ? (s.poi ?? s.id ?? s.name) : s))
-        .filter(Boolean),
-      narrative: typeof r.narrative === "string" ? r.narrative : "",
-      sort_order: i,
-    })).filter(r => r.stops.length > 0);
+    // Route stop validation: resolve and report mismatches
+    const routes = (rr.routes || []).map((r: any, i: number) => {
+      const rawStops: string[] = (Array.isArray(r.stops) ? r.stops : [])
+        .map((s: any) => s && typeof s === "object" ? (s.poi ?? s.id ?? s.name) : s)
+        .filter(Boolean);
+      const resolved = rawStops.map((s: string) => resolveStop(s)).filter(Boolean);
+      const unresolved = rawStops.filter((_, j) => !resolved[j]);
+      if (unresolved.length > 0) {
+        warnings.push(`⚠️ 路线"${r.title || r.day_label || `路线${i+1}`}"有 ${unresolved.length} 个站点无法匹配：${unresolved.join(', ')}`);
+      }
+      return {
+        id: `${scope}-r${i + 1}`,
+        day_label: String(r.day_label || ""),
+        title: String(r.title || `路线${i + 1}`),
+        stops: resolved,
+        narrative: typeof r.narrative === "string" ? r.narrative : "",
+        sort_order: i,
+      };
+    }).filter(r => r.stops.length > 0);
 
     // 5. Write
     console.log(`Writing ${locs.length} locs + ${routes.length} routes`);
@@ -152,9 +193,16 @@ Deno.serve(async (req: Request) => {
     ].map(ly => ({ ...ly, tour_id: tourId })));
     await postRows("routes", routes.map(r => ({ id: r.id, tour_id: tourId, day_label: r.day_label, title: r.title, stops: r.stops, narrative: r.narrative, sort_order: r.sort_order })));
 
-    console.log("Done!");
+    // Quality report
+    const report = {
+      locations: locs.length,
+      routes: routes.length,
+      warnings: warnings.length > 0 ? warnings : undefined,
+      rejected: (lr.locations || []).length - locs.length, // locations rejected by regeo
+    };
+    console.log(`Done! ${report.locations} locs, ${report.routes} routes, ${warnings.length} warnings`);
     await setStatus(tourId, "done");
-    return json({ success: true, locations: locs.length, routes: routes.length });
+    return json({ success: true, ...report });
   } catch (e: any) {
     console.error(e);
     if (tourId) await setStatus(tourId, "error");
