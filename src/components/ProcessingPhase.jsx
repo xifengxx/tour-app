@@ -39,15 +39,20 @@ export default function ProcessingPhase({
     const check = async () => {
       if (!draftTourId) return;
       try {
+        // AbortController prevents hung connections when DevTools Network panel is open
+        const ac = new AbortController();
+        const t = setTimeout(() => ac.abort(), 10000);
         const res = await fetch(
           `https://qxunedraoviaonjdanag.supabase.co/rest/v1/locations?select=id&tour_id=eq.${draftTourId}&limit=1`,
           {
+            signal: ac.signal,
             headers: {
               apikey: 'sb_publishable_Pp21-3ssB3rSxwFnA-WZZw_eUHmF31E',
               Authorization: `Bearer ${tokenRef.current || 'sb_publishable_Pp21-3ssB3rSxwFnA-WZZw_eUHmF31E'}`,
             },
           }
         );
+        clearTimeout(t);
         setPollCount(prev => prev + 1);
         if (!res.ok) return;
         const data = await res.json();
