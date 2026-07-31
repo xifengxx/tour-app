@@ -34,17 +34,28 @@ export default function ProcessingPhase({
   useEffect(() => {
     const check = async () => {
       if (!draftTourId) return;
-      const { data, error } = await supabase
-        .from('locations')
-        .select('id')
-        .eq('tour_id', draftTourId)
-        .limit(1);
-      if (error) return;
-      setPollCount(prev => prev + 1);
-      if (data && data.length > 0) {
-        if (intervalRef.current) clearInterval(intervalRef.current);
-        if (timerRef.current) clearInterval(timerRef.current);
-        setTimeout(() => onCheckDone(), 800);
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const token = session?.access_token;
+        const res = await fetch(
+          `https://qxunedraoviaonjdanag.supabase.co/rest/v1/locations?select=id&tour_id=eq.${draftTourId}&limit=1`,
+          {
+            headers: {
+              apikey: 'sb_publishable_Pp21-3ssB3rSxwFnA-WZZw_eUHmF31E',
+              ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            },
+          }
+        );
+        if (!res.ok) return;
+        const data = await res.json();
+        setPollCount(prev => prev + 1);
+        if (Array.isArray(data) && data.length > 0) {
+          if (intervalRef.current) clearInterval(intervalRef.current);
+          if (timerRef.current) clearInterval(timerRef.current);
+          setTimeout(() => onCheckDone(), 800);
+        }
+      } catch {
+        // retry on next poll
       }
     };
 
