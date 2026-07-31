@@ -27,12 +27,44 @@
 
 ```
 用户点 AI 分析
-  → TourEdit 保存草稿到 Supabase
-  → 调用 Supabase Edge Function (process-tour)
-  → Edge Function 调用 DeepSeek API: 提取地点 → 生成内容 → 规划路线
-  → Edge Function 调用高德 API 查坐标
-  → 数据写入 Supabase
-  → ProcessingPhase 轮询检测到数据 → 自动跳审核页
+  → TourEdit 保存草稿到 Supabase (status=processing)
+  → 数据库触发器 (pg_net) 服务器端调用 Edge Function
+  → Edge Function: DeepSeek 提取地点 → 高德查坐标 → DeepSeek 生成内容 → 规划路线
+  → 写入 Supabase (locations, routes, content_layers)
+  → ProcessingPhase 轮询检测到数据 → 自动加载完整数据 → 审核页
+```
+
+> **关键设计决策**：Edge Function 由数据库触发器服务器端调用，浏览器不发起任何长连接。避免了 Chrome 连接池耗尽导致的 `ERR_INTERNET_DISCONNECTED`。
+
+### 数据库配置
+
+```sql
+-- pg_net 扩展 (服务器端 HTTP 请求)
+CREATE EXTENSION IF NOT EXISTS pg_net;
+
+-- 触发器函数
+CREATE OR REPLACE FUNCTION trigger_ai_process()
+RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  PERFORM net.http_post(
+    url := 'https://qxunedraoviaonjdanag.supabase.co/functions/v1/process-tour',
+    body := json_build_object('tourId', NEW.id)::jsonb,
+    headers := jsonb_build_object(
+      'Content-Type', 'application/json',
+      'Authorization', 'Bearer sb_publishable_...'
+    ),
+    timeout_milliseconds := 60000
+  );
+  RETURN NEW;
+END;
+$$;
+
+-- 触发器 (仅 INSERT status=processing 时触发)
+CREATE TRIGGER ai_process_trigger
+  AFTER INSERT ON tours
+  FOR EACH ROW
+  WHEN (NEW.status = 'processing')
+  EXECUTE FUNCTION trigger_ai_process();
 ```
 
 ### 手动处理（备选）
@@ -98,23 +130,24 @@
 ## 架构概览
 
 ```
-用户浏览器 (Vercel SPA)       Supabase                 DeepSeek / 高德
-    │                           │                         │
-    │ React SPA (Vite)          │ PostgreSQL              │
-    │ ↓                         │ ↓                       │
-    │ 浏览导览 ←────────────────→ tours                   │
-    │ 创建草稿 ─────────────────→ tours (draft)           │
-    │     │                     │                         │
-    │     └─ 触发 Edge Function ─→ process-tour           │
-    │                           │     │                   │
-    │                           │     ├─ 提取地点 ──────→ DeepSeek API
-    │                           │     ├─ 查坐标 ────────→ 高德 Web API
-    │                           │     ├─ 生成内容 ──────→ DeepSeek API
-    │                           │     └─ 规划路线 ──────→ DeepSeek API
+用户浏览器 (Vercel SPA)       Supabase                     DeepSeek / 高德
+    │                           │                             │
+    │ React SPA (Vite)          │ PostgreSQL                  │
+    │ ↓                         │ ↓                           │
+    │ 浏览导览 ←────────────────→ tours                       │
+    │ 创建草稿 (status=process)─→ tours ──→ 触发器 fire      │
+    │                           │     └──→ http_post ────→  Edge Function
+    │                           │               │               │
+    │                           │               ├─ 提取地点 ──→ DeepSeek
+    │                           │               ├─ 查坐标 ────→ 高德 Web API
+    │                           │               ├─ 生成内容 ──→ DeepSeek
+    │                           │               └─ 规划路线 ──→ DeepSeek
     │                           │                         │
     │ 轮询检测 ←─────────────── locations/routes ←────── 写入
-    │ 审核编辑 ←────────────────→ 更新数据               │
+    │ 加载数据 → 审核编辑 ←────→ 更新数据                  │
 ```
+
+> **注意**：Edge Function 由数据库触发器**服务器端**调用，浏览器不参与。浏览器仅轮询 Supabase 检测数据写入完成。
 
 | 层 | 技术 | 用途 |
 |------|------|------|
@@ -127,10 +160,34 @@
 
 ---
 
+## 调试经验
+
+### 浏览器 `ERR_INTERNET_DISCONNECTED` 排查
+
+此错误在开发过程中反复出现（20+ 次），最终确认是多个因素叠加：
+
+| 根因 | 表现 | 修复 |
+|------|------|------|
+| PWA workbox 拦截 Supabase API 请求 | `workbox: no-response` | 移除 PWA 插件 |
+| `await` 长 POST（1-3 min）耗尽 Chrome 连接池 | POST 完成后所有 GET 失败 | 改用数据库触发器（浏览器零长连接） |
+| 轮询用 anon key，RLS 拦截非公开导览 | 数据存在但查询返回 `[]` | 用 Supabase 客户端（带用户 JWT） |
+| 审核页嵌入 join 查询比简单轮询查询更易失败 | 轮询成功但审核页加载失败 | `onCheckDone` 预加载数据再跳转 |
+| 删除 `vercel.json` 时误删 SPA rewrite | `<a href>` 全页加载返回 Vercel 404 | 保留 `"rewrites": [{"source": "/(.*)", "destination": "/"}]` |
+
+### 核心教训
+
+1. **3 次失败 → 必须查官方文档**，不能凭记忆猜测 API 签名或配置格式
+2. **浏览器不适合做服务器端编排**，长连接/并发请求交给数据库触发器
+3. **RLS 权限永远优先排查**，数据查询返回空大概率是权限问题
+4. **删除文件前理解每一行**，看似冗余的配置可能是关键（如 vercel.json rewrite）
+5. **状态跳转前完成数据加载**，不让用户看到空白错误页
+6. **隔离变量逐层排除**：先去掉 PWA → 换 fetch 方式 → 查 RLS → 改连接模式
+
+---
+
 ## 限制
 
-1. **ProcessingPhase 轮询偶发 ERR_INTERNET_DISCONNECTED**：当前在排查中，详见 [docs/AI-AUTO-PROCESSING.md](./docs/AI-AUTO-PROCESSING.md)
-2. **坐标查询需逐一进行**：高德 Web API 不支持批量查询
-3. **旧版静态 HTML 仍可用**：`~/lib/tour-guide/` 下 build.sh 独立运行，与 App 无关
-4. **图片不支持**：当前版本无地点实景照片上传功能
-5. **PWA 当前已移除**：因 workbox 可能干扰 API 请求，临时移除，待修复后重新启用
+1. **坐标查询需逐一进行**：高德 Web API 不支持批量查询
+2. **旧版静态 HTML 仍可用**：`~/lib/tour-guide/` 下 build.sh 独立运行，与 App 无关
+3. **图片不支持**：当前版本无地点实景照片上传功能
+4. **PWA 当前已移除**：workbox 拦截 API 请求，待修复后重新启用

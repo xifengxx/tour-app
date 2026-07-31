@@ -2,166 +2,140 @@
 
 ## 功能目标
 
-用户在前端创建导览 → 点击「AI 分析」→ 服务器自动调用 DeepSeek 提取地点、生成内容、规划路线 → 数据库写入完成 → 前端自动检测并跳转到审核页面。
+用户在前端创建导览 → 点击「AI 分析」→ 保存草稿到 Supabase → 数据库触发器服务器端调用 Edge Function → DeepSeek 提取地点、生成内容、规划路线 → 高德 API 查坐标 → 写入数据库 → 前端轮询检测完成 → 自动跳转审核页。
 
 ## 架构
 
 ```
-用户浏览器 (Vercel SPA)
-    │
-    ├─ POST tours (保存草稿) ──────────→ Supabase REST API
-    │
-    ├─ POST Edge Function (触发处理) ──→ Supabase Edge Function
-    │                                       │
-    │                                       ├─ 读取草稿
-    │                                       ├─ DeepSeek API (提取地点)
-    │                                       ├─ 高德 API (查询坐标)
-    │                                       ├─ DeepSeek API (生成四层内容)
-    │                                       ├─ DeepSeek API (规划路线)
-    │                                       └─ 写入 Supabase
-    │
-    └─ GET locations (轮询检测) ────────→ Supabase REST API
-                                            │
-                                        检测到数据 → 跳转审核页
+用户浏览器 (Vercel SPA)        Supabase                      DeepSeek / 高德
+    │                            │                              │
+    │ 1. INSERT (status=process)─→ tours                        │
+    │                            │ 2. 触发器 fire               │
+    │                            │    └──→ http_post ──────→  Edge Function
+    │                            │              │                 │
+    │                            │              ├─ 提取地点 ────→ DeepSeek
+    │                            │              ├─ 查坐标 ──────→ 高德 Web API
+    │                            │              ├─ 生成内容 ────→ DeepSeek
+    │                            │              └─ 规划路线 ────→ DeepSeek
+    │                            │              │
+    │ 3. 轮询 GET locations ←────┼──────────────┘ 写入 locations
+    │ 4. 加载完整数据 ←──────────┼────────────────── SELECT tours+join
+    │ 5. 审核页 → 保存 → 查看    │
 ```
+
+> **关键设计**：Edge Function 由数据库触发器（pg_net）**服务器端**调用，浏览器不发起任何长连接。
 
 ## 组件
 
 | 文件 | 职责 |
 |------|------|
-| `src/pages/TourEdit.jsx` | 导览编辑：保存草稿、触发 Edge Function |
-| `src/components/ProcessingPhase.jsx` | 等待页面：轮询数据库，检测 AI 写入完成 |
+| `src/pages/TourEdit.jsx` | 导览编辑：保存草稿、ProcessingPhase 控制、审核保存 |
+| `src/components/ProcessingPhase.jsx` | 等待页面：轮询检测 + 自动重试加载数据 |
 | `supabase/functions/process-tour/index.ts` | Supabase Edge Function：AI 处理核心逻辑 |
 
-## 部署配置
+## 数据库配置
 
-### Supabase Edge Function
+### pg_net 触发器
 
+```sql
+CREATE EXTENSION IF NOT EXISTS pg_net;
+
+CREATE OR REPLACE FUNCTION trigger_ai_process()
+RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  PERFORM net.http_post(
+    url := 'https://qxunedraoviaonjdanag.supabase.co/functions/v1/process-tour',
+    body := json_build_object('tourId', NEW.id)::jsonb,
+    headers := jsonb_build_object(
+      'Content-Type', 'application/json',
+      'Authorization', 'Bearer sb_publishable_Pp21-3ssB3rSxwFnA-WZZw_eUHmF31E'
+    ),
+    timeout_milliseconds := 60000
+  );
+  RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER ai_process_trigger
+  AFTER INSERT ON tours
+  FOR EACH ROW
+  WHEN (NEW.status = 'processing')
+  EXECUTE FUNCTION trigger_ai_process();
 ```
-部署命令:
-  npx supabase functions deploy process-tour --project-ref qxunedraoviaonjdanag --no-verify-jwt
 
-所需 Secrets:
-  SB_SERVICE_ROLE_KEY  — Supabase service_role key（绕过 RLS 写数据）
-  DEEPSEEK_API_KEY     — DeepSeek API key（AI 内容生成）
+### tours.status 字段
 
-函数地址:
-  https://qxunedraoviaonjdanag.supabase.co/functions/v1/process-tour
+```sql
+ALTER TABLE tours ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'draft';
 ```
 
-### Vercel 前端
+状态流转：`draft` → `processing`（草稿保存时）→ `done`（AI 处理完成）
 
+## Supabase Edge Function
+
+### 部署
+
+```bash
+npx supabase functions deploy process-tour --project-ref qxunedraoviaonjdanag --no-verify-jwt
 ```
-框架: Vite (React SPA)
-域名: https://tour-app-pro.vercel.app
-环境变量:
-  VITE_SUPABASE_URL        — Supabase 项目 URL
-  VITE_SUPABASE_ANON_KEY   — Supabase 匿名 key
-```
+
+### Secrets
+
+| Key | 说明 |
+|-----|------|
+| `SB_SERVICE_ROLE_KEY` | Supabase service_role key（绕过 RLS 写数据） |
+| `DEEPSEEK_API_KEY` | DeepSeek API key（AI 内容生成） |
+
+### 函数地址
+
+`https://qxunedraoviaonjdanag.supabase.co/functions/v1/process-tour`
+
+### 关键修复
+
+| 版本 | 修复内容 |
+|------|---------|
+| v1 | 初始版本，基础 AI 处理流程 |
+| v2 | `res.ok` 检查：fetch 对 4xx 不抛异常，之前静默失败 |
+| v3 | ID 命名空间：`{tourId前8位}-{slug}` 避免全局主键冲突 |
+| v4 | stops 格式兼容：DeepSeek 可能返回对象数组，做 slug/中文名/包含关系三重匹配 |
+| v5 | `setStatus` 记录处理进度，支持 `status` 字段 |
 
 ## 测试记录
 
-### 函数测试
+### 端到端验证
 
 ```bash
-# Edge Function 直接测试（成功）
+# 1. 确认函数可用
 curl -X POST "https://qxunedraoviaonjdanag.supabase.co/functions/v1/process-tour" \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer sb_publishable_Pp21-3ssB3rSxwFnA-WZZw_eUHmF31E" \
   -d '{"tourId":"<TOUR_ID>"}'
+# 返回: {"success":true,"locations":N,"routes":M}
 
-# 返回: {"success":true,"locations":5,"routes":3}
+# 2. 确认数据写入（用 service_role key，绕过 RLS）
+curl -s "https://qxunedraoviaonjdanag.supabase.co/rest/v1/locations?tour_id=eq.<TOUR_ID>" \
+  -H "apikey: <SERVICE_ROLE_KEY>" \
+  -H "Authorization: Bearer <SERVICE_ROLE_KEY>"
+
+# 3. 确认函数日志
+# 打开: https://supabase.com/dashboard/project/qxunedraoviaonjdanag/functions/process-tour/logs
 ```
 
-### Console 手动请求测试
+### 已知问题 & 修复记录
 
-```javascript
-// tours 表查询（成功）
-fetch('https://qxunedraoviaonjdanag.supabase.co/rest/v1/tours?select=id&limit=1', {
-  headers: { apikey: 'sb_publishable_Pp21-3ssB3rSxwFnA-WZZw_eUHmF31E', Authorization: 'Bearer sb_publishable_Pp21-3ssB3rSxwFnA-WZZw_eUHmF31E' }
-}).then(r => r.json()).then(console.log);
-
-// locations 表查询（成功）
-fetch('https://qxunedraoviaonjdanag.supabase.co/rest/v1/locations?select=id&limit=1', {
-  headers: { apikey: 'sb_publishable_Pp21-3ssB3rSxwFnA-WZZw_eUHmF31E', Authorization: 'Bearer sb_publishable_Pp21-3ssB3rSxwFnA-WZZw_eUHmF31E' }
-}).then(r => r.json()).then(console.log);
-```
-
-### setInterval 轮询测试
-
-```javascript
-// ProcessingPhase 正在运行时，在 Console 执行手动轮询
-let count = 0;
-const id = setInterval(() => {
-  fetch('https://qxunedraoviaonjdanag.supabase.co/rest/v1/locations?select=id&limit=1', {
-    headers: { apikey: 'sb_publishable_Pp21-3ssB3rSxwFnA-WZZw_eUHmF31E', Authorization: 'Bearer sb_publishable_Pp21-3ssB3rSxwFnA-WZZw_eUHmF31E' }
-  }).then(r => r.json()).then(() => console.log('✅ manual poll', ++count)).catch(e => console.log('❌', e.message));
-  if (count >= 5) clearInterval(id);
-}, 5000);
-```
-
-## 已知问题
-
-| 问题 | 状态 | 说明 |
+| 问题 | 根因 | 修复 |
 |------|------|------|
-| ProcessingPhase 轮询 ERR_INTERNET_DISCONNECTED | ✅ 已解决（2026-07-29） | 根因：长时挂起的 Edge Function POST 与每 5s 轮询 GET 并发，国内网络下长连接被重置。方案：移除轮询，前端直接 await Edge Function 响应；tours 表新增 status 字段（draft/processing/done/error） |
-| Edge Function 函数调用 | ✅ 正常 | curl 直接调用返回正确数据 |
-| 草稿保存 | ✅ 正常 | POST 到 Supabase 成功 |
-| 主页加载 | ✅ 正常 | Supabase 查询 tours 表成功 |
+| `ERR_INTERNET_DISCONNECTED` 轮询失败 | Chrome 连接池耗尽（长 POST + 并发 GET） | 数据库触发器替代浏览器调用 |
+| 数据写入但查询返回空 | RLS 策略：anon key 查不到非公开导览 | 轮询用 Supabase 客户端（带用户 JWT） |
+| 审核页显示空数据 | 复杂 join 查询比简单轮询更易失败 | `onCheckDone` 预加载 + 5 次重试 |
+| 保存后跳转 404 | `vercel.json` 被删，SPA rewrite 丢失 | 保留 `"rewrites": [{"source": "/(.*)", "destination": "/"}]` |
+| Edge Function 409 主键冲突 | ID 全局唯一约束，DeepSeek 生成重复 slug | v3：ID 加 tourId 前缀做命名空间 |
 
-## 2026-07-29 架构调整：await 响应替代轮询
+## 错误排查清单
 
-原设计在触发 Edge Function 后由 ProcessingPhase 每 5 秒轮询 locations 表检测完成。
-在国内网络环境下，长时挂起的 POST（1-5 分钟）与高频轮询并发，连接被重置后
-Chrome 对轮询请求报 `net::ERR_INTERNET_DISCONNECTED`（请求未发出，与应用层无关）。
-
-现架构：
-
-```
-TourEdit 保存草稿 → await fetch(Edge Function) ──→ 成功：window.location.reload()
-                                                  └─→ 失败：ProcessingPhase 显示错误 + 重试按钮
-```
-
-同时 `tours.status` 字段记录处理状态（Edge Function 写入），供后续"关闭页面后回来查看进度"使用。
-
-部署注意：
-1. 数据库执行：`ALTER TABLE tours ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'draft';`
-2. 重新部署函数：`npx supabase functions deploy process-tour --project-ref qxunedraoviaonjdanag --no-verify-jwt`
-
-## 2026-07-29 第二根因：Edge Function 的 service_role 密钥失效
-
-修复轮询后端到端测试发现：函数返回 `success:true` 但数据库零写入。
-根因是 secret `SB_SERVICE_ROLE_KEY` 的值无效，函数内所有 REST 调用 401。
-**注意：fetch 收到 4xx 不会抛异常**，代码未检查响应状态，导致全部静默失败——
-连读取草稿都失败（得到错误对象而非数组），DeepSeek 只能拿到空文本。
-
-教训：
-- 函数内所有 fetch 必须检查 `res.ok`，失败要显式抛错
-- 端到端验证必须查数据库确认真实写入，不能只看函数返回值
-
-修复：`supabase secrets set SB_SERVICE_ROLE_KEY=<legacy service_role JWT>`。
-验证：E2E 测试 5 地点 + 3 路线 + status=done 全部落库（已清理测试数据）。
-
-## 2026-07-30 第三根因：路线写入静默失败（叠加问题）
-
-真实导览跑完后 locations 落库但 routes 为 0，函数却返回 success。日志显示
-"Writing 17 locs + 3 routes" → "Done!"。逐层排查出三个叠加问题：
-
-1. **写入不检查 res.ok**：fetch 对 4xx 不抛异常，409/400 全部静默丢弃。
-2. **主键全局冲突**：DeepSeek 每条路线都返回 "r1"/"r2"/"r3"，而 routes.id 是
-   全局主键，与其他导览（种子数据）冲突 → 409。locations 的 slug id 同理。
-   修复：id 统一加 tourId 前缀做命名空间（`{tourId前8位}-{slug}`）。
-3. **stops 格式漂移**：DeepSeek 把 stops 返回成 `[{day,order,poi}]` 对象数组，
-   且 poi 是路线步骤自造的 slug，与提取步骤的 id 对不上。
-   修复：prompt 明确要求 stops 为地点 id 字符串数组；代码兼容对象格式并做
-   slug/中文名/包含关系三重匹配，匹配不上的站点丢弃。
-
-验证：真实导览重跑 → 10 地点 + 3 路线（7/5/5 站点）+ 0 无效引用 + status=done。
-
-## 已排除的变量
-
-- PWA Service Worker（已从构建中移除）
-- Supabase JS 客户端（已换成原生 fetch）
-- Vite 环境变量注入（已硬编码 URL 和 key）
-- tours vs locations 表差异（console 测试两者均正常）
-- Supabase 域名墙（console 测试可连通）
+1. **函数日志**：`https://supabase.com/dashboard/project/qxunedraoviaonjdanag/functions/process-tour/logs`
+2. **数据确认**：用 service_role key 查询 `locations`/`routes` 表
+3. **触发器状态**：`SELECT * FROM pg_trigger WHERE tgname = 'ai_process_trigger';`
+4. **RLS 策略**：`SELECT * FROM pg_policies WHERE tablename IN ('locations', 'routes');`
+5. **浏览器扩展**：`chrome://extensions/` 禁用所有扩展后测试
+6. **SPA 路由**：确认 `vercel.json` 存在且含 `rewrites` 配置
