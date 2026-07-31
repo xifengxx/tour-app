@@ -130,6 +130,7 @@ export default function TourEdit() {
       },
       destination: { name: destName, region: destRegion, type: 'mountain' },
       is_public: false,
+      status: 'processing',
     };
 
     try {
@@ -150,18 +151,6 @@ export default function TourEdit() {
 
       setPhase('processing');
       setSaveMsg(`✅ 草稿已保存 (ID: ${uuid})`);
-
-      // Fire-and-forget: trigger Edge Function without blocking.
-      // (Awaited long POST exhausts Chrome's connection pool and causes
-      // ERR_INTERNET_DISCONNECTED on all subsequent requests.)
-      fetch('https://qxunedraoviaonjdanag.supabase.co/functions/v1/process-tour', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-        },
-        body: JSON.stringify({ tourId: uuid }),
-      }).catch(() => {});
     } catch (e) {
       setSaveMsg(`❌ ${e.message}`);
     } finally {
