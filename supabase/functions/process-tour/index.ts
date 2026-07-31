@@ -124,7 +124,11 @@ Deno.serve(async (req: Request) => {
       }
       // Verify coordinate is in the target region
       const geo = await regeo(c.lng, c.lat);
-      if (geo && !regionMatch(geo, destRegion)) {
+      if (!geo) {
+        warnings.push(`⚠️ "${l.name}" regeo 校验失败（API 不可达），已跳过`);
+        continue;
+      }
+      if (!regionMatch(geo, destRegion)) {
         warnings.push(`⚠️ "${l.name}" 坐标(${c.lng},${c.lat})位于 ${geo.province}${geo.city || ''}，不在 ${destRegion}，已跳过`);
         continue;
       }
