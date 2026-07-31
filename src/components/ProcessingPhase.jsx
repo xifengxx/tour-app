@@ -54,9 +54,8 @@ export default function ProcessingPhase({
     return () => {
       clearTimeout(initial);
       if (intervalRef.current) clearInterval(intervalRef.current);
-      if (timerRef.current) clearInterval(timerRef.current);
     };
-  }, [draftTourId, onCheckDone]);
+  }, [draftTourId]); // removed onCheckDone — its reference changes every render, killing the timer
 
   const formatElapsed = (s) => {
     if (s < 60) return `${s} 秒`;
