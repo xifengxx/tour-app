@@ -99,6 +99,10 @@ npx supabase functions deploy process-tour --project-ref qxunedraoviaonjdanag --
 | v3 | ID 命名空间：`{tourId前8位}-{slug}` 避免全局主键冲突 |
 | v4 | stops 格式兼容：DeepSeek 可能返回对象数组，做 slug/中文名/包含关系三重匹配 |
 | v5 | `setStatus` 记录处理进度，支持 `status` 字段 |
+| v6 | regeo 逆地理编码：高德 API 验证坐标是否在目的地城市 |
+| v7 | 路线最近邻排序：按地理距离重排 stops，避免 A→C→B 乱序 |
+| v8 | Gaode `city` + `citylimit=true`：限定搜索范围到目的地城市 |
+| v9 | 严格 regeo：API 调用失败时跳过地点，不给错误坐标可乘之机 |
 
 ## 测试记录
 
@@ -125,17 +129,20 @@ curl -s "https://qxunedraoviaonjdanag.supabase.co/rest/v1/locations?tour_id=eq.<
 
 | 问题 | 根因 | 修复 |
 |------|------|------|
-| `ERR_INTERNET_DISCONNECTED` 轮询失败 | Chrome 连接池耗尽（长 POST + 并发 GET） | 数据库触发器替代浏览器调用 |
+| `ERR_INTERNET_DISCONNECTED` 轮询失败 | Chrome DevTools Network 面板打开时连接挂起，占满连接池 | 关闭 DevTools；加 AbortController 10s 超时 |
 | 数据写入但查询返回空 | RLS 策略：anon key 查不到非公开导览 | 轮询用 Supabase 客户端（带用户 JWT） |
 | 审核页显示空数据 | 复杂 join 查询比简单轮询更易失败 | `onCheckDone` 预加载 + 5 次重试 |
 | 保存后跳转 404 | `vercel.json` 被删，SPA rewrite 丢失 | 保留 `"rewrites": [{"source": "/(.*)", "destination": "/"}]` |
 | Edge Function 409 主键冲突 | ID 全局唯一约束，DeepSeek 生成重复 slug | v3：ID 加 tourId 前缀做命名空间 |
+| 坐标错到其他省份 | Gaode 搜索未限城市 + regeo 静默失败 | v8/v9：citylimit + 严格 regeo |
+| 路线顺序混乱（A→C→B→D） | DeepSeek 输出无序，从中间点出发 | v7：最近邻排序，从最远点出发 |
 
 ## 错误排查清单
 
-1. **函数日志**：`https://supabase.com/dashboard/project/qxunedraoviaonjdanag/functions/process-tour/logs`
-2. **数据确认**：用 service_role key 查询 `locations`/`routes` 表
-3. **触发器状态**：`SELECT * FROM pg_trigger WHERE tgname = 'ai_process_trigger';`
-4. **RLS 策略**：`SELECT * FROM pg_policies WHERE tablename IN ('locations', 'routes');`
-5. **浏览器扩展**：`chrome://extensions/` 禁用所有扩展后测试
-6. **SPA 路由**：确认 `vercel.json` 存在且含 `rewrites` 配置
+1. **Chrome DevTools**：**关闭 Network 面板**后测试。开着 DevTools 会导致连接挂起 → `ERR_INTERNET_DISCONNECTED`
+2. **函数日志**：`https://supabase.com/dashboard/project/qxunedraoviaonjdanag/functions/process-tour/logs`
+3. **数据确认**：用 service_role key 查询 `locations`/`routes` 表
+4. **触发器状态**：`SELECT * FROM pg_trigger WHERE tgname = 'ai_process_trigger';`
+5. **RLS 策略**：`SELECT * FROM pg_policies WHERE tablename IN ('locations', 'routes');`
+6. **浏览器扩展**：`chrome://extensions/` 禁用所有扩展后测试
+7. **SPA 路由**：确认 `vercel.json` 存在且含 `rewrites` 配置
