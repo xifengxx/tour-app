@@ -151,36 +151,17 @@ export default function TourEdit() {
       setPhase('processing');
       setSaveMsg(`✅ 草稿已保存 (ID: ${uuid})`);
 
-      // Trigger Supabase Edge Function and await the result directly.
-      // (No client-side polling — a single long-lived request is far more
-      // resilient on flaky networks than repeated polls during the POST.)
-      const runId = ++aiRunRef.current;
-      setProcessingError('');
-      try {
-        const res = await fetch('https://qxunedraoviaonjdanag.supabase.co/functions/v1/process-tour', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-          },
-          body: JSON.stringify({ tourId: uuid }),
-        });
-        const result = await res.json().catch(() => ({}));
-        if (aiRunRef.current !== runId) return; // user left the processing screen
-        if (res.ok && result.success) {
-          // Brief pause to let Chrome's connection pool stabilize
-          // after the long-lived POST before starting GET retries.
-          await new Promise(r => setTimeout(r, 3000));
-          await loadResults(runId);
-        } else {
-          setRetryMode('ai');
-          setProcessingError(result.error || `服务器返回错误 (${res.status})，请重试`);
-        }
-      } catch (e) {
-        if (aiRunRef.current !== runId) return;
-        setRetryMode('ai');
-        setProcessingError(`网络请求失败：${e.message || '无法连接服务器'}。草稿已保存，可直接重试。`);
-      }
+      // Fire-and-forget: trigger Edge Function without blocking.
+      // (Awaited long POST exhausts Chrome's connection pool and causes
+      // ERR_INTERNET_DISCONNECTED on all subsequent requests.)
+      fetch('https://qxunedraoviaonjdanag.supabase.co/functions/v1/process-tour', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+        },
+        body: JSON.stringify({ tourId: uuid }),
+      }).catch(() => {});
     } catch (e) {
       setSaveMsg(`❌ ${e.message}`);
     } finally {
@@ -463,26 +444,9 @@ export default function TourEdit() {
             novelTitle={novelTitle}
             novelAuthor={novelAuthor}
             sourceText={sourceText}
-            error={processingError}
-            onRetry={async () => {
-              setProcessingError('');
-              // Always try a cheap refetch first — the AI may have finished
-              // server-side even if the POST request itself failed.
-              const runId = aiRunRef.current;
-              const fresh = await reloadTour();
-              if (aiRunRef.current !== runId) return;
-              if (fresh && fresh.locations && fresh.locations.length > 0) {
-                setPhase('review');
-                return;
-              }
-              if (retryMode === 'reload') {
-                setProcessingError('结果仍未加载成功，请检查网络连接后再试。');
-                return;
-              }
-              handleSaveDraft();
-            }}
-            onSkip={() => { aiRunRef.current++; setPhase('review'); }}
-            onBack={() => { aiRunRef.current++; setProcessingError(''); setPhase('input'); }}
+            onCheckDone={() => setPhase('review')}
+            onSkip={() => setPhase('review')}
+            onBack={() => setPhase('input')}
           />
         )}
 
