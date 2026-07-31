@@ -165,6 +165,34 @@ Deno.serve(async (req: Request) => {
       { role: "system", content: "你是旅游路线规划师。只返回JSON。" },
       { role: "user", content: `${destName}路线。可选地点（id: 名称）: ${locs.map(l => `${l.id}: ${l.name}`).join(", ")}\n\n规划3条路线（2日游/1日游/主题游）。注意：stops 必须是由上面地点的 id 组成的字符串数组，如 ["yujing-feng","sanqing-palace"]，严禁返回对象或使用地点以外的 id。JSON: {"routes":[{"day_label":"2日游","title":"","stops":["id1","id2"],"narrative":""}]}` },
     ]);
+    // Build coordinate lookup for proximity-based reordering
+    const locCoords = new Map(locs.map(l => [l.id, { lng: l.lng, lat: l.lat, name: l.name }]));
+    const dist = (a: {lng:number,lat:number}, b: {lng:number,lat:number}) => Math.sqrt((a.lng-b.lng)**2 + (a.lat-b.lat)**2);
+
+    // Reorder stops by nearest-neighbor for geographic consistency (A→B→C, not A→C→B)
+    const reorderByProximity = (stops: string[]): string[] => {
+      if (stops.length <= 2) return stops;
+      const remaining = new Set(stops);
+      const ordered: string[] = [];
+      let current = stops[0]; // start from first DeepSeek pick
+      while (remaining.size > 0) {
+        ordered.push(current);
+        remaining.delete(current);
+        // Find closest unvisited stop
+        let best: string | null = null;
+        let bestDist = Infinity;
+        const curCoord = locCoords.get(current);
+        if (curCoord) {
+          for (const s of remaining) {
+            const c = locCoords.get(s);
+            if (c) { const d = dist(curCoord, c); if (d < bestDist) { bestDist = d; best = s; } }
+          }
+        }
+        current = best || [...remaining][0] || current;
+      }
+      return ordered;
+    };
+
     // Route stop validation: resolve and report mismatches
     const routes = (rr.routes || []).map((r: any, i: number) => {
       const rawStops: string[] = (Array.isArray(r.stops) ? r.stops : [])
@@ -179,7 +207,7 @@ Deno.serve(async (req: Request) => {
         id: `${scope}-r${i + 1}`,
         day_label: String(r.day_label || ""),
         title: String(r.title || `路线${i + 1}`),
-        stops: resolved,
+        stops: reorderByProximity(resolved),
         narrative: typeof r.narrative === "string" ? r.narrative : "",
         sort_order: i,
       };
