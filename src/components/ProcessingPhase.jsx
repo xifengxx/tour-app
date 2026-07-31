@@ -48,9 +48,9 @@ export default function ProcessingPhase({
             },
           }
         );
+        setPollCount(prev => prev + 1);
         if (!res.ok) return;
         const data = await res.json();
-        setPollCount(prev => prev + 1);
         if (Array.isArray(data) && data.length > 0) {
           if (intervalRef.current) clearInterval(intervalRef.current);
           if (timerRef.current) clearInterval(timerRef.current);
