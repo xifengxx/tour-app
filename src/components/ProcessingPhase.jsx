@@ -19,8 +19,17 @@ export default function ProcessingPhase({
 }) {
   const [pollCount, setPollCount] = useState(0);
   const [elapsed, setElapsed] = useState(0);
+  const startTimeRef = useRef(Date.now());
   const intervalRef = useRef(null);
   const timerRef = useRef(null);
+
+  // Timer: read from startTimeRef instead of useState to avoid stale closures
+  useEffect(() => {
+    const tick = () => setElapsed(Math.floor((Date.now() - startTimeRef.current) / 1000));
+    tick(); // initial
+    timerRef.current = setInterval(tick, 1000);
+    return () => { if (timerRef.current) clearInterval(timerRef.current); };
+  }, []);
 
   useEffect(() => {
     const check = async () => {
@@ -48,11 +57,6 @@ export default function ProcessingPhase({
       if (timerRef.current) clearInterval(timerRef.current);
     };
   }, [draftTourId, onCheckDone]);
-
-  useEffect(() => {
-    timerRef.current = setInterval(() => setElapsed(prev => prev + 1), 1000);
-    return () => { if (timerRef.current) clearInterval(timerRef.current); };
-  }, []);
 
   const formatElapsed = (s) => {
     if (s < 60) return `${s} 秒`;
