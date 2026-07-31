@@ -261,7 +261,10 @@ export default function TourEdit() {
       }
 
       setSaveMsg('✅ 保存成功！');
-      setTimeout(() => navigate(`/tour/${uuid}`), 1000);
+      // Hard navigation (fresh connection pool) after brief cooldown
+      setTimeout(() => {
+        window.location.href = `/tour/${uuid}`;
+      }, 2000);
     } catch (e) {
       setSaveMsg(`❌ ${e.message}`);
     } finally {
