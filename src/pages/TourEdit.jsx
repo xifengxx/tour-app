@@ -261,10 +261,6 @@ export default function TourEdit() {
       }
 
       setSaveMsg('✅ 保存成功！');
-      // Hard navigation (fresh connection pool) after brief cooldown
-      setTimeout(() => {
-        window.location.href = `/tour/${uuid}`;
-      }, 2000);
     } catch (e) {
       setSaveMsg(`❌ ${e.message}`);
     } finally {
@@ -303,11 +299,11 @@ export default function TourEdit() {
       />
 
       {saveMsg && (
-        <div className={`px-4 py-2.5 text-xs text-center font-medium ${
+        <div className={`px-4 py-2.5 text-xs text-center font-medium flex items-center justify-center gap-3 ${
           saveMsg.includes('✅') ? 'bg-green-600/10 text-green-400' :
           saveMsg.includes('💡') ? 'bg-blue-600/10 text-blue-400' :
           'bg-red-600/10 text-red-400'
-        }`}>{saveMsg}</div>
+        }`}>{saveMsg}{saveMsg.includes('✅') && <a href={`/tour/${draftTourId}`} className="underline hover:text-white transition-colors">查看导览 →</a>}</div>
       )}
 
       <div className="flex-1 overflow-y-auto p-4 max-w-2xl mx-auto w-full pb-24">
