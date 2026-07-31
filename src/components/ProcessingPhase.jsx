@@ -31,18 +31,20 @@ export default function ProcessingPhase({
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
   }, []);
 
+  // Fetch token once at mount — avoids triggering Supabase auto-refresh on every poll
+  const tokenRef = useRef(null);
+  useEffect(() => { supabase.auth.getSession().then(s => { tokenRef.current = s.data.session?.access_token; }); }, []);
+
   useEffect(() => {
     const check = async () => {
       if (!draftTourId) return;
       try {
-        const { data: { session } } = await supabase.auth.getSession();
-        const token = session?.access_token;
         const res = await fetch(
           `https://qxunedraoviaonjdanag.supabase.co/rest/v1/locations?select=id&tour_id=eq.${draftTourId}&limit=1`,
           {
             headers: {
               apikey: 'sb_publishable_Pp21-3ssB3rSxwFnA-WZZw_eUHmF31E',
-              ...(token ? { Authorization: `Bearer ${token}` } : {}),
+              Authorization: `Bearer ${tokenRef.current || 'sb_publishable_Pp21-3ssB3rSxwFnA-WZZw_eUHmF31E'}`,
             },
           }
         );
