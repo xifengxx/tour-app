@@ -50,13 +50,19 @@ async function gaode(name: string, city: string) {
   return null;
 }
 
-// Regeo: verify a coordinate is actually in the expected city/province
+// Regeo: verify a coordinate is actually in the expected city/province.
+// Gracefully degrades — if the API call fails, returns null (location passes validation).
 async function regeo(lng: number, lat: number) {
-  const r = await fetch(`https://restapi.amap.com/v3/geocode/regeo?location=${lng},${lat}&key=${GAODE_KEY}`);
-  const d = await r.json();
-  if (d.status === "1" && d.regeocode?.addressComponent) {
-    const ac = d.regeocode.addressComponent;
-    return { province: ac.province, city: ac.city, district: ac.district, adcode: ac.adcode };
+  try {
+    const r = await fetch(`https://restapi.amap.com/v3/geocode/regeo?location=${lng},${lat}&key=${GAODE_KEY}`);
+    if (!r.ok) return null;
+    const d = await r.json();
+    if (d.status === "1" && d.regeocode?.addressComponent) {
+      const ac = d.regeocode.addressComponent;
+      return { province: ac.province, city: ac.city, district: ac.district, adcode: ac.adcode };
+    }
+  } catch {
+    // API failure — skip validation, don't crash
   }
   return null;
 }
