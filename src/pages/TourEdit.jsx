@@ -65,15 +65,21 @@ export default function TourEdit() {
   // Token to invalidate a stale AI run (user went back / skipped / retried)
   const aiRunRef = useRef(0);
 
-  // Refetch results after AI completes — no full-page reload, so a flaky
-  // network can never kill the page with ERR_INTERNET_DISCONNECTED.
+  // Refetch results after AI completes — retry up to 5 times with
+  // increasing delays, because the long POST can exhaust Chrome's
+  // connection pool and cause transient ERR_INTERNET_DISCONNECTED.
   const loadResults = async (runId) => {
-    const fresh = await reloadTour();
-    if (aiRunRef.current !== runId) return true; // user left; stay silent
-    if (fresh && fresh.locations && fresh.locations.length > 0) {
-      setProcessingError('');
-      setPhase('review');
-      return true;
+    for (let i = 0; i < 5; i++) {
+      if (aiRunRef.current !== runId) return true;
+      const fresh = await reloadTour();
+      if (aiRunRef.current !== runId) return true;
+      if (fresh && fresh.locations && fresh.locations.length > 0) {
+        setProcessingError('');
+        setPhase('review');
+        return true;
+      }
+      // Wait before retry: 2s, 4s, 8s, 16s
+      if (i < 4) await new Promise(r => setTimeout(r, (2 ** (i + 1)) * 1000));
     }
     setRetryMode('reload');
     setProcessingError('AI 处理已完成，但网络异常导致结果加载失败。点「重试」重新加载（不会重复调用 AI）。');
@@ -162,6 +168,9 @@ export default function TourEdit() {
         const result = await res.json().catch(() => ({}));
         if (aiRunRef.current !== runId) return; // user left the processing screen
         if (res.ok && result.success) {
+          // Brief pause to let Chrome's connection pool stabilize
+          // after the long-lived POST before starting GET retries.
+          await new Promise(r => setTimeout(r, 3000));
           await loadResults(runId);
         } else {
           setRetryMode('ai');
