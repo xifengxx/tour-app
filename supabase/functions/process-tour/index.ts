@@ -42,9 +42,11 @@ async function deleteRows(table: string, tourId: string) {
   if (!res.ok) throw new Error(`DELETE ${table}: ${res.status} ${await res.text()}`);
 }
 
-async function gaode(name: string, city: string) {
-  const kw = encodeURIComponent(`${city} ${name}`);
-  const r = await fetch(`https://restapi.amap.com/v3/place/text?keywords=${kw}&key=${GAODE_KEY}&types=风景名胜|旅游景点`);
+async function gaode(name: string, destCity: string) {
+  const kw = encodeURIComponent(name);
+  // Use city filter to restrict results to destination region
+  const cityParam = encodeURIComponent(destCity.replace(/[省市自治区]$/g, ""));
+  const r = await fetch(`https://restapi.amap.com/v3/place/text?keywords=${kw}&city=${cityParam}&key=${GAODE_KEY}&types=风景名胜|旅游景点&citylimit=true`);
   const d = await r.json();
   if (d.pois?.length) { const [lng, lat] = d.pois[0].location.split(",").map(Number); return { lng, lat, name: d.pois[0].name }; }
   return null;
@@ -173,16 +175,24 @@ Deno.serve(async (req: Request) => {
     const locCoords = new Map(locs.map(l => [l.id, { lng: l.lng, lat: l.lat, name: l.name }]));
     const dist = (a: {lng:number,lat:number}, b: {lng:number,lat:number}) => Math.sqrt((a.lng-b.lng)**2 + (a.lat-b.lat)**2);
 
-    // Reorder stops by nearest-neighbor for geographic consistency (A→B→C, not A→C→B)
+    // Reorder stops by nearest-neighbor starting from the most extreme point,
+    // so the route follows a consistent geographic path.
     const reorderByProximity = (stops: string[]): string[] => {
       if (stops.length <= 2) return stops;
+      // Find the two most distant points — start from one of them
+      let maxDist = 0, start = stops[0];
+      for (const a of stops) {
+        for (const b of stops) {
+          const ca = locCoords.get(a), cb = locCoords.get(b);
+          if (ca && cb) { const d = dist(ca, cb); if (d > maxDist) { maxDist = d; start = a; } }
+        }
+      }
       const remaining = new Set(stops);
       const ordered: string[] = [];
-      let current = stops[0]; // start from first DeepSeek pick
+      let current = start;
       while (remaining.size > 0) {
         ordered.push(current);
         remaining.delete(current);
-        // Find closest unvisited stop
         let best: string | null = null;
         let bestDist = Infinity;
         const curCoord = locCoords.get(current);
