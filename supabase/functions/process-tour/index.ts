@@ -1,8 +1,9 @@
 // Supabase Edge Function: AI 自动处理导览
-// 部署: npx supabase functions deploy process-tour --project-ref qxunedraoviaonjdanag
-// Secrets: supabase secrets set DEEPSEEK_API_KEY=sk-... --project-ref qxunedraoviaonjdanag
+// 部署: npx supabase functions deploy process-tour --project-ref qxunedraoviaonjdanag --no-verify-jwt
+// Secrets: supabase secrets set DEEPSEEK_API_KEY=sk-... GAODE_KEY=2ff1... --project-ref qxunedraoviaonjdanag
 
-const GAODE_KEY = "2ff1bf71b26aed0a92eb4ab63657bb25";
+// 高德 Key 必须走环境变量（supabase secrets set GAODE_KEY=...），禁止硬编码
+const GAODE_KEY = Deno.env.get("GAODE_KEY") || "";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SR_KEY = Deno.env.get("SB_SERVICE_ROLE_KEY")!;
 const DEEPSEEK_KEY = Deno.env.get("DEEPSEEK_API_KEY")!;
@@ -42,41 +43,95 @@ async function deleteRows(table: string, tourId: string) {
   if (!res.ok) throw new Error(`DELETE ${table}: ${res.status} ${await res.text()}`);
 }
 
-async function gaode(name: string, destCity: string) {
+async function gaode(name: string, destCity: string, center?: { lng: number; lat: number }) {
   const kw = encodeURIComponent(name);
-  // Use city filter to restrict results to destination region
-  const cityParam = encodeURIComponent(destCity.replace(/[省市自治区]$/g, ""));
-  const r = await fetch(`https://restapi.amap.com/v3/place/text?keywords=${kw}&city=${cityParam}&key=${GAODE_KEY}&types=风景名胜|旅游景点&citylimit=true`);
+  // 高德 city 参数只接受城市名/adcode，不能是"省+市"。
+  // "安徽省黄山市" → "黄山"；否则 citylimit=true 被静默忽略，全国同名点乱入。
+  const cityParam = encodeURIComponent((splitRegion(destCity).city || destCity).replace(/[市]$/g, ""));
+  // 用目的地中心做搜索偏置：优先返回中心附近 POI，避免"同城同名但隔几十公里"的错误点
+  const near = center ? `&location=${center.lng},${center.lat}&radius=20000` : "";
+  const r = await fetch(`https://restapi.amap.com/v3/place/text?keywords=${kw}&city=${cityParam}&key=${GAODE_KEY}&types=风景名胜|旅游景点&citylimit=true${near}`);
   const d = await r.json();
-  if (d.pois?.length) { const [lng, lat] = d.pois[0].location.split(",").map(Number); return { lng, lat, name: d.pois[0].name }; }
+  // 过滤地址式 POI：名称形如"湖北省武汉市洪山区象鼻山"（整串地址当名称）的多为非景点的幻觉点。
+  // 真实景点名称是短的（"黄鹤楼""晴川阁"），不会带"省…市"。
+  const realPois = (d.pois || []).filter((p: any) => !/省.*市/.test(p.name || ""));
+  if (realPois.length) { const [lng, lat] = realPois[0].location.split(",").map(Number); return { lng, lat, name: realPois[0].name }; }
   return null;
 }
 
+// 目的地中心坐标：地理编码目的地名称（"龟山"+武汉 → 汉阳龟山 114.269,30.554）。
+// 用于①搜索偏置 ②距离校验。失败返回 null（降级为仅城市级校验）。
+async function geoCodeCenter(name: string, destCity: string): Promise<{ lng: number; lat: number } | null> {
+  try {
+    const cityParam = encodeURIComponent((splitRegion(destCity).city || destCity).replace(/[市]$/g, ""));
+    const r = await fetch(`https://restapi.amap.com/v3/geocode/geo?address=${encodeURIComponent(name)}&city=${cityParam}&key=${GAODE_KEY}`);
+    if (!r.ok) return null;
+    const d = await r.json();
+    const g = d.geocodes?.[0];
+    if (!g?.location) return null;
+    const [lng, lat] = g.location.split(",").map(Number);
+    return { lng, lat };
+  } catch {
+    return null;
+  }
+}
+
 // Regeo: verify a coordinate is actually in the expected city/province.
-// Gracefully degrades — if the API call fails, returns null (location passes validation).
+// 返回值三态：object=坐标可解析；undefined=API 不可达；null=坐标无法解析。
 async function regeo(lng: number, lat: number) {
   try {
     const r = await fetch(`https://restapi.amap.com/v3/geocode/regeo?location=${lng},${lat}&key=${GAODE_KEY}`);
-    if (!r.ok) return null;
+    if (!r.ok) return undefined;
     const d = await r.json();
     if (d.status === "1" && d.regeocode?.addressComponent) {
       const ac = d.regeocode.addressComponent;
       return { province: ac.province, city: ac.city, district: ac.district, adcode: ac.adcode };
     }
+    return null;
   } catch {
     // API failure — skip validation, don't crash
+    return undefined;
   }
-  return null;
 }
 
-// Check if a location is plausibly in the expected region
-function regionMatch(geo: { province: string; city: string }, targetRegion: string): boolean {
+// ── Region helpers ─────────────────────────────────────────────
+// "安徽省黄山市" → {prov:"安徽省", city:"黄山市"}; "黄山市" → {prov:"", city:"黄山市"}
+function splitRegion(t: string) {
+  const sheng = t.indexOf("省");
+  if (sheng > -1) return { prov: t.slice(0, sheng + 1), city: t.slice(sheng + 1) };
+  const zzq = t.indexOf("自治区");
+  if (zzq > -1) return { prov: t.slice(0, zzq + 3), city: t.slice(zzq + 3) };
+  return { prov: "", city: t };
+}
+const stripSuffix = (s: any) => String(s).replace(/[市]$/g, "");
+
+// Check if a location is plausibly in the expected region.
+// 注意：高德 regeo 对直辖市返回 city=[]（空数组，truthy），
+// 必须显式回退到 province，否则空数组会让 includes("") 恒为 true → 校验被绕过。
+function regionMatch(geo: { province: string; city: string | string[] }, targetRegion: string): boolean {
   if (!geo) return false;
-  // Extract city/province keywords from target region (e.g., "湖北省武汉市" → ["湖北","武汉"])
-  const kw = targetRegion.replace(/[省市自治区]$/g, "");
-  const cityPart = geo.city || geo.province || "";
-  const provPart = geo.province || "";
-  return cityPart.includes(kw) || kw.includes(cityPart) || provPart.includes(kw);
+  const { prov: tProv, city: tCity } = splitRegion(targetRegion);
+  const gCity = Array.isArray(geo.city) ? (geo.city[0] || "") : String(geo.city || "");
+  const gProv = String(geo.province || "");
+  const gCityCand = gCity || gProv; // 直辖市：city 为空 → 用 province 兜底
+  const tCityCand = stripSuffix(tCity || targetRegion);
+  // 城市匹配是主判据（含直辖市 province 兜底）。若目标有明确"市"，省份不再兜底，
+  // 否则同省不同市（如合肥 vs 黄山）也会通过。
+  const cityOk = !!tCityCand && (gCityCand.includes(tCityCand) || tCityCand.includes(stripSuffix(gCityCand)));
+  const provinceOnly = !tCity && !!tProv; // 目标地区只写了省份才用省份匹配
+  const provOk = provinceOnly && (gProv.includes(stripSuffix(tProv)) || stripSuffix(tProv).includes(stripSuffix(gProv)));
+  return Boolean(cityOk || provOk);
+}
+
+// 坐标距离（米）— 用于地点去重（DeepSeek 常提取多个近义地名到同一 POI）
+const EARTH_R = 6371000;
+const DEDUP_M = 150;
+function haversineM(a: { lng: number; lat: number }, b: { lng: number; lat: number }): number {
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const dLat = toRad(b.lat - a.lat);
+  const dLng = toRad(b.lng - a.lng);
+  const s = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(a.lat)) * Math.cos(toRad(b.lat)) * Math.sin(dLng / 2) ** 2;
+  return 2 * EARTH_R * Math.asin(Math.sqrt(s));
 }
 
 async function deepseek(messages: { role: string; content: string }[]) {
@@ -86,7 +141,11 @@ async function deepseek(messages: { role: string; content: string }[]) {
     body: JSON.stringify({ model: "deepseek-chat", messages, temperature: 0.7, max_tokens: 8192, response_format: { type: "json_object" } }),
   });
   if (!r.ok) throw new Error(`DeepSeek: ${r.status}`);
-  return JSON.parse((await r.json()).choices[0].message.content);
+  const text = ((await r.json()).choices?.[0]?.message?.content || "").trim();
+  if (!text) throw new Error("DeepSeek 返回空内容");
+  // 剥离 ```json ... ``` 代码块后解析，避免模型偶尔包裹 markdown
+  const cleaned = text.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "");
+  return JSON.parse(cleaned);
 }
 
 Deno.serve(async (req: Request) => {
@@ -97,47 +156,82 @@ Deno.serve(async (req: Request) => {
   try {
     ({ tourId } = await req.json());
     if (!tourId) return json({ error: "Missing tourId" }, 400);
+    if (!GAODE_KEY) return json({ error: "GAODE_KEY 未配置（supabase secrets set GAODE_KEY=...）" }, 500);
 
     // 1. Fetch draft (use REST directly since service_role bypasses RLS)
     const rows = await fetch(`${SUPABASE_URL}/rest/v1/tours?id=eq.${tourId}&select=*`, { headers: hdr }).then(r => r.json());
     const tour = Array.isArray(rows) ? rows[0] : rows;
     if (!tour) return json({ error: "Tour not found" }, 404);
-
-    await setStatus(tourId, "processing");
+    // 注意：此处不能再 setStatus("processing") —— 导览已由 INSERT/UPDATE 触发器置为 processing，
+    // 再设一次会触发 UPDATE 触发器 → 函数被并发调用两次（双重写导致数据错乱）。
 
     const destName = tour.destination?.name || "";
     const destRegion = tour.destination?.region || "";
     const src = tour.source?.rawText || "";
     console.log(`Processing: ${tour.title}, ${src.length} chars`);
 
+    // 目的地中心坐标（地理编码），用于搜索偏置 + 距离校验
+    const center = await geoCodeCenter(destName, destRegion);
+    if (center) console.log(`Destination center: ${destName} @ ${center.lng.toFixed(4)},${center.lat.toFixed(4)}`);
+
     // 2. Extract locations
     const lr = await deepseek([
-      { role: "system", content: "你是中国旅游规划专家。只返回JSON。" },
-      { role: "user", content: `目的地：${destName}（${destRegion}）\n文本：${src.slice(0, 6000)}\n\n提取所有值得探访的地点。JSON: {"locations":[{"id":"en-id","name":"地点","importance":1-5,"elevation":"","tags":[]}]}` },
+      { role: "system", content: "你是中国旅游规划专家。只返回JSON。只提取真实存在的地点，不确定的地点不要提取。只列固定旅游景点/地标/古迹/公园，不要临时展览、活动、演出、商业店铺等非固定地点。" },
+      { role: "user", content: `目的地：${destName}（${destRegion}）\n文本：${src.slice(0, 6000)}\n\n提取值得探访的地点：有文本时以文本提到的地点为准；文本为空或未提及时，列出该目的地及周边公认的著名景点（地标/景区/古迹）。至少提取 5 个。JSON: {"locations":[{"id":"en-id","name":"地点","importance":1-5,"elevation":"","tags":[]}]}` },
     ]);
 
     const warnings: string[] = [];
     const locs: any[] = [];
     for (const l of (lr.locations || [])) {
-      const c = await gaode(l.name, destRegion);
+      const c = await gaode(l.name, destRegion, center);
       if (!c || !c.lat) {
         warnings.push(`⚠️ "${l.name}" 未找到坐标，已跳过`);
         continue;
       }
       // Verify coordinate is in the target region
       const geo = await regeo(c.lng, c.lat);
-      if (!geo) {
-        warnings.push(`⚠️ "${l.name}" regeo 校验失败（API 不可达），已跳过`);
+      if (geo === undefined) {
+        warnings.push(`⚠️ "${l.name}" 坐标校验失败（高德 API 不可达），已跳过`);
+        continue;
+      }
+      if (geo === null) {
+        warnings.push(`⚠️ "${l.name}" 坐标(${c.lng},${c.lat})无法解析，已跳过`);
         continue;
       }
       if (!regionMatch(geo, destRegion)) {
         warnings.push(`⚠️ "${l.name}" 坐标(${c.lng},${c.lat})位于 ${geo.province}${geo.city || ''}，不在 ${destRegion}，已跳过`);
         continue;
       }
+      // 距离目的地中心过远 → 同城不同地（如"江夏龟山" vs 汉阳龟山），跳过。
+      // 12km：合法景点实测都在中心 5km 内；14km+ 的"象鼻山"等误入点须拦截
+      if (center && haversineM(center, c) > 12000) {
+        warnings.push(`⚠️ "${l.name}" 坐标距目的地中心 ${Math.round(haversineM(center, c) / 1000)}km，过远已跳过`);
+        continue;
+      }
       // Use Gaode's official name if available
       const displayName = c.name && c.name !== l.name ? c.name : l.name;
       locs.push({ id: l.id, name: displayName, lat: c.lat, lng: c.lng, elevation: l.elevation || "", importance: l.importance || 3, tags: l.tags || [], sort_order: locs.length });
     }
+    const extractedBeforeDedup = locs.length;
+
+    // 坐标去重：距离 <150m 视为同一地点，保留 importance 更高者（地图上避免标记重叠）
+    const deduped: any[] = [];
+    for (const l of locs) {
+      const dup = deduped.find(d => haversineM(d, l) < DEDUP_M);
+      if (dup) {
+        if ((l.importance || 3) > (dup.importance || 3)) {
+          deduped[deduped.indexOf(dup)] = l;
+          warnings.push(`♻️ "${dup.name}" 与 "${l.name}" 距离过近(<${DEDUP_M}m)，保留重要性更高者`);
+        } else {
+          warnings.push(`♻️ "${l.name}" 与 "${dup.name}" 距离过近(<${DEDUP_M}m)，已去重`);
+        }
+        continue;
+      }
+      deduped.push(l);
+    }
+    deduped.forEach((l, i) => (l.sort_order = i));
+    locs.length = 0;
+    locs.push(...deduped);
     console.log(`${locs.length} locations (${warnings.length} warnings)`);
 
     // 3. Content
@@ -169,7 +263,7 @@ Deno.serve(async (req: Request) => {
     // 4. Routes
     const rr = await deepseek([
       { role: "system", content: "你是旅游路线规划师。只返回JSON。" },
-      { role: "user", content: `${destName}路线。可选地点（id: 名称）: ${locs.map(l => `${l.id}: ${l.name}`).join(", ")}\n\n规划3条路线（2日游/1日游/主题游）。注意：stops 必须是由上面地点的 id 组成的字符串数组，如 ["yujing-feng","sanqing-palace"]，严禁返回对象或使用地点以外的 id。JSON: {"routes":[{"day_label":"2日游","title":"","stops":["id1","id2"],"narrative":""}]}` },
+      { role: "user", content: `${destName}路线。可选地点（id: 名称）: ${locs.map(l => `${l.id}: ${l.name}`).join(", ")}\n\n根据地点数量和地理集中度规划 2-3 条真正不同的路线：地点少且集中时只做半日/一日主题路线，严禁编造需要多天的行程（如地点都在步行范围内就绝不能标"2日游"）。每条路线 3-6 个地点（地点不足则全部用上）。路线之间主题或路径必须明显不同。stops 必须是由上面地点 id 组成的字符串数组，如 ["yujing-feng","sanqing-palace"]，严禁返回对象或使用地点以外的 id。JSON: {"routes":[{"day_label":"1日游","title":"","stops":["id1","id2"],"narrative":""}]}` },
     ]);
     // Build coordinate lookup for proximity-based reordering
     const locCoords = new Map(locs.map(l => [l.id, { lng: l.lng, lat: l.lat, name: l.name }]));
@@ -208,7 +302,7 @@ Deno.serve(async (req: Request) => {
     };
 
     // Route stop validation: resolve and report mismatches
-    const routes = (rr.routes || []).map((r: any, i: number) => {
+    const allRoutes = (rr.routes || []).map((r: any, i: number) => {
       const rawStops: string[] = (Array.isArray(r.stops) ? r.stops : [])
         .map((s: any) => s && typeof s === "object" ? (s.poi ?? s.id ?? s.name) : s)
         .filter(Boolean);
@@ -226,6 +320,18 @@ Deno.serve(async (req: Request) => {
         sort_order: i,
       };
     }).filter(r => r.stops.length > 0);
+
+    // 路线去重：stops 重叠度 >70% 视为同一路线（如"1日游/2日游"内容雷同），只保留第一条
+    const routes: any[] = [];
+    for (const r of allRoutes) {
+      const set = new Set(r.stops);
+      const dup = routes.find(u => {
+        const us = new Set(u.stops);
+        const overlap = [...set].filter(s => us.has(s)).length / Math.max(set.size, us.size);
+        return overlap > 0.7;
+      });
+      if (!dup) routes.push(r);
+    }
 
     // 5. Write
     console.log(`Writing ${locs.length} locs + ${routes.length} routes`);
@@ -246,7 +352,8 @@ Deno.serve(async (req: Request) => {
       locations: locs.length,
       routes: routes.length,
       warnings: warnings.length > 0 ? warnings : undefined,
-      rejected: (lr.locations || []).length - locs.length, // locations rejected by regeo
+      rejected: (lr.locations || []).length - extractedBeforeDedup, // regeo/坐标校验被拒
+      deduped: extractedBeforeDedup - locs.length, // 坐标去重数
     };
     console.log(`Done! ${report.locations} locs, ${report.routes} routes, ${warnings.length} warnings`);
     await setStatus(tourId, "done");

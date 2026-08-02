@@ -64,6 +64,8 @@ export default function TourEdit() {
   const [retryMode, setRetryMode] = useState('ai');
   // Token to invalidate a stale AI run (user went back / skipped / retried)
   const aiRunRef = useRef(0);
+  // 重新处理计数：递增以强制重挂载 ProcessingPhase，重置轮询
+  const [retryCount, setRetryCount] = useState(0);
 
   // Refetch results after AI completes — retry up to 5 times with
   // increasing delays, because the long POST can exhaust Chrome's
@@ -155,6 +157,20 @@ export default function TourEdit() {
       setSaveMsg(`❌ ${e.message}`);
     } finally {
       setSaving(false);
+    }
+  };
+
+  // ── Re-process: 重置 status=processing，触发 UPDATE 触发器重新调用 Edge Function ──
+  const handleReprocess = async () => {
+    if (!user) { setSaveMsg('请先登录'); return; }
+    if (!draftTourId) { setSaveMsg('❌ 尚未保存草稿'); return; }
+    setProcessingError('');
+    try {
+      await supabase.from('tours').update({ status: 'processing' }).eq('id', draftTourId);
+      setRetryCount(c => c + 1); // 强制重挂载 ProcessingPhase，重置轮询
+      setPhase('processing');
+    } catch (e) {
+      setSaveMsg(`❌ ${e.message}`);
     }
   };
 
@@ -425,6 +441,7 @@ export default function TourEdit() {
         {/* ════════════════════════════════════════════════ */}
         {phase === 'processing' && (
           <ProcessingPhase
+            key={retryCount}
             draftTourId={draftTourId}
             title={title}
             destName={destName}
@@ -446,6 +463,7 @@ export default function TourEdit() {
             }}
             onSkip={() => setPhase('review')}
             onBack={() => setPhase('input')}
+            onRetry={handleReprocess}
           />
         )}
 
@@ -473,6 +491,13 @@ export default function TourEdit() {
               <div className="flex-1 h-px bg-white/10" />
               <div className="w-8 h-8 rounded-full bg-white/5 text-gray-500 flex items-center justify-center text-xs">3</div>
             </div>
+
+            <button
+              onClick={handleReprocess}
+              className="w-full py-2.5 bg-purple-600/10 text-purple-400 rounded-xl text-xs border border-purple-600/20 mb-3 hover:bg-purple-600/20 transition-colors"
+            >
+              🔄 AI 重新分析（重新调用 AI，覆盖当前 AI 生成的地点 / 内容 / 路线）
+            </button>
 
             {/* Locations */}
             <section className="bg-[#1c1c32] rounded-2xl p-5 border border-white/5">

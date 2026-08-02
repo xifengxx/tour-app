@@ -1,9 +1,13 @@
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 
+const SB_URL = import.meta.env.VITE_SUPABASE_URL || '';
+const SB_ANON = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+
 /**
- * Waiting screen during AI processing. Polls Supabase to detect
- * when the Edge Function has written location data.
+ * Waiting screen during AI processing.
+ * 轮询 tours.status：done → 跳转审核；error → 显示失败 + 重试；
+ * processing → 继续等待。避免处理失败时无限死等。
  */
 export default function ProcessingPhase({
   draftTourId,
@@ -16,9 +20,11 @@ export default function ProcessingPhase({
   onCheckDone,
   onSkip,
   onBack,
+  onRetry,
 }) {
   const [pollCount, setPollCount] = useState(0);
   const [elapsed, setElapsed] = useState(0);
+  const [error, setError] = useState(null);
   const startTimeRef = useRef(Date.now());
   const intervalRef = useRef(null);
   const timerRef = useRef(null);
@@ -43,12 +49,12 @@ export default function ProcessingPhase({
         const ac = new AbortController();
         const t = setTimeout(() => ac.abort(), 10000);
         const res = await fetch(
-          `https://qxunedraoviaonjdanag.supabase.co/rest/v1/locations?select=id&tour_id=eq.${draftTourId}&limit=1`,
+          `${SB_URL}/rest/v1/tours?id=eq.${draftTourId}&select=status&limit=1`,
           {
             signal: ac.signal,
             headers: {
-              apikey: 'sb_publishable_Pp21-3ssB3rSxwFnA-WZZw_eUHmF31E',
-              Authorization: `Bearer ${tokenRef.current || 'sb_publishable_Pp21-3ssB3rSxwFnA-WZZw_eUHmF31E'}`,
+              apikey: SB_ANON,
+              Authorization: `Bearer ${tokenRef.current || SB_ANON}`,
             },
           }
         );
@@ -56,11 +62,20 @@ export default function ProcessingPhase({
         setPollCount(prev => prev + 1);
         if (!res.ok) return;
         const data = await res.json();
-        if (Array.isArray(data) && data.length > 0) {
+        const status = Array.isArray(data) ? data[0]?.status : undefined;
+        if (status === 'error') {
+          // Edge Function 处理失败，停止轮询并显示错误
+          if (intervalRef.current) clearInterval(intervalRef.current);
+          if (timerRef.current) clearInterval(timerRef.current);
+          setError('AI 处理失败：服务器端出错，请重新处理');
+          return;
+        }
+        if (status === 'done') {
           if (intervalRef.current) clearInterval(intervalRef.current);
           if (timerRef.current) clearInterval(timerRef.current);
           setTimeout(() => onCheckDone(), 800);
         }
+        // 'processing'（或暂未变更）→ 继续轮询
       } catch {
         // retry on next poll
       }
@@ -81,6 +96,39 @@ export default function ProcessingPhase({
     const sec = s % 60;
     return `${m} 分 ${sec} 秒`;
   };
+
+  // ── 处理失败状态：停止轮询，给出错误 + 重试 ──
+  if (error) {
+    return (
+      <div className="space-y-4">
+        <section className="bg-card rounded-2xl p-6 border border-red-500/30 text-center">
+          <div className="text-4xl mb-3">⚠️</div>
+          <h2 className="text-white font-bold text-lg mb-2">AI 处理失败</h2>
+          <p className="text-red-400 text-sm mb-5">{error}</p>
+          <div className="flex gap-2">
+            {onRetry && (
+              <button
+                onClick={onRetry}
+                className="flex-1 py-3 bg-gradient-to-r from-red-600 to-purple-600 text-white rounded-xl text-sm font-bold hover:from-red-700 hover:to-purple-700 transition-colors"
+              >
+                🔄 重新处理
+              </button>
+            )}
+            <button
+              onClick={onBack}
+              className="flex-1 py-3 bg-white/5 text-muted-foreground rounded-xl text-sm hover:bg-white/10 transition-colors"
+            >
+              ← 返回修改
+            </button>
+          </div>
+        </section>
+        <p className="text-muted-foreground text-xs text-center">
+          重新处理会再次调用 AI（提取地点、生成内容、规划路线）。<br />
+          若反复失败，请检查「目的地 / 地区」格式（如：湖南省衡阳市），或改用「跳过 → 手动编辑」。
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">

@@ -56,12 +56,23 @@ BEGIN
 END;
 $$;
 
-CREATE TRIGGER ai_process_trigger
+-- INSERT 触发器（新导览）
+CREATE TRIGGER ai_process_trigger_insert
   AFTER INSERT ON tours
   FOR EACH ROW
   WHEN (NEW.status = 'processing')
   EXECUTE FUNCTION trigger_ai_process();
+
+-- UPDATE 触发器（重新处理已有导览）：仅 status 从非 processing 转入时触发，
+-- 避免与函数内部 setStatus('processing') 形成死循环
+CREATE TRIGGER ai_process_trigger_update
+  AFTER UPDATE ON tours
+  FOR EACH ROW
+  WHEN (NEW.status = 'processing' AND OLD.status IS DISTINCT FROM 'processing')
+  EXECUTE FUNCTION trigger_ai_process();
 ```
+
+> 完整可重复执行的 SQL 见 **`supabase/ai-triggers.sql`**。若库里已有旧版 `ai_process_trigger`，建议删除以免 INSERT 双触发。
 
 ### tours.status 字段
 
@@ -69,7 +80,7 @@ CREATE TRIGGER ai_process_trigger
 ALTER TABLE tours ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'draft';
 ```
 
-状态流转：`draft` → `processing`（草稿保存时）→ `done`（AI 处理完成）
+状态流转：`draft` → `processing`（保存/重新处理时）→ `done`（AI 处理完成）/ `error`（处理失败，可重试）
 
 ## Supabase Edge Function
 
@@ -103,6 +114,9 @@ npx supabase functions deploy process-tour --project-ref qxunedraoviaonjdanag --
 | v7 | 路线最近邻排序：按地理距离重排 stops，避免 A→C→B 乱序 |
 | v8 | Gaode `city` + `citylimit=true`：限定搜索范围到目的地城市 |
 | v9 | 严格 regeo：API 调用失败时跳过地点，不给错误坐标可乘之机 |
+| v10 | 修复 `regionMatch` 对"省+市"格式的坐标误杀；`gaode` city 参数只取城市名（"安徽省黄山市"→"黄山"，否则被高德忽略）；直辖市空数组绕过校验；regeo 三态区分；`GAODE_KEY` 环境变量化；错误状态检测与「重新处理」|
+| v11 | 坐标质量防线：目的地中心地理编码（`geocode/geo`）+ place 搜索偏置（`location=<中心>&radius=20000`）；`>12km` 距离校验拦截同城不同地；`<150m` haversine 坐标去重；地址式 POI 名称过滤（`省…市` 整串地址当名称的假点）；防幻觉提示词（反幻觉主防线放外部校验层，提示词对空源文本要有著名景点回退，避免过度收紧导致提取骤减）|
+| v12 | 路线规划修复：移除固定「2日游/1日游/主题游」模板（按地点规模生成，禁止编造多日行程）；路线 stops 重叠 >70% 视为重复去重；**修复函数开头 `setStatus('processing')` 在导览为 done 时触发 UPDATE 触发器导致并发双重写**；提取提示词排除临时展览/活动 |
 
 ## 测试记录
 
@@ -134,8 +148,15 @@ curl -s "https://qxunedraoviaonjdanag.supabase.co/rest/v1/locations?tour_id=eq.<
 | 审核页显示空数据 | 复杂 join 查询比简单轮询更易失败 | `onCheckDone` 预加载 + 5 次重试 |
 | 保存后跳转 404 | `vercel.json` 被删，SPA rewrite 丢失 | 保留 `"rewrites": [{"source": "/(.*)", "destination": "/"}]` |
 | Edge Function 409 主键冲突 | ID 全局唯一约束，DeepSeek 生成重复 slug | v3：ID 加 tourId 前缀做命名空间 |
-| 坐标错到其他省份 | Gaode 搜索未限城市 + regeo 静默失败 | v8/v9：citylimit + 严格 regeo |
+| 坐标错到其他省份 | Gaode `city` 参数传了"省+市"（`安徽省黄山市`），被高德静默忽略 → 全国同名点乱入 | v10：city 参数只取城市名（`黄山`） |
+| 所有地点被「不在目的地」跳过 | `regionMatch` 无法处理"省+市"格式：`kw="安徽省黄山"` 对 `geo.city="黄山市"` 永不匹配 | v10：拆分省/市分别匹配 |
+| 直辖市坐标校验被绕过 | regeo 对直辖市返回 `city=[]`（truthy 空数组），`kw.includes([])` 恒为 true | v10：空数组回退到 province |
+| AI 处理失败后无限等待 | 轮询只看 `locations` 表，看不到 `status='error'` | v10：轮询 `tours.status`，error 时显示重试 |
+| 重新处理已有导览不生效 | 触发器只监听 INSERT，UPDATE 不触发 | v10：新增 UPDATE 触发器（仅转入 processing 时触发） |
+| 同城同名不同地（江夏"龟山" vs 汉阳"龟山"） | 城市级 regeo 校验放行同城任意坐标，错误点距目的地 45km | v11：目的地中心地理编码 + 搜索偏置 + >15km 距离拦截 |
+| 重复地点（3×"龟山风景区"重叠标记） | DeepSeek 提取近义地名解析到同一 POI，未去重 | v11：haversine <150m 坐标去重，保留重要性更高者 |
 | 路线顺序混乱（A→C→B→D） | DeepSeek 输出无序，从中间点出发 | v7：最近邻排序，从最远点出发 |
+| 地点数与响应不一致 / 数据混乱 | 函数开头 `setStatus('processing')` 在导览为 done 时触发 UPDATE 触发器 → 并发两次运行 | v12：删除该行 setStatus（导览已由触发器置为 processing） |
 
 ## 错误排查清单
 
