@@ -135,6 +135,11 @@ CREATE TRIGGER ai_process_trigger_update
 - 原因：`stops` 中 ID 与 `locations.id` 不匹配
 - 解决：确保 stops 格式为 `{id1,id2,id3}`，ID 与 locations 保持一致
 
+### 7. routes 表列名
+- `routes` 表用 **`day_label`**（不是 `day`），查询报 `column "day" does not exist` 即此因
+- 常用列：`id` / `tour_id` / `day_label` / `title` / `narrative` / `stops`(text[]) / `sort_order`
+- `locations` 表：`id`(text) / `tour_id` / `name` / `lat` / `lng` / `elevation` / `importance` / `tags`(text[]) / `layers`(jsonb) / `reflection` / `practical`(jsonb) / `sort_order`
+
 ---
 
 ## 架构概览
