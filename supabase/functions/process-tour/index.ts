@@ -202,8 +202,8 @@ Deno.serve(async (req: Request) => {
 
     // 2. Extract locations
     const lr = await deepseek([
-      { role: "system", content: "你是中国旅游规划专家。只返回JSON。只提取真实存在的地点，不确定的地点不要提取。只列固定旅游景点/地标/古迹/公园，不要临时展览、活动、演出、商业店铺等非固定地点。" },
-      { role: "user", content: `目的地：${destName}（${destRegion}）\n文本：${src.slice(0, 6000)}\n\n提取值得探访的地点：有文本时以文本提到的地点为准；文本为空或未提及时，列出该目的地及周边公认的著名景点（地标/景区/古迹）。至少提取 5 个。JSON: {"locations":[{"id":"en-id","name":"地点","importance":1-5,"elevation":"","tags":[]}]}` },
+      { role: "system", content: "你是中国旅游规划专家。只返回JSON。只提取真实存在的地点，不确定的地点不要提取。只列固定旅游景点/地标/古迹/公园/山峰/宫观，不要临时展览、活动、演出、商业店铺等非固定地点。" },
+      { role: "user", content: `目的地：${destName}（${destRegion}）\n文本：${src.slice(0, 6000)}\n\n提取值得探访的地点：有文本时以文本提到的地点为准；文本为空或未提及时，列出该目的地及周边真实存在的名胜，涵盖主要景点和次一级地标（山峰、宫观、栈道、园区、古迹等）。至少提取 8-12 个（景点多的目的地可更多）。宁可多列，坐标校验会过滤掉不存在的——不要遗漏真实景点。JSON: {"locations":[{"id":"en-id","name":"地点","importance":1-5,"elevation":"","tags":[]}]}` },
     ]);
 
     const warnings: string[] = [];
@@ -333,7 +333,7 @@ Deno.serve(async (req: Request) => {
     for (let attempt = 0; attempt < 2 && routes.length === 0; attempt++) {
       const rr = await deepseek([
         { role: "system", content: "你是旅游路线规划师。只返回JSON。" },
-        { role: "user", content: `${destName}路线。可选地点（id: 名称）: ${locs.map(l => `${l.id}: ${l.name}`).join(", ")}\n\n严格生成 2 条路线：\n路线1 = 全程徒步线（栈道/登山道/环线）\n路线2 = 车行+索道线（观光车/索道/公交接驳）\n若目的地实际只有一种游览方式，则生成 2 条不同主题的该类型路线。\n\n要求：\n1. 每条覆盖目的地主要地点，形成完整闭环行程（从某入口/索道进 → 逐点游览 → 出口/索道出），不要只列几个点就结束。\n2. narrative 各写 150-300 字完整行程描述：从哪个入口/索道进、每段用什么交通（徒步/索道/观光车）、依次经过哪些地点、从哪里出。\n3. 地点少且集中时做半日/一日线，严禁编造多日行程。\n4. 两条路线主题/路径/交通方式明显不同。\n5. stops 只能从上面给出的 id 中逐字复制，必须出现在上面列表中，严禁自创、改动或使用列表外的 id。\nJSON: {"routes":[{"day_label":"1日游·徒步环线","title":"","stops":["id1","id2"],"narrative":"完整行程描述"}]}` },
+        { role: "user", content: `${destName}路线。可选地点（id: 名称）: ${locs.map(l => `${l.id}: ${l.name}`).join(", ")}\n\n严格生成 2 条路线：\n路线1 = 全程徒步线（栈道/登山道/环线）\n路线2 = 车行+索道线（观光车/索道/公交接驳）\n若目的地实际只有一种游览方式，则生成 2 条不同主题的该类型路线。\n\n要求：\n1. 每条覆盖目的地主要地点，形成完整闭环行程（从某入口/索道进 → 逐点游览 → 出口/索道出），不要只列几个点就结束。\n2. narrative 各写 150-300 字完整行程描述：从哪个入口/索道进、每段用什么交通（徒步/索道/观光车）、依次经过哪些地点、从哪里出。narrative 中必须写地点的中文名（如"玉京峰"），严禁写 id 代号（如 sgs-010）。\n3. 地点少且集中时做半日/一日线，严禁编造多日行程。\n4. 两条路线主题/路径/交通方式明显不同。\n5. stops 只能从上面给出的 id 中逐字复制，必须出现在上面列表中，严禁自创、改动或使用列表外的 id。\nJSON: {"routes":[{"day_label":"1日游·徒步环线","title":"","stops":["id1","id2"],"narrative":"完整行程描述"}]}` },
       ]);
       // Route stop validation: resolve and report mismatches
       const allRoutes = (rr.routes || []).map((r: any, i: number) => {
@@ -355,15 +355,16 @@ Deno.serve(async (req: Request) => {
         };
       }).filter(r => r.stops.length > 0);
 
-      // 路线去重：仅当 stops 几乎完全相同（重叠 >95%）才视为重复。
-      // 徒步线与车行/索道线可以合理共享景点，70% 阈值会误并不同交通类型的路线。
+      // 路线去重：仅当「同交通类型」且「stops 完全相同」才视为重复。
+      // 徒步线与车行/索道线即使共享景点也是两条不同路线，必须都保留。
       const dedupedRoutes: any[] = [];
       for (const r of allRoutes) {
         const set = new Set(r.stops);
+        const isHike = (x: any) => String(x.day_label).includes('徒步') || String(x.title).includes('徒步');
         const dup = dedupedRoutes.find(u => {
+          if (isHike(u) !== isHike(r)) return false; // 不同交通类型 → 保留
           const us = new Set(u.stops);
-          const overlap = [...set].filter(s => us.has(s)).length / Math.max(set.size, us.size);
-          return overlap > 0.95;
+          return set.size === us.size && [...set].every(s => us.has(s)); // 完全相同才去重
         });
         if (!dup) dedupedRoutes.push(r);
       }
