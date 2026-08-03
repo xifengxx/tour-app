@@ -21,7 +21,7 @@ export default function NavBar({ title, showBack, rightContent }) {
   const avatarLetter = user?.email ? user.email[0].toUpperCase() : '?';
 
   return (
-    <nav className="sticky top-0 z-30 bg-[#0f0f1a]/95 backdrop-blur border-b border-white/5">
+    <nav className="sticky top-0 z-30 bg-[#0f0f1a]/95 backdrop-blur border-b border-white/5 pointer-events-auto">
       <div className="flex items-center justify-between h-12 px-4 max-w-4xl mx-auto">
         {/* Left */}
         <div className="w-16">

@@ -86,9 +86,14 @@ export default function TourView() {
             m.setContent(`<div style="width:${d}px;height:${d}px;border-radius:50%;background:rgba(220,38,38,.88);border:2px solid rgba(255,255,255,.9);color:#fff;font-weight:700;font-size:${d >= 44 ? 15 : 13}px;display:flex;align-items:center;justify-content:center;box-shadow:0 3px 8px rgba(0,0,0,.35);cursor:pointer">${n}</div>`);
             m.setSize(new window.AMap.Size(d, d));
             m.on('click', () => {
-              // 点击聚合气泡 → 放大地图拆开
+              // 点击聚合气泡 → 选中簇内最近的地点：内容栏立即更新并放大到该点，
+              // 与点击单个标记行为一致（否则默认视图下点气泡只缩放不选中，用户会以为点不动）
               const pos = m.getPosition();
-              map.setZoomAndCenter(Math.min(map.getZoom() + 1, 18), pos);
+              const nearest = tour.locations.reduce((best, l) => {
+                const d = (l.lng - pos.getLng()) ** 2 + (l.lat - pos.getLat()) ** 2;
+                return !best || d < best.d ? { l, d } : best;
+              }, null)?.l;
+              if (nearest) selectLoc(nearest);
             });
           },
         });
@@ -210,7 +215,7 @@ export default function TourView() {
   return (
     <div className="h-screen flex flex-col bg-[#0f0f1a] relative">
       {/* NavBar + subtitle */}
-      <div className="absolute top-0 left-0 right-0 z-20">
+      <div className="absolute top-0 left-0 right-0 z-20 pointer-events-none">
         <NavBar
           title={tour.meta.title}
           rightContent={
@@ -226,7 +231,7 @@ export default function TourView() {
             </div>
           }
         />
-        <div className="px-4 pb-2 bg-gradient-to-b from-[#0f0f1a] to-transparent">
+        <div className="px-4 pb-2 bg-gradient-to-b from-[#0f0f1a] to-transparent pointer-events-none">
           <p className="text-gray-400 text-xs">{tour.meta.subtitle}</p>
         </div>
       </div>
