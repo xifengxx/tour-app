@@ -508,6 +508,21 @@ export default function TourEdit() {
               <div className="w-8 h-8 rounded-full bg-white/5 text-gray-500 flex items-center justify-center text-xs">3</div>
             </div>
 
+            {/* 公开/私密切换 */}
+            <div className="flex items-center justify-between mb-3">
+              <button
+                onClick={() => setIsPublic(!isPublic)}
+                className={`flex items-center gap-2 text-xs px-3 py-2 rounded-xl border transition-colors ${
+                  isPublic
+                    ? 'bg-green-600/10 border-green-600/30 text-green-400'
+                    : 'bg-white/5 border-white/10 text-gray-400'
+                }`}
+              >
+                {isPublic ? '🌍 已公开（所有人可见）' : '🔒 私密（仅自己可见）'}
+              </button>
+              <span className="text-[10px] text-gray-500">点右上角「保存」后生效</span>
+            </div>
+
             <button
               onClick={handleReprocess}
               className="w-full py-2.5 bg-purple-600/10 text-purple-400 rounded-xl text-xs border border-purple-600/20 mb-3 hover:bg-purple-600/20 transition-colors"

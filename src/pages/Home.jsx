@@ -4,7 +4,14 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import NavBar from '../components/NavBar';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import { Plus } from 'lucide-react';
+import { Plus, MoreHorizontal } from 'lucide-react';
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+} from '@/components/ui/dropdown-menu';
 
 const STATIC_TOURS = [
   {
@@ -71,6 +78,24 @@ export default function Home() {
     ...publicTours.filter(st => !STATIC_TOURS.find(s => s.id === st.id)),
   ];
 
+  // 切换公开/私密
+  const togglePublic = async (tour) => {
+    const newVal = !tour.is_public;
+    const { error } = await supabase.from('tours').update({ is_public: newVal }).eq('id', tour.id);
+    if (!error) {
+      setMyTours(prev => prev.map(t => t.id === tour.id ? { ...t, is_public: newVal } : t));
+    }
+  };
+
+  // 删除导览（子表有 ON DELETE CASCADE，会连带删除地点/路线/内容）
+  const deleteTour = async (tour) => {
+    if (!window.confirm(`确定删除「${tour.title}」？将同时删除其所有地点、路线和内容，且不可恢复。`)) return;
+    const { error } = await supabase.from('tours').delete().eq('id', tour.id);
+    if (!error) {
+      setMyTours(prev => prev.filter(t => t.id !== tour.id));
+    }
+  };
+
   const renderTourCard = (tour, isMyTour) => (
     <div key={tour.id} className="relative group">
       <Link
@@ -93,7 +118,7 @@ export default function Home() {
         </div>
       </Link>
 
-      {/* My tour: status badge */}
+      {/* My tour: status badge + actions menu */}
       {isMyTour && (
         <div className="absolute top-3 right-3 flex items-center gap-1.5">
           <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${
@@ -103,6 +128,28 @@ export default function Home() {
           }`}>
             {tour.is_public ? '已发布' : '私密'}
           </span>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                className="w-6 h-6 rounded-full bg-white/10 text-gray-300 flex items-center justify-center hover:bg-white/20 transition-colors"
+                aria-label="导览操作"
+              >
+                <MoreHorizontal className="h-3.5 w-3.5" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-44">
+              <DropdownMenuItem onClick={() => navigate(`/tour/${tour.id}/edit`)}>
+                ✏️ 编辑导览
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => togglePublic(tour)}>
+                {tour.is_public ? '🔒 设为私密' : '🌍 设为公开'}
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => deleteTour(tour)} className="text-red-400 focus:text-red-400 focus:bg-red-600/10">
+                🗑️ 删除导览
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       )}
     </div>
