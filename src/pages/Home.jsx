@@ -84,6 +84,11 @@ export default function Home() {
     const { error } = await supabase.from('tours').update({ is_public: newVal }).eq('id', tour.id);
     if (!error) {
       setMyTours(prev => prev.map(t => t.id === tour.id ? { ...t, is_public: newVal } : t));
+      // 同步「发现」页：设为公开 → 加入公开列表；设为私密 → 移除（无需刷新）
+      setPublicTours(prev => newVal
+        ? (prev.some(t => t.id === tour.id) ? prev : [{ ...tour, is_public: true }, ...prev])
+        : prev.filter(t => t.id !== tour.id)
+      );
     }
   };
 
