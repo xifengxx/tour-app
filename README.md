@@ -51,3 +51,4 @@ tour-app/
 - AI 自动处理架构：**[docs/AI-AUTO-PROCESSING.md](./docs/AI-AUTO-PROCESSING.md)**
 - 数据写入方法对比
 - 常见问题与解决方案
+- 安全与已接受风险：**[SECURITY.md](./SECURITY.md)**
