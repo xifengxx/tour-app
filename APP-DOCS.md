@@ -59,13 +59,23 @@ BEGIN
 END;
 $$;
 
--- 触发器 (仅 INSERT status=processing 时触发)
-CREATE TRIGGER ai_process_trigger
+-- INSERT 触发器（新导览）
+CREATE TRIGGER ai_process_trigger_insert
   AFTER INSERT ON tours
   FOR EACH ROW
   WHEN (NEW.status = 'processing')
   EXECUTE FUNCTION trigger_ai_process();
+
+-- UPDATE 触发器（重新处理已有导览）：仅 status 从非 processing 转入时触发，
+-- 避免与函数内部 setStatus('processing') 形成死循环
+CREATE TRIGGER ai_process_trigger_update
+  AFTER UPDATE ON tours
+  FOR EACH ROW
+  WHEN (NEW.status = 'processing' AND OLD.status IS DISTINCT FROM 'processing')
+  EXECUTE FUNCTION trigger_ai_process();
 ```
+
+> 完整可重复执行的 SQL 见 **`supabase/ai-triggers.sql`**。若库里已有旧版 `ai_process_trigger`，建议删除以免 INSERT 双触发。
 
 ### 手动处理（备选）
 
@@ -135,7 +145,7 @@ CREATE TRIGGER ai_process_trigger
     │ React SPA (Vite)          │ PostgreSQL                  │
     │ ↓                         │ ↓                           │
     │ 浏览导览 ←────────────────→ tours                       │
-    │ 创建草稿 (status=process)─→ tours ──→ 触发器 fire      │
+    │ 创建草稿 (status=processing)─→ tours ─→ 触发器 fire     │
     │                           │     └──→ http_post ────→  Edge Function
     │                           │               │               │
     │                           │               ├─ 提取地点 ──→ DeepSeek

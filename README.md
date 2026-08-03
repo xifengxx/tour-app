@@ -38,8 +38,7 @@ tour-app/
 │   └── lib/             # supabase client
 ├── public/data/         # 静态导览 JSON（衡山、华山）
 ├── scripts/             # 数据导入脚本
-│   ├── insert-tour.mjs      # 标准化 Supabase 写入脚本
-│   └── supabase-migration.sql  # 数据库建表迁移
+│   └── insert-tour.mjs      # 标准化 Supabase 写入脚本
 ├── APP-DOCS.md          # 开发文档（完整流程、密钥、故障排查）
 └── supabase-migration.sql
 ```

@@ -451,7 +451,7 @@ export default function TourEdit() {
                 </label>
                 <textarea value={sourceText} onChange={e => setSourceText(e.target.value)} rows={8}
                   className="w-full bg-[#0f0f1a] text-white rounded-xl px-3 py-2.5 text-sm border border-white/10 mt-1 outline-none focus:border-red-600 resize-none font-mono"
-                  placeholder={"粘贴小说中涉及该目的地的章节...\n\n或者写上「上传了《XXX》TXT 文件到 XX 路径」\nClaude 会直接读取文件进行分析。"} />
+                  placeholder={"粘贴小说中涉及该目的地的章节，AI 会从中提取地点与原文引用...\n\n留空时 AI 将基于目的地常识生成导览。"} />
               </div>
 
               <div className="flex gap-2">
@@ -473,9 +473,9 @@ export default function TourEdit() {
                 </button>
               </div>
               <p className="text-gray-500 text-xs text-center leading-relaxed">
-                保存草稿后，在对话中告诉 Claude「处理导览 [ID]」。Claude 将自动：<br/>
-                ① 分析小说文本，提取所有地点 → ② 高德 API 查找精确坐标<br/>
-                ③ 生成四层内容（小说/历史/传说/民俗）→ ④ 搜索徒步路线规划 → ⑤ 写入数据库
+                点击「AI 分析」后全自动完成：<br/>
+                ① 分析文本提取所有地点 → ② 高德 API 校验精确坐标<br/>
+                ③ 生成四层内容（小说/历史/传说/民俗）→ ④ 规划游览路线 → ⑤ 写入数据库
               </p>
             </section>
           </div>
