@@ -173,6 +173,7 @@ export default function TourView() {
     ? (tour?.routes.find(r => r.id === currentRouteId)?.stops || [])
         .map(id => locByIdRef.current[id]).filter(Boolean)
     : (tour?.locations || []);
+  const activeRoute = currentRouteId ? (tour?.routes || []).find(r => r.id === currentRouteId) : null;
 
   // ── Render ──
   if (loading) return <div className="min-h-screen bg-[#0f0f1a] flex items-center justify-center text-gray-400">加载中...</div>;
@@ -215,6 +216,12 @@ export default function TourView() {
 
         {showCard && (
           <>
+            {/* Route narrative: 完整行程描述（入口/交通方式/出口） */}
+            {activeRoute?.narrative && (
+              <div className="px-4 pb-2">
+                <p className="text-xs text-gray-300 leading-relaxed bg-[#0f0f1a] rounded-xl p-3 border border-white/5 max-h-24 overflow-y-auto">{activeRoute.narrative}</p>
+              </div>
+            )}
             {/* Location strip */}
             <div className="flex gap-2 px-4 pb-2 overflow-x-auto">
               {filteredLocations.map(loc => (

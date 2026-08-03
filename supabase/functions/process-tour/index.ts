@@ -29,7 +29,7 @@ async function postRows(table: string, rows: any[]) {
   if (!rows.length) return;
   const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}`, {
     method: "POST",
-    headers: hdr,
+    headers: { ...hdr, Prefer: "return=representation,resolution=ignore-duplicates" },
     body: JSON.stringify(rows),
   });
   if (!res.ok) throw new Error(`POST ${table}: ${res.status} ${await res.text()}`);
@@ -292,11 +292,6 @@ Deno.serve(async (req: Request) => {
       return hit ? slugToDbId.get(hit.id) : undefined;
     };
 
-    // 4. Routes
-    const rr = await deepseek([
-      { role: "system", content: "你是旅游路线规划师。只返回JSON。" },
-      { role: "user", content: `${destName}路线。可选地点（id: 名称）: ${locs.map(l => `${l.id}: ${l.name}`).join(", ")}\n\n根据地点数量和地理集中度规划 2-3 条真正不同的路线：地点少且集中时只做半日/一日主题路线，严禁编造需要多天的行程（如地点都在步行范围内就绝不能标"2日游"）。每条路线 3-6 个地点（地点不足则全部用上）。路线之间主题或路径必须明显不同。stops 必须是由上面地点 id 组成的字符串数组，如 ["yujing-feng","sanqing-palace"]，严禁返回对象或使用地点以外的 id。JSON: {"routes":[{"day_label":"1日游","title":"","stops":["id1","id2"],"narrative":""}]}` },
-    ]);
     // Build coordinate lookup for proximity-based reordering
     const locCoords = new Map(locs.map(l => [l.id, { lng: l.lng, lat: l.lat, name: l.name }]));
     const dist = (a: {lng:number,lat:number}, b: {lng:number,lat:number}) => Math.sqrt((a.lng-b.lng)**2 + (a.lat-b.lat)**2);
@@ -333,36 +328,46 @@ Deno.serve(async (req: Request) => {
       return ordered;
     };
 
-    // Route stop validation: resolve and report mismatches
-    const allRoutes = (rr.routes || []).map((r: any, i: number) => {
-      const rawStops: string[] = (Array.isArray(r.stops) ? r.stops : [])
-        .map((s: any) => s && typeof s === "object" ? (s.poi ?? s.id ?? s.name) : s)
-        .filter(Boolean);
-      const resolved = rawStops.map((s: string) => resolveStop(s)).filter(Boolean);
-      const unresolved = rawStops.filter((_, j) => !resolved[j]);
-      if (unresolved.length > 0) {
-        warnings.push(`⚠️ 路线"${r.title || r.day_label || `路线${i+1}`}"有 ${unresolved.length} 个站点无法匹配：${unresolved.join(', ')}`);
-      }
-      return {
-        id: `${scope}-r${i + 1}`,
-        day_label: String(r.day_label || ""),
-        title: String(r.title || `路线${i + 1}`),
-        stops: reorderByProximity(resolved),
-        narrative: typeof r.narrative === "string" ? r.narrative : "",
-        sort_order: i,
-      };
-    }).filter(r => r.stops.length > 0);
+    // 4. Routes — DeepSeek 偶尔自创 stop id 导致路线全部无法解析，空结果时重试一次
+    let routes: any[] = [];
+    for (let attempt = 0; attempt < 2 && routes.length === 0; attempt++) {
+      const rr = await deepseek([
+        { role: "system", content: "你是旅游路线规划师。只返回JSON。" },
+        { role: "user", content: `${destName}路线。可选地点（id: 名称）: ${locs.map(l => `${l.id}: ${l.name}`).join(", ")}\n\n严格生成 2 条路线：\n路线1 = 全程徒步线（栈道/登山道/环线）\n路线2 = 车行+索道线（观光车/索道/公交接驳）\n若目的地实际只有一种游览方式，则生成 2 条不同主题的该类型路线。\n\n要求：\n1. 每条覆盖目的地主要地点，形成完整闭环行程（从某入口/索道进 → 逐点游览 → 出口/索道出），不要只列几个点就结束。\n2. narrative 各写 150-300 字完整行程描述：从哪个入口/索道进、每段用什么交通（徒步/索道/观光车）、依次经过哪些地点、从哪里出。\n3. 地点少且集中时做半日/一日线，严禁编造多日行程。\n4. 两条路线主题/路径/交通方式明显不同。\n5. stops 只能从上面给出的 id 中逐字复制，必须出现在上面列表中，严禁自创、改动或使用列表外的 id。\nJSON: {"routes":[{"day_label":"1日游·徒步环线","title":"","stops":["id1","id2"],"narrative":"完整行程描述"}]}` },
+      ]);
+      // Route stop validation: resolve and report mismatches
+      const allRoutes = (rr.routes || []).map((r: any, i: number) => {
+        const rawStops: string[] = (Array.isArray(r.stops) ? r.stops : [])
+          .map((s: any) => s && typeof s === "object" ? (s.poi ?? s.id ?? s.name) : s)
+          .filter(Boolean);
+        const resolved = rawStops.map((s: string) => resolveStop(s)).filter(Boolean);
+        const unresolved = rawStops.filter((_, j) => !resolved[j]);
+        if (unresolved.length > 0) {
+          warnings.push(`⚠️ 路线"${r.title || r.day_label || `路线${i+1}`}"有 ${unresolved.length} 个站点无法匹配：${unresolved.join(', ')}`);
+        }
+        return {
+          id: `${scope}-r${i + 1}`,
+          day_label: String(r.day_label || ""),
+          title: String(r.title || `路线${i + 1}`),
+          stops: reorderByProximity(resolved),
+          narrative: typeof r.narrative === "string" ? r.narrative : "",
+          sort_order: i,
+        };
+      }).filter(r => r.stops.length > 0);
 
-    // 路线去重：stops 重叠度 >70% 视为同一路线（如"1日游/2日游"内容雷同），只保留第一条
-    const routes: any[] = [];
-    for (const r of allRoutes) {
-      const set = new Set(r.stops);
-      const dup = routes.find(u => {
-        const us = new Set(u.stops);
-        const overlap = [...set].filter(s => us.has(s)).length / Math.max(set.size, us.size);
-        return overlap > 0.7;
-      });
-      if (!dup) routes.push(r);
+      // 路线去重：仅当 stops 几乎完全相同（重叠 >95%）才视为重复。
+      // 徒步线与车行/索道线可以合理共享景点，70% 阈值会误并不同交通类型的路线。
+      const dedupedRoutes: any[] = [];
+      for (const r of allRoutes) {
+        const set = new Set(r.stops);
+        const dup = dedupedRoutes.find(u => {
+          const us = new Set(u.stops);
+          const overlap = [...set].filter(s => us.has(s)).length / Math.max(set.size, us.size);
+          return overlap > 0.95;
+        });
+        if (!dup) dedupedRoutes.push(r);
+      }
+      routes = dedupedRoutes;
     }
 
     // 5. Write
