@@ -160,6 +160,40 @@ export default function TourEdit() {
     }
   };
 
+  // ── 保存基本信息（已有导览）：只更新标题/目的地等，不触发 AI 重新处理 ──
+  const handleSaveBasic = async () => {
+    if (!user) { setSaveMsg('请先登录'); return; }
+    if (!title.trim()) { setSaveMsg('请输入标题'); return; }
+    if (!draftTourId) { setSaveMsg('❌ 尚未保存草稿'); return; }
+    setSaving(true);
+    setSaveMsg('');
+    const tourData = {
+      title: title.trim(),
+      subtitle: subtitle.trim(),
+      theme: { primaryColor },
+      source: {
+        type: 'novel',
+        title: novelTitle,
+        author: novelAuthor,
+        era: novelEra,
+        synopsis: novelSynopsis,
+        rawText: sourceText,
+      },
+      destination: { name: destName, region: destRegion, type: 'mountain' },
+      is_public: isPublic,
+    };
+    try {
+      await supabase.from('tours').update(tourData).eq('id', draftTourId);
+      await reloadTour();
+      setSaveMsg('✅ 基本信息已保存');
+      setPhase('review');
+    } catch (e) {
+      setSaveMsg(`❌ ${e.message}`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
   // ── Re-process: 重置 status=processing，触发 UPDATE 触发器重新调用 Edge Function ──
   const handleReprocess = async () => {
     if (!user) { setSaveMsg('请先登录'); return; }
@@ -420,13 +454,24 @@ export default function TourEdit() {
                   placeholder={"粘贴小说中涉及该目的地的章节...\n\n或者写上「上传了《XXX》TXT 文件到 XX 路径」\nClaude 会直接读取文件进行分析。"} />
               </div>
 
-              <button
-                onClick={handleSaveDraft}
-                disabled={saving}
-                className="w-full py-3.5 bg-gradient-to-r from-red-600 to-purple-600 text-white rounded-xl text-sm font-bold disabled:opacity-50 hover:from-red-700 hover:to-purple-700 transition-colors shadow-lg shadow-red-600/20"
-              >
-                {saving ? '⏳ 保存中...' : '🤖 AI 分析：生成地点、内容与路线'}
-              </button>
+              <div className="flex gap-2">
+                {draftTourId && (
+                  <button
+                    onClick={handleSaveBasic}
+                    disabled={saving}
+                    className="flex-1 py-3.5 bg-white/5 text-white rounded-xl text-sm font-bold hover:bg-white/10 transition-colors disabled:opacity-50"
+                  >
+                    {saving ? '⏳ 保存中...' : '💾 保存修改'}
+                  </button>
+                )}
+                <button
+                  onClick={handleSaveDraft}
+                  disabled={saving}
+                  className="flex-1 py-3.5 bg-gradient-to-r from-red-600 to-purple-600 text-white rounded-xl text-sm font-bold disabled:opacity-50 hover:from-red-700 hover:to-purple-700 transition-colors shadow-lg shadow-red-600/20"
+                >
+                  {saving ? '⏳ 保存中...' : draftTourId ? '🤖 AI 重新分析' : '🤖 AI 分析：生成地点、内容与路线'}
+                </button>
+              </div>
               <p className="text-gray-500 text-xs text-center leading-relaxed">
                 保存草稿后，在对话中告诉 Claude「处理导览 [ID]」。Claude 将自动：<br/>
                 ① 分析小说文本，提取所有地点 → ② 高德 API 查找精确坐标<br/>
@@ -508,8 +553,8 @@ export default function TourEdit() {
               <div className="w-8 h-8 rounded-full bg-white/5 text-gray-500 flex items-center justify-center text-xs">3</div>
             </div>
 
-            {/* 公开/私密切换 */}
-            <div className="flex items-center justify-between mb-3">
+            {/* 公开/私密切换 + 编辑基本信息 */}
+            <div className="flex items-center gap-2 mb-3 flex-wrap">
               <button
                 onClick={() => setIsPublic(!isPublic)}
                 className={`flex items-center gap-2 text-xs px-3 py-2 rounded-xl border transition-colors ${
@@ -519,6 +564,12 @@ export default function TourEdit() {
                 }`}
               >
                 {isPublic ? '🌍 已公开（所有人可见）' : '🔒 私密（仅自己可见）'}
+              </button>
+              <button
+                onClick={() => setPhase('input')}
+                className="flex items-center gap-2 text-xs px-3 py-2 rounded-xl border border-white/10 bg-white/5 text-gray-300 hover:bg-white/10 transition-colors"
+              >
+                📝 编辑基本信息（标题/目的地等）
               </button>
               <span className="text-[10px] text-gray-500">点右上角「保存」后生效</span>
             </div>
