@@ -10,7 +10,7 @@ import DetailModal from '../components/DetailModal';
 import { Share2, Check } from 'lucide-react';
 
 const ROUTE_COLORS = ['#e74c3c','#f39c12','#3498db','#2ecc71','#9b59b6'];
-const IMPORTANCE_COLORS = ['#95a5a6','#95a5a6','#3498db','#f39c12','#e74c3c','#e74c3c'];
+const DEFAULT_PIN_COLOR = '#95a5a6'; // 未选中标记：统一灰色（避免重要性红/蓝/橙配色与选中色混淆）
 const SELECTED_COLOR = '#f5a623'; // 选中标记：琥珀金
 
 // 生成图钉 SVG data-URI。selected 时加白色描边放大，用于视觉区分当前选中地点
@@ -25,17 +25,19 @@ const buildPinIcon = (color, size, selected) => 'data:image/svg+xml,' + encodeUR
   `</svg>`
 );
 
-// 统一给标记套上「普通 / 选中」样式
+// 统一给标记套上「普通 / 选中」样式。
+// 未选中：统一灰色小图钉；选中：琥珀金 + 白色描边 + 放大 + 置顶。
+// 之前按重要性配色（红/蓝/橙），其中橙色与选中琥珀金几乎同色，导致选中态分不清 —— 改为未选中全灰。
 const applyPinStyle = (m, loc, isSel) => {
-  const size = isSel ? 36 : (loc.importance || 0) >= 4 ? 32 : 26;
-  const color = isSel ? SELECTED_COLOR : IMPORTANCE_COLORS[Math.min(loc.importance || 0, 5)];
+  const size = isSel ? 36 : 26;
+  const color = isSel ? SELECTED_COLOR : DEFAULT_PIN_COLOR;
   m.setIcon(new window.AMap.Icon({
     size: new window.AMap.Size(size, size + 10),
     imageSize: new window.AMap.Size(size, size + 10),
     image: buildPinIcon(color, size, isSel),
   }));
   m.setOffset(new window.AMap.Pixel(-size / 2, -(size + 10)));
-  m.setzIndex(100 + (loc.importance || 0) + (isSel ? 50 : 0));
+  m.setzIndex(isSel ? 500 : 100);
 };
 
 export default function TourView() {
