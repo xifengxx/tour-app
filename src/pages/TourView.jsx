@@ -208,8 +208,9 @@ export default function TourView() {
       {/* Map */}
       <div ref={mapRef} className="flex-1" />
 
-      {/* Bottom card zone */}
-      <div className="absolute bottom-0 left-0 right-0 z-20 bg-[#1c1c32] rounded-t-3xl max-h-[50vh] flex flex-col shadow-2xl">
+      {/* Bottom card zone — 置于正常文档流而非覆盖地图：地图容器止于卡片上缘，
+          高德版权条不再压在卡片底部内容上；卡片折叠时地图随之扩展 */}
+      <div className="z-20 bg-[#1c1c32] rounded-t-3xl max-h-[50vh] flex flex-col shadow-2xl">
         <div className="flex justify-center py-2 cursor-pointer" onClick={() => setShowCard(s => !s)}>
           <div className="w-8 h-1 rounded-full bg-white/20" />
         </div>

@@ -21,8 +21,8 @@ export default function ContentCard({ loc, layer, layers, onLayerChange, onShowD
         ))}
       </div>
 
-      {/* Scrollable content */}
-      <div className="flex-1 overflow-y-auto px-4 pb-6">
+      {/* Scrollable content — pb-12 给高德版权条留出空间，避免遮挡底部实用信息 */}
+      <div className="flex-1 overflow-y-auto px-4 pb-12">
         <div className="text-white font-bold text-lg mb-1">
           {'⭐'.repeat(loc.importance || 1)} {loc.name}
         </div>
