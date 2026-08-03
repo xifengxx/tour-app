@@ -3,8 +3,12 @@ const ROUTE_COLORS = ['#e74c3c', '#f39c12', '#3498db', '#2ecc71', '#9b59b6'];
 export default function RouteBar({ routes, currentRouteId, onSelectRoute }) {
   if (!routes || routes.length === 0) return null;
 
+  // 右缘渐变提示可滚动；有选中路线时含「清除筛选」按钮，不遮渐变以免按钮被淡出
   return (
-    <div className="absolute top-28 left-0 right-0 z-10 px-4 flex gap-2 overflow-x-auto pointer-events-none">
+    <div
+      className="absolute top-28 left-0 right-0 z-10 px-4 flex gap-2 overflow-x-auto pointer-events-none"
+      style={currentRouteId ? {} : { WebkitMaskImage: 'linear-gradient(to right, black calc(100% - 28px), transparent)', maskImage: 'linear-gradient(to right, black calc(100% - 28px), transparent)' }}
+    >
       {routes.filter(r => r.id !== 'extra').map((route, i) => {
         const color = ROUTE_COLORS[i % ROUTE_COLORS.length];
         const active = currentRouteId === route.id;

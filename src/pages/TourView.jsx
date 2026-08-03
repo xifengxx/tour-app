@@ -21,6 +21,7 @@ export default function TourView() {
   const markersRef = useRef([]);
   const routePolylinesRef = useRef({});
   const locByIdRef = useRef({});
+  const clustererRef = useRef(null);
 
   const [currentLoc, setCurrentLoc] = useState(null);
   const [currentLayer, setCurrentLayer] = useState('novel');
@@ -47,32 +48,51 @@ export default function TourView() {
       });
       mapInstance.current = map;
 
-      // Place markers
-      tour.locations.forEach((loc) => {
-        locByIdRef.current[loc.id] = loc;
-        const color = IMPORTANCE_COLORS[Math.min(loc.importance || 0, 5)];
-        const size = (loc.importance || 0) >= 4 ? 32 : 26;
-        const m = new window.AMap.Marker({
-          position: [loc.lng, loc.lat],
-          title: loc.name,
-          icon: new window.AMap.Icon({
-            size: new window.AMap.Size(size, size + 10),
-            imageSize: new window.AMap.Size(size, size + 10),
-            image: 'data:image/svg+xml,' + encodeURIComponent(
-              `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size + 10}" viewBox="0 0 ${size} ${size + 10}">` +
-              `<filter id="s"><feDropShadow dx="0" dy="1" stdDeviation="1.5" flood-opacity="0.4"/></filter>` +
-              `<path d="M${size / 2} 0 C${size * 0.23} 0 0 ${size * 0.23} 0 ${size / 2} C0 ${size * 0.77} ${size / 2} ${size + 6} ${size / 2} ${size + 6}z" fill="${color}" filter="url(#s)"/>` +
-              `<circle cx="${size / 2}" cy="${size / 2}" r="${size * 0.22}" fill="#fff" opacity="0.9"/>` +
-              `</svg>`
-            )
-          }),
-          offset: new window.AMap.Pixel(-size / 2, -(size + 10)),
-          zIndex: 100 + (loc.importance || 0)
+      // 地点标记 + 聚合：AMap 2.0 用 AMap.MarkerCluster（注意不是旧版 MarkerClusterer）。
+      // 缩小地图时邻近点聚合成带数字气泡，放大才拆分为单个标记。
+      locByIdRef.current = {};
+      tour.locations.forEach(l => { locByIdRef.current[l.id] = l; });
+      window.AMap.plugin('AMap.MarkerCluster', () => {
+        const points = tour.locations.map(l => ({ lnglat: [l.lng, l.lat], extData: l }));
+        const clusterer = new window.AMap.MarkerCluster(map, points, {
+          gridSize: 60,
+          maxZoom: 15,
+          renderMarker: (ctx) => {
+            const loc = ctx.data?.extData || ctx.data?.data || ctx.data || {};
+            const m = ctx.marker;
+            const color = IMPORTANCE_COLORS[Math.min(loc.importance || 0, 5)];
+            const size = (loc.importance || 0) >= 4 ? 32 : 26;
+            m.setIcon(new window.AMap.Icon({
+              size: new window.AMap.Size(size, size + 10),
+              imageSize: new window.AMap.Size(size, size + 10),
+              image: 'data:image/svg+xml,' + encodeURIComponent(
+                `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size + 10}" viewBox="0 0 ${size} ${size + 10}">` +
+                `<filter id="s"><feDropShadow dx="0" dy="1" stdDeviation="1.5" flood-opacity="0.4"/></filter>` +
+                `<path d="M${size / 2} 0 C${size * 0.23} 0 0 ${size * 0.23} 0 ${size / 2} C0 ${size * 0.77} ${size / 2} ${size + 6} ${size / 2} ${size + 6}z" fill="${color}" filter="url(#s)"/>` +
+                `<circle cx="${size / 2}" cy="${size / 2}" r="${size * 0.22}" fill="#fff" opacity="0.9"/>` +
+                `</svg>`
+              )
+            }));
+            m.setOffset(new window.AMap.Pixel(-size / 2, -(size + 10)));
+            m.setzIndex(100 + (loc.importance || 0));
+            m._locData = loc;
+            m.on('click', () => selectLoc(loc));
+            markersRef.current.push(m);
+          },
+          renderClusterMarker: (ctx) => {
+            const m = ctx.marker;
+            const n = ctx.count;
+            const d = n >= 100 ? 52 : n >= 10 ? 44 : 36;
+            m.setContent(`<div style="width:${d}px;height:${d}px;border-radius:50%;background:rgba(220,38,38,.88);border:2px solid rgba(255,255,255,.9);color:#fff;font-weight:700;font-size:${d >= 44 ? 15 : 13}px;display:flex;align-items:center;justify-content:center;box-shadow:0 3px 8px rgba(0,0,0,.35);cursor:pointer">${n}</div>`);
+            m.setSize(new window.AMap.Size(d, d));
+            m.on('click', () => {
+              // 点击聚合气泡 → 放大地图拆开
+              const pos = m.getPosition();
+              map.setZoomAndCenter(Math.min(map.getZoom() + 1, 18), pos);
+            });
+          },
         });
-        m._locData = loc;
-        m.on('click', () => { selectLoc(loc); });
-        map.add(m);
-        markersRef.current.push(m);
+        clustererRef.current = clusterer;
       });
 
       // Draw routes
@@ -86,7 +106,7 @@ export default function TourView() {
           const poly = new window.AMap.Polyline({
             path, map,
             strokeColor: ROUTE_COLORS[ri % ROUTE_COLORS.length],
-            strokeWeight: 4, strokeOpacity: 0.6,
+            strokeWeight: 3, strokeOpacity: 0.35, // 默认降透明度：多路线共享站点时避免交织成网，选中才高亮
           });
           routePolylinesRef.current[route.id] = {
             polyline: poly, route,
@@ -95,7 +115,15 @@ export default function TourView() {
         }
       });
 
-      map.setFitView();
+      // 标记由 MarkerCluster 托管，setFitView 未必生效——直接从地点坐标算边界
+      const lngs = tour.locations.map(l => l.lng);
+      const lats = tour.locations.map(l => l.lat);
+      if (lngs.length > 0) {
+        map.setBounds(new window.AMap.Bounds(
+          [Math.min(...lngs), Math.min(...lats)],
+          [Math.max(...lngs), Math.max(...lats)]
+        ));
+      }
       setTimeout(() => setShowCard(true), 500);
     };
     init();
@@ -223,8 +251,9 @@ export default function TourView() {
                 <p className="text-xs text-gray-300 leading-relaxed bg-[#0f0f1a] rounded-xl p-3 border border-white/5 max-h-24 overflow-y-auto">{activeRoute.narrative}</p>
               </div>
             )}
-            {/* Location strip */}
-            <div className="flex gap-2 px-4 pb-2 overflow-x-auto">
+            {/* Location strip — 右缘渐变提示可横向滚动查看更多 */}
+            <div className="flex gap-2 px-4 pb-2 overflow-x-auto"
+                 style={{ WebkitMaskImage: 'linear-gradient(to right, black calc(100% - 28px), transparent)', maskImage: 'linear-gradient(to right, black calc(100% - 28px), transparent)' }}>
               {filteredLocations.map(loc => (
                 <button
                   key={loc.id}
