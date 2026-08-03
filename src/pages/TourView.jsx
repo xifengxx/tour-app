@@ -11,6 +11,32 @@ import { Share2, Check } from 'lucide-react';
 
 const ROUTE_COLORS = ['#e74c3c','#f39c12','#3498db','#2ecc71','#9b59b6'];
 const IMPORTANCE_COLORS = ['#95a5a6','#95a5a6','#3498db','#f39c12','#e74c3c','#e74c3c'];
+const SELECTED_COLOR = '#f5a623'; // 选中标记：琥珀金
+
+// 生成图钉 SVG data-URI。selected 时加白色描边放大，用于视觉区分当前选中地点
+const buildPinIcon = (color, size, selected) => 'data:image/svg+xml,' + encodeURIComponent(
+  `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size + 10}" viewBox="0 0 ${size} ${size + 10}">` +
+  `<filter id="s"><feDropShadow dx="0" dy="1" stdDeviation="1.5" flood-opacity="0.4"/></filter>` +
+  (selected
+    ? `<path d="M${size / 2} 0 C${size * 0.23} 0 0 ${size * 0.23} 0 ${size / 2} C0 ${size * 0.77} ${size / 2} ${size + 6} ${size / 2} ${size + 6}z" fill="none" stroke="#fff" stroke-width="3" opacity="0.95"/>`
+    : '') +
+  `<path d="M${size / 2} 0 C${size * 0.23} 0 0 ${size * 0.23} 0 ${size / 2} C0 ${size * 0.77} ${size / 2} ${size + 6} ${size / 2} ${size + 6}z" fill="${color}" filter="url(#s)"/>` +
+  `<circle cx="${size / 2}" cy="${size / 2}" r="${size * 0.22}" fill="#fff" opacity="0.9"/>` +
+  `</svg>`
+);
+
+// 统一给标记套上「普通 / 选中」样式
+const applyPinStyle = (m, loc, isSel) => {
+  const size = isSel ? 36 : (loc.importance || 0) >= 4 ? 32 : 26;
+  const color = isSel ? SELECTED_COLOR : IMPORTANCE_COLORS[Math.min(loc.importance || 0, 5)];
+  m.setIcon(new window.AMap.Icon({
+    size: new window.AMap.Size(size, size + 10),
+    imageSize: new window.AMap.Size(size, size + 10),
+    image: buildPinIcon(color, size, isSel),
+  }));
+  m.setOffset(new window.AMap.Pixel(-size / 2, -(size + 10)));
+  m.setzIndex(100 + (loc.importance || 0) + (isSel ? 50 : 0));
+};
 
 export default function TourView() {
   const { tourId } = useParams();
@@ -22,6 +48,7 @@ export default function TourView() {
   const routePolylinesRef = useRef({});
   const locByIdRef = useRef({});
   const clustererRef = useRef(null);
+  const currentLocRef = useRef(null);
 
   const [currentLoc, setCurrentLoc] = useState(null);
   const [currentLayer, setCurrentLayer] = useState('novel');
@@ -31,6 +58,8 @@ export default function TourView() {
   const [toast, setToast] = useState(null);
 
   const { tour, loading } = useTourData(tourId);
+
+  currentLocRef.current = currentLoc; // 供 renderMarker 闭包读取最新选中态
 
   // Init map
   useEffect(() => {
@@ -58,23 +87,18 @@ export default function TourView() {
           gridSize: 60,
           maxZoom: 15,
           renderMarker: (ctx) => {
-            const loc = ctx.data?.extData || ctx.data?.data || ctx.data || {};
+            // AMap 2.0 下 ctx.data 是 [point] 数组（首元素 {lnglat, extData}）。
+            // 直接读 ctx.data.extData 会落空 → 取数组首元素，兜底按坐标匹配 tour.locations。
+            // 修复前 loc 落成数组对象 → 全部标记灰色、点击选中空对象（内容栏四 tab 全空）。
+            const raw = Array.isArray(ctx.data) ? ctx.data[0] : ctx.data;
+            let loc = (raw && (raw.extData || raw.data)) || raw || {};
+            if (!loc.name) {
+              const p = ctx.marker.getPosition();
+              loc = tour.locations.find(l => Math.abs(l.lng - p.getLng()) < 1e-4 && Math.abs(l.lat - p.getLat()) < 1e-4) || {};
+            }
             const m = ctx.marker;
-            const color = IMPORTANCE_COLORS[Math.min(loc.importance || 0, 5)];
-            const size = (loc.importance || 0) >= 4 ? 32 : 26;
-            m.setIcon(new window.AMap.Icon({
-              size: new window.AMap.Size(size, size + 10),
-              imageSize: new window.AMap.Size(size, size + 10),
-              image: 'data:image/svg+xml,' + encodeURIComponent(
-                `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size + 10}" viewBox="0 0 ${size} ${size + 10}">` +
-                `<filter id="s"><feDropShadow dx="0" dy="1" stdDeviation="1.5" flood-opacity="0.4"/></filter>` +
-                `<path d="M${size / 2} 0 C${size * 0.23} 0 0 ${size * 0.23} 0 ${size / 2} C0 ${size * 0.77} ${size / 2} ${size + 6} ${size / 2} ${size + 6}z" fill="${color}" filter="url(#s)"/>` +
-                `<circle cx="${size / 2}" cy="${size / 2}" r="${size * 0.22}" fill="#fff" opacity="0.9"/>` +
-                `</svg>`
-              )
-            }));
-            m.setOffset(new window.AMap.Pixel(-size / 2, -(size + 10)));
-            m.setzIndex(100 + (loc.importance || 0));
+            const isSel = currentLocRef.current && loc.id === currentLocRef.current.id;
+            applyPinStyle(m, loc, isSel);
             m._locData = loc;
             m.on('click', () => selectLoc(loc));
             markersRef.current.push(m);
@@ -133,6 +157,16 @@ export default function TourView() {
     };
     init();
   }, [tour]);
+
+  // 选中态变化 → 刷新所有标记的「选中 / 普通」样式（选中地点琥珀金高亮）
+  useEffect(() => {
+    markersRef.current.forEach(m => {
+      const ld = m._locData;
+      if (!ld || !ld.id) return;
+      const isSel = currentLoc && ld.id === currentLoc.id;
+      applyPinStyle(m, ld, isSel);
+    });
+  }, [currentLoc]);
 
   // ── Actions ──
   const handleShare = () => {
