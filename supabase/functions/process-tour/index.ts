@@ -43,14 +43,14 @@ async function deleteRows(table: string, tourId: string) {
   if (!res.ok) throw new Error(`DELETE ${table}: ${res.status} ${await res.text()}`);
 }
 
-async function gaode(name: string, destCity: string, center?: { lng: number; lat: number }) {
+async function gaode(name: string, destCity: string) {
   const kw = encodeURIComponent(name);
   // 高德 city 参数只接受城市名/adcode，不能是"省+市"。
   // "安徽省黄山市" → "黄山"；否则 citylimit=true 被静默忽略，全国同名点乱入。
   const cityParam = encodeURIComponent((splitRegion(destCity).city || destCity).replace(/[市]$/g, ""));
-  // 用目的地中心做搜索偏置：优先返回中心附近 POI，避免"同城同名但隔几十公里"的错误点
-  const near = center ? `&location=${center.lng},${center.lat}&radius=20000` : "";
-  const r = await fetch(`https://restapi.amap.com/v3/place/text?keywords=${kw}&city=${cityParam}&key=${GAODE_KEY}&types=风景名胜|旅游景点&citylimit=true${near}`);
+  // 不做 location 偏置：目的地地理编码可能偏到行政中心（如"三清山"被编码到上饶市区，距真景点 50km），
+  // 偏置反而排挤真景点。靠城市限定 + 类型过滤 + 后续聚类离群点剔除保证质量。
+  const r = await fetch(`https://restapi.amap.com/v3/place/text?keywords=${kw}&city=${cityParam}&key=${GAODE_KEY}&types=风景名胜|旅游景点&citylimit=true`);
   const d = await r.json();
   // 过滤地址式 POI：名称形如"湖北省武汉市洪山区象鼻山"（整串地址当名称）的多为非景点的幻觉点。
   // 真实景点名称是短的（"黄鹤楼""晴川阁"），不会带"省…市"。
@@ -59,21 +59,24 @@ async function gaode(name: string, destCity: string, center?: { lng: number; lat
   return null;
 }
 
-// 目的地中心坐标：地理编码目的地名称（"龟山"+武汉 → 汉阳龟山 114.269,30.554）。
-// 用于①搜索偏置 ②距离校验。失败返回 null（降级为仅城市级校验）。
-async function geoCodeCenter(name: string, destCity: string): Promise<{ lng: number; lat: number } | null> {
-  try {
-    const cityParam = encodeURIComponent((splitRegion(destCity).city || destCity).replace(/[市]$/g, ""));
-    const r = await fetch(`https://restapi.amap.com/v3/geocode/geo?address=${encodeURIComponent(name)}&city=${cityParam}&key=${GAODE_KEY}`);
-    if (!r.ok) return null;
-    const d = await r.json();
-    const g = d.geocodes?.[0];
-    if (!g?.location) return null;
-    const [lng, lat] = g.location.split(",").map(Number);
-    return { lng, lat };
-  } catch {
-    return null;
+// 离群点剔除：真实地点聚成簇，编造/过远点是离群点。
+// 以候选点中位数为中心，迭代剔除 >20km 的点（最多 3 轮）。
+// 不依赖地理编码中心 —— 某些目的地（三清山）地理编码会偏到行政中心，固定中心校验会误杀真景点。
+function pruneFarPoints(cands: { lng: number; lat: number }[]): { lng: number; lat: number }[] {
+  if (cands.length <= 2) return cands;
+  const med = (arr: number[]) => {
+    const s = [...arr].sort((a, b) => a - b);
+    const m = Math.floor(s.length / 2);
+    return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+  };
+  let pts = cands;
+  for (let round = 0; round < 3; round++) {
+    const c = { lng: med(pts.map(p => p.lng)), lat: med(pts.map(p => p.lat)) };
+    const next = pts.filter(p => haversineM(c, p) <= 20000);
+    if (next.length < 2 || next.length === pts.length) break;
+    pts = next;
   }
+  return pts;
 }
 
 // Regeo: verify a coordinate is actually in the expected city/province.
@@ -106,21 +109,39 @@ function splitRegion(t: string) {
 const stripSuffix = (s: any) => String(s).replace(/[市]$/g, "");
 
 // Check if a location is plausibly in the expected region.
-// 注意：高德 regeo 对直辖市返回 city=[]（空数组，truthy），
-// 必须显式回退到 province，否则空数组会让 includes("") 恒为 true → 校验被绕过。
+// 支持各种输入格式："安徽省黄山市"、"黄山市"、"黄山"、"北京"（直辖市）、"江西"（裸省名）、"江西省"。
+// 规则：
+//   1) 目标明确含"市"（省+市 或 裸市名）→ 城市必须匹配（直辖市用 province 兜底），省份不够。
+//   2) 目标只含"省/自治区"（如"江西省""内蒙古自治区"）→ 省份匹配即可。
+//   3) 目标是无后缀裸名（"江西""黄山"）→ 省或市任一匹配即可。
+// 注意：高德 regeo 对直辖市返回 city=[]（空数组，truthy），须显式回退到 province。
 function regionMatch(geo: { province: string; city: string | string[] }, targetRegion: string): boolean {
   if (!geo) return false;
-  const { prov: tProv, city: tCity } = splitRegion(targetRegion);
-  const gCity = Array.isArray(geo.city) ? (geo.city[0] || "") : String(geo.city || "");
+  const norm = String(targetRegion).trim();
+  if (!norm) return false;
   const gProv = String(geo.province || "");
+  const gCity = Array.isArray(geo.city) ? (geo.city[0] || "") : String(geo.city || "");
   const gCityCand = gCity || gProv; // 直辖市：city 为空 → 用 province 兜底
-  const tCityCand = stripSuffix(tCity || targetRegion);
-  // 城市匹配是主判据（含直辖市 province 兜底）。若目标有明确"市"，省份不再兜底，
-  // 否则同省不同市（如合肥 vs 黄山）也会通过。
-  const cityOk = !!tCityCand && (gCityCand.includes(tCityCand) || tCityCand.includes(stripSuffix(gCityCand)));
-  const provinceOnly = !tCity && !!tProv; // 目标地区只写了省份才用省份匹配
-  const provOk = provinceOnly && (gProv.includes(stripSuffix(tProv)) || stripSuffix(tProv).includes(stripSuffix(gProv)));
-  return Boolean(cityOk || provOk);
+
+  const sheng = norm.indexOf("省");
+  const zzq = norm.indexOf("自治区");
+  let provPart = "", cityPart = "";
+  if (sheng > -1) { provPart = norm.slice(0, sheng); cityPart = norm.slice(sheng + 1); }
+  else if (zzq > -1) { provPart = norm.slice(0, zzq); cityPart = norm.slice(zzq + 3); }
+
+  if (cityPart) {
+    // 明确指定了市 → 市必须匹配
+    const tCityCands = [cityPart, stripSuffix(cityPart)];
+    return tCityCands.some(tc => tc && (gCityCand.includes(tc) || tc.includes(stripSuffix(gCityCand))));
+  }
+  if (provPart) {
+    // 只指定了省
+    const tProvCands = [provPart, stripSuffix(provPart)];
+    return tProvCands.some(tp => tp && gProv.includes(tp));
+  }
+  // 裸名（"江西""黄山""北京"）→ 省或市任一匹配
+  const cands = [norm, stripSuffix(norm)];
+  return cands.some(k => k && (gProv.includes(k) || gCityCand.includes(k)));
 }
 
 // 坐标距离（米）— 用于地点去重（DeepSeek 常提取多个近义地名到同一 POI）
@@ -134,18 +155,27 @@ function haversineM(a: { lng: number; lat: number }, b: { lng: number; lat: numb
   return 2 * EARTH_R * Math.asin(Math.sqrt(s));
 }
 
-async function deepseek(messages: { role: string; content: string }[]) {
-  const r = await fetch("https://api.deepseek.com/v1/chat/completions", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${DEEPSEEK_KEY}` },
-    body: JSON.stringify({ model: "deepseek-chat", messages, temperature: 0.7, max_tokens: 8192, response_format: { type: "json_object" } }),
-  });
-  if (!r.ok) throw new Error(`DeepSeek: ${r.status}`);
-  const text = ((await r.json()).choices?.[0]?.message?.content || "").trim();
-  if (!text) throw new Error("DeepSeek 返回空内容");
-  // 剥离 ```json ... ``` 代码块后解析，避免模型偶尔包裹 markdown
-  const cleaned = text.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "");
-  return JSON.parse(cleaned);
+async function deepseek(messages: { role: string; content: string }[], retries = 2) {
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    const r = await fetch("https://api.deepseek.com/v1/chat/completions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${DEEPSEEK_KEY}` },
+      body: JSON.stringify({ model: "deepseek-chat", messages, temperature: 0.7, max_tokens: 8192, response_format: { type: "json_object" } }),
+    });
+    if (!r.ok) throw new Error(`DeepSeek: ${r.status}`);
+    const text = ((await r.json()).choices?.[0]?.message?.content || "").trim();
+    if (!text) throw new Error("DeepSeek 返回空内容");
+    // 剥离 ```json ... ``` 代码块后解析，避免模型偶尔包裹 markdown
+    const cleaned = text.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "");
+    try {
+      return JSON.parse(cleaned);
+    } catch (e) {
+      // 模型偶发返回截断/畸形 JSON → 重试（非确定性，重试常能成功）
+      if (attempt < retries) continue;
+      throw new Error(`DeepSeek JSON 解析失败: ${(e as Error).message}`);
+    }
+  }
+  throw new Error("DeepSeek 调用失败");
 }
 
 Deno.serve(async (req: Request) => {
@@ -170,10 +200,6 @@ Deno.serve(async (req: Request) => {
     const src = tour.source?.rawText || "";
     console.log(`Processing: ${tour.title}, ${src.length} chars`);
 
-    // 目的地中心坐标（地理编码），用于搜索偏置 + 距离校验
-    const center = await geoCodeCenter(destName, destRegion);
-    if (center) console.log(`Destination center: ${destName} @ ${center.lng.toFixed(4)},${center.lat.toFixed(4)}`);
-
     // 2. Extract locations
     const lr = await deepseek([
       { role: "system", content: "你是中国旅游规划专家。只返回JSON。只提取真实存在的地点，不确定的地点不要提取。只列固定旅游景点/地标/古迹/公园，不要临时展览、活动、演出、商业店铺等非固定地点。" },
@@ -183,7 +209,7 @@ Deno.serve(async (req: Request) => {
     const warnings: string[] = [];
     const locs: any[] = [];
     for (const l of (lr.locations || [])) {
-      const c = await gaode(l.name, destRegion, center);
+      const c = await gaode(l.name, destRegion);
       if (!c || !c.lat) {
         warnings.push(`⚠️ "${l.name}" 未找到坐标，已跳过`);
         continue;
@@ -202,16 +228,22 @@ Deno.serve(async (req: Request) => {
         warnings.push(`⚠️ "${l.name}" 坐标(${c.lng},${c.lat})位于 ${geo.province}${geo.city || ''}，不在 ${destRegion}，已跳过`);
         continue;
       }
-      // 距离目的地中心过远 → 同城不同地（如"江夏龟山" vs 汉阳龟山），跳过。
-      // 12km：合法景点实测都在中心 5km 内；14km+ 的"象鼻山"等误入点须拦截
-      if (center && haversineM(center, c) > 12000) {
-        warnings.push(`⚠️ "${l.name}" 坐标距目的地中心 ${Math.round(haversineM(center, c) / 1000)}km，过远已跳过`);
-        continue;
-      }
       // Use Gaode's official name if available
       const displayName = c.name && c.name !== l.name ? c.name : l.name;
       locs.push({ id: l.id, name: displayName, lat: c.lat, lng: c.lng, elevation: l.elevation || "", importance: l.importance || 3, tags: l.tags || [], sort_order: locs.length });
     }
+
+    // 聚类离群点剔除：真实地点聚成簇，编造/过远点（江夏龟山 45km、罗汉寺街皇庙 43km）是离群点。
+    // 不依赖地理编码中心 —— 三清山等目的地的中心会偏到行政中心，固定中心校验会误杀全部真景点。
+    const clusterKeep = new Set(pruneFarPoints(locs));
+    if (clusterKeep.size < locs.length) {
+      for (const l of locs) {
+        if (!clusterKeep.has(l)) warnings.push(`⚠️ "${l.name}" 距其他地点过远（离群点），已剔除`);
+      }
+      locs.length = 0;
+      locs.push(...clusterKeep);
+    }
+
     const extractedBeforeDedup = locs.length;
 
     // 坐标去重：距离 <150m 视为同一地点，保留 importance 更高者（地图上避免标记重叠）

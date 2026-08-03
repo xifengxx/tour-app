@@ -474,11 +474,27 @@ export default function TourEdit() {
           <div className="text-center py-16 text-gray-400">加载数据中...</div>
         )}
         {phase === 'review' && !loading && (!tour || (!locations.length && !routes.length)) && (
-          <div className="text-center py-16 space-y-4">
-            <div className="text-4xl">📡</div>
-            <p className="text-gray-400">数据加载失败，请检查网络后重试</p>
-            <button onClick={() => reloadTour()} className="px-6 py-2 bg-red-600 text-white rounded-xl text-sm">🔄 重试加载</button>
-          </div>
+          tour ? (
+            // 导览加载成功，但 AI 没有生成任何地点 —— 重试加载没用，给出正确操作
+            <div className="text-center py-16 space-y-4">
+              <div className="text-4xl">🗺️</div>
+              <p className="text-gray-400">AI 没有生成任何地点</p>
+              <p className="text-gray-500 text-xs">可能原因：源文本过少、地点未识别、或坐标校验全被过滤</p>
+              <div className="flex gap-2 justify-center">
+                <button onClick={() => setPhase('input')}
+                  className="px-6 py-2 bg-white/5 text-muted-foreground rounded-xl text-sm">← 修改基本信息</button>
+                <button onClick={handleReprocess}
+                  className="px-6 py-2 bg-red-600 text-white rounded-xl text-sm">🔄 AI 重新分析</button>
+              </div>
+            </div>
+          ) : (
+            // 导览数据加载失败（网络/权限问题）
+            <div className="text-center py-16 space-y-4">
+              <div className="text-4xl">📡</div>
+              <p className="text-gray-400">数据加载失败，请检查网络后重试</p>
+              <button onClick={() => reloadTour()} className="px-6 py-2 bg-red-600 text-white rounded-xl text-sm">🔄 重试加载</button>
+            </div>
+          )
         )}
         {phase === 'review' && !loading && tour && (locations.length > 0 || routes.length > 0) && (
           <div className="space-y-4">
