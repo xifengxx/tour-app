@@ -34,3 +34,7 @@ body {
 
 /* AMap container fixes */
 .amap-container { background: #f5f4ed !important; }
+
+/* 高德版权/Logo 条 z-index 默认极高(~1100)，会盖在 z-50 的弹窗上（手机端尤甚）。
+   压到 1，使其始终在弹窗(≥z-30)之下、地图容器内正常显示 */
+.amap-copyright, .amap-logo { z-index: 1 !important; }

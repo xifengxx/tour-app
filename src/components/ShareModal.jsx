@@ -32,10 +32,31 @@ export default function ShareModal({ tour, tourId, onClose }) {
     const c = posterRef.current;
     if (!c) return;
     drawTourPoster(c, tour, qrRef.current); // 重绘确保含二维码
-    const a = document.createElement('a');
-    a.download = `${title || 'tour'}-海报.png`;
-    a.href = c.toDataURL('image/png');
-    a.click();
+    const fileName = `${title || 'tour'}-海报.png`;
+    c.toBlob(async (blob) => {
+      if (!blob) return;
+      // 1) 支持 Web Share 的（iOS Safari / 安卓 Chrome）→ 调起系统分享（可分享到微信等）
+      if (navigator.canShare && navigator.canShare({ files: [new File([blob], fileName, { type: 'image/png' })] })) {
+        try {
+          await navigator.share({ files: [new File([blob], fileName, { type: 'image/png' })], title });
+          return;
+        } catch (e) { /* 用户取消 → 回退下载 */ }
+      }
+      // 2) 常规下载（blob URL，安卓/桌面生效）
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      // 3) iOS Safari 兜底：新窗口打开，长按保存
+      if (/iphone|ipad|ipod/i.test(navigator.userAgent)) {
+        setTimeout(() => window.open(url, '_blank'), 300);
+      } else {
+        setTimeout(() => URL.revokeObjectURL(url), 5000);
+      }
+    }, 'image/png');
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   };

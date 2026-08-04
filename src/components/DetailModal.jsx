@@ -2,7 +2,7 @@ export default function DetailModal({ loc, layers, onClose }) {
   if (!loc) return null;
 
   return (
-    <div className="fixed inset-0 z-30 bg-black/70 flex items-center justify-center p-4" onClick={onClose}>
+    <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4" onClick={onClose}>
       <div className="bg-card rounded-2xl max-w-lg max-h-[80vh] overflow-y-auto p-6 w-full" onClick={e => e.stopPropagation()}>
         <button className="float-right w-8 h-8 rounded-full bg-black/10 text-foreground text-lg" onClick={onClose}>✕</button>
         <div className="text-foreground font-serif font-bold text-xl mb-1">

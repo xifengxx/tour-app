@@ -73,15 +73,19 @@ export function drawTourPoster(canvas, tour, qrCanvas) {
     y += 52;
   });
 
-  // 印章（标题右侧）
+  // 印章（标题右侧）——标题过长时跳过，避免盖住标题
+  const titleMaxWidth = Math.max(...tLines.map(l => ctx.measureText(l).width));
   const sealX = W / 2 + 155;
-  ctx.fillStyle = '#c96442';
-  roundRect(sealX, 86, 46, 46, 6);
-  ctx.fill();
-  ctx.fillStyle = '#f5f4ed';
-  ctx.font = `700 22px ${SERIF}`;
-  ctx.textAlign = 'center';
-  ctx.fillText('文', sealX + 23, 86 + 31);
+  const drawSeal = titleMaxWidth < 2 * (sealX - 10 - W / 2); // 标题右缘(300+w/2)不碰印章左侧(sealX-10)
+  if (drawSeal) {
+    ctx.fillStyle = '#c96442';
+    roundRect(sealX, 86, 46, 46, 6);
+    ctx.fill();
+    ctx.fillStyle = '#f5f4ed';
+    ctx.font = `700 22px ${SERIF}`;
+    ctx.textAlign = 'center';
+    ctx.fillText('文', sealX + 23, 86 + 31);
+  }
 
   // 副标题（点睛句，陶土色）
   y += 38;
