@@ -286,9 +286,14 @@ Deno.serve(async (req: Request) => {
         const regionScenics = await gaodeRegionScenics(destRegion);
         const distinct = regionScenics.filter(p => locs.every(l => haversineM(l, p) > 5000)); // 与核心全部 >5km
         const dedupedRegion = distinct.filter((p, i) => !distinct.slice(0, i).some(q => haversineM(q, p) < 5000)); // 地区点间互去重
-        if (dedupedRegion.length >= 3) {
-          const addN = Math.min(4, dedupedRegion.length);
-          for (const p of dedupedRegion.slice(0, addN)) {
+        // 包含关系过滤：两个"风景区/名胜区"类 POI 相距 <8km 时保留名称更长者（如武陵源 ⊃ 天子山，天子山不单列）
+        const umbrellaSuffix = /(风景区|名胜区|景区|森林公园)$/;
+        const regionFinal = dedupedRegion.filter(p =>
+          !dedupedRegion.some(q => q !== p && haversineM(q, p) < 8000 && umbrellaSuffix.test(q.name) && umbrellaSuffix.test(p.name) && q.name.length > p.name.length)
+        );
+        if (regionFinal.length >= 3) {
+          const addN = Math.min(4, regionFinal.length);
+          for (const p of regionFinal.slice(0, addN)) {
             locs.push({ id: `reg-${locs.length}`, name: p.name, lat: p.lat, lng: p.lng, elevation: "", importance: 4, tags: ["地区景点"], layers: {}, reflection: "", practical: {} });
           }
           locs.forEach((l, i) => (l.sort_order = i));
@@ -364,9 +369,9 @@ Deno.serve(async (req: Request) => {
     const isNovelBased = !!(tour.source?.title || tour.source?.novelTitle);
     const novelName = String(tour.source?.title || tour.source?.novelTitle || '');
     const routeReqs = [
-      { label: "1日精华游", desc: "目的地核心必看景点，1天内完成" },
-      ...(locs.length >= 8 ? [{ label: "2日全景游", desc: "覆盖全部主要景点，分两天" }] : []),
-      ...(hasRegionTour ? [{ label: "主题游", desc: "以目的地所在城市/地区为范围，串起地区最值得一游的独立景点（名楼/古迹/博物馆/地标等）" }] : []),
+      { label: "1日精华游", desc: "目的地核心必看景点，1天内完成（≤6 站）" },
+      ...(locs.length >= 8 ? [{ label: "2日全景游", desc: "目的地核心 + 邻近主景区的完整两天行程（分两天，每天 ≤6 站）" }] : []),
+      ...(hasRegionTour ? [{ label: "主题游", desc: "完整地区行程：目的地核心景点 + 地区其他知名景点（如天门山+武陵源+黄龙洞+大峡谷），narrative 可写 3 天" }] : []),
       ...(isNovelBased ? [{ label: "文学巡礼线", desc: `跟随小说《${novelName}》的情节场景顺序游览相关地点` }] : []),
     ];
     const routeReqText = routeReqs.map((r, i) => `${i + 1}. ${r.label} — ${r.desc}`).join("\n");
@@ -374,7 +379,7 @@ Deno.serve(async (req: Request) => {
     for (let attempt = 0; attempt < 2 && routes.length < routeReqs.length; attempt++) {
       const rr = await deepseek([
         { role: "system", content: "你是旅游路线规划师。只返回JSON。" },
-        { role: "user", content: `${destName}路线。可选地点（id: 名称）: ${locs.map(l => `${l.id}: ${l.name}`).join(", ")}\n\n按序严格生成 ${routeReqs.length} 条路线：\n${routeReqText}\n\n要求：\n1. 每条路线覆盖其主题对应的地点，形成完整行程（从某入口/索道进 → 逐点游览 → 出口/索道出）。\n2. narrative 各写 150-300 字完整行程描述：从哪个入口/索道进、每段用什么交通（徒步/索道/观光车）、依次经过哪些地点、从哪里出。narrative 中必须写地点的中文名（如"玉京峰"），严禁写 id 代号。\n3. 1日精华游与2日全景游覆盖范围不同（精华=核心必看子集，全景=全部）；主题游与文学巡礼线应与其他路线在路径和主题上有区分。\n4. 地点少时压缩天数，严禁编造不存在的多日行程。\n5. stops 只能从上面给出的 id 中逐字复制，必须出现在上面列表中，严禁自创、改动或使用列表外的 id。\n6. 路线条数必须与上述完全一致（${routeReqs.length} 条），缺一不可。\nJSON: {"routes":[{"day_label":"","title":"","stops":["id1","id2"],"narrative":"完整行程描述"}]}` },
+        { role: "user", content: `${destName}路线。可选地点（id: 名称）: ${locs.map(l => `${l.id}: ${l.name}`).join(", ")}\n\n按序严格生成 ${routeReqs.length} 条路线：\n${routeReqText}\n\n要求：\n1. 每条路线覆盖其主题对应的地点，形成完整行程（从某入口/索道进 → 逐点游览 → 出口/索道出）。\n2. narrative 各写 150-300 字完整行程描述：从哪个入口/索道进、每段用什么交通（徒步/索道/观光车）、依次经过哪些地点、从哪里出。narrative 中必须写地点的中文名（如"玉京峰"），严禁写 id 代号。\n3. **路线覆盖以"景区/大区域"为容量单位，每个主要景区（如天门山、武陵源、黄龙洞、大峡谷）各需约一整天**：按地点名称归组到所属景区（如\"天门山国家森林公园-鬼谷栈道\"属于天门山景区）。1日精华游只含目的地核心景区（≤6 站）；2日全景游只含 2 个景区（核心景区 + 紧邻主景区，如天门山+武陵源，共 ≤10 站，narrative 明确第1天/第2天各去哪）；主题游含全部景区（narrative 按景区数安排天数）。**严禁把 3 个以上景区塞进 2 日游**。\n4. **主题游必须包含目的地核心景点**；1日精华/2日全景/主题游覆盖范围逐步扩大且互补（精华⊂全景⊂主题游）。\n5. 地点少时压缩天数，严禁编造不存在的多日行程。\n6. stops 只能从上面给出的 id 中逐字复制，必须出现在上面列表中，严禁自创、改动或使用列表外的 id。\n7. 路线条数必须与上述完全一致（${routeReqs.length} 条），缺一不可。\nJSON: {"routes":[{"day_label":"","title":"","stops":["id1","id2"],"narrative":"完整行程描述"}]}` },
       ]);
       // Route stop validation: resolve and report mismatches
       const allRoutes = (rr.routes || []).map((r: any, i: number) => {
