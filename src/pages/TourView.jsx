@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useTourData } from '../hooks/useTourData';
+import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import NavBar from '../components/NavBar';
 import { Button } from '@/components/ui/button';
