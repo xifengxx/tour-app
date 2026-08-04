@@ -8,22 +8,11 @@ import RouteBar from '../components/RouteBar';
 import ContentCard from '../components/ContentCard';
 import DetailModal from '../components/DetailModal';
 import { Share2, Check } from 'lucide-react';
+import { extractMarkerLoc, findNearestLocation, buildPinIcon } from '../lib/mapUtils';
 
 const ROUTE_COLORS = ['#e74c3c','#f39c12','#3498db','#2ecc71','#9b59b6'];
 const DEFAULT_PIN_COLOR = '#b3ae9e'; // 未选中标记：暖灰
 const SELECTED_COLOR = '#c96442'; // 选中标记：陶土（亮底高对比）
-
-// 生成图钉 SVG data-URI。selected 时加白色描边放大，用于视觉区分当前选中地点
-const buildPinIcon = (color, size, selected) => 'data:image/svg+xml,' + encodeURIComponent(
-  `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size + 10}" viewBox="0 0 ${size} ${size + 10}">` +
-  `<filter id="s"><feDropShadow dx="0" dy="1" stdDeviation="1.5" flood-opacity="0.4"/></filter>` +
-  (selected
-    ? `<path d="M${size / 2} 0 C${size * 0.23} 0 0 ${size * 0.23} 0 ${size / 2} C0 ${size * 0.77} ${size / 2} ${size + 6} ${size / 2} ${size + 6}z" fill="none" stroke="#fff" stroke-width="3" opacity="0.95"/>`
-    : '') +
-  `<path d="M${size / 2} 0 C${size * 0.23} 0 0 ${size * 0.23} 0 ${size / 2} C0 ${size * 0.77} ${size / 2} ${size + 6} ${size / 2} ${size + 6}z" fill="${color}" filter="url(#s)"/>` +
-  `<circle cx="${size / 2}" cy="${size / 2}" r="${size * 0.22}" fill="#fff" opacity="0.9"/>` +
-  `</svg>`
-);
 
 // 统一给标记套上「普通 / 选中」样式。
 // 未选中：统一灰色小图钉；选中：琥珀金 + 白色描边 + 放大 + 置顶。
@@ -89,15 +78,8 @@ export default function TourView() {
           gridSize: 60,
           maxZoom: 15,
           renderMarker: (ctx) => {
-            // AMap 2.0 下 ctx.data 是 [point] 数组（首元素 {lnglat, extData}）。
-            // 直接读 ctx.data.extData 会落空 → 取数组首元素，兜底按坐标匹配 tour.locations。
-            // 修复前 loc 落成数组对象 → 全部标记灰色、点击选中空对象（内容栏四 tab 全空）。
-            const raw = Array.isArray(ctx.data) ? ctx.data[0] : ctx.data;
-            let loc = (raw && (raw.extData || raw.data)) || raw || {};
-            if (!loc.name) {
-              const p = ctx.marker.getPosition();
-              loc = tour.locations.find(l => Math.abs(l.lng - p.getLng()) < 1e-4 && Math.abs(l.lat - p.getLat()) < 1e-4) || {};
-            }
+            // ctx.data 提取逻辑见 mapUtils.extractMarkerLoc（回归测试覆盖）
+            const loc = extractMarkerLoc(ctx.data, tour.locations, () => ctx.marker.getPosition());
             const m = ctx.marker;
             const isSel = currentLocRef.current && loc.id === currentLocRef.current.id;
             applyPinStyle(m, loc, isSel);
@@ -115,10 +97,7 @@ export default function TourView() {
               // 点击聚合气泡 → 选中簇内最近的地点：内容栏立即更新并放大到该点，
               // 与点击单个标记行为一致（否则默认视图下点气泡只缩放不选中，用户会以为点不动）
               const pos = m.getPosition();
-              const nearest = tour.locations.reduce((best, l) => {
-                const d = (l.lng - pos.getLng()) ** 2 + (l.lat - pos.getLat()) ** 2;
-                return !best || d < best.d ? { l, d } : best;
-              }, null)?.l;
+              const nearest = findNearestLocation(tour.locations, pos);
               if (nearest) selectLoc(nearest);
             });
           },

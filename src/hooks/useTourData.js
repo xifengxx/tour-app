@@ -73,7 +73,7 @@ export function useTourData(tourId) {
 /**
  * Normalize Supabase flat tables → nested tour object matching static JSON shape.
  */
-function normalizeTour(row) {
+export function normalizeTour(row) {
   const layers = (row.content_layers || []).map(l => ({
     id: l.layer_key,
     name: l.name,
@@ -126,7 +126,7 @@ function normalizeTour(row) {
  * Derive map bounds from location coordinates (drafts created in the app
  * don't store destination.bounds). Returns null when no usable coords.
  */
-function computeBounds(locations) {
+export function computeBounds(locations) {
   const pts = locations.filter(l => l.lat && l.lng);
   if (pts.length === 0) return null;
   const lats = pts.map(l => l.lat);

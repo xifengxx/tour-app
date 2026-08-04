@@ -10,4 +10,8 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
     },
   },
+  test: {
+    globals: true, // RTL 依赖全局 afterEach 自动 cleanup
+    setupFiles: './vitest.setup.js',
+  },
 })
