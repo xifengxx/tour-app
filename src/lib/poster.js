@@ -14,7 +14,7 @@ export function drawTourPoster(canvas, tour, qrCanvas) {
 
   const SERIF = 'Georgia,"Songti SC","Noto Serif SC",serif';
   const SANS = '-apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif';
-  const MAX_Y = H - 350; // 内容区下界，CTA 在其下方留 ~54px
+  const MAX_Y = H - 340; // 内容区下界，CTA(H-300) 与其间距 40px
 
   const title = tour.meta?.title || tour.title || '文学巡礼';
   const subtitle = tour.meta?.subtitle || tour.subtitle || '';
