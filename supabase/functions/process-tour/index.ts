@@ -318,6 +318,7 @@ Deno.serve(async (req: Request) => {
         const nameSeen = new Set<string>();
         const regionFinal: { lng: number; lat: number; name: string }[] = [];
         for (const p of regionScenics) {
+          if (regionFinal.some(q => haversineM(q, p) < 1000)) continue; // 同坐标（如武陵源/张家界国家森林公园）只留一个
           if (!nameSeen.has(p.name)) { nameSeen.add(p.name); regionFinal.push(p); }
         }
         for (const name of aiAttractions) {
@@ -409,7 +410,7 @@ Deno.serve(async (req: Request) => {
     const novelName = String(tour.source?.title || tour.source?.novelTitle || '');
     const routeReqs = [
       { label: "1日精华游", desc: "目的地核心必看景点，1天内完成（≤6 站）" },
-      ...(locs.length >= 8 ? [{ label: "2日全景游", desc: "目的地核心 + 邻近主景区的完整两天行程（分两天，每天 ≤6 站）" }] : []),
+      ...(locs.length >= 8 ? [{ label: "2日全景游", desc: "目的地核心（第1天）+ 主景区（第2天，如武陵源）完整两天行程；第2天应含主景区全部著名子景点（可达 6-8 站）" }] : []),
       ...(hasRegionTour ? [{ label: "主题游", desc: "完整地区行程：目的地核心景点 + 地区其他知名景点（如天门山+武陵源+黄龙洞+大峡谷），narrative 可写 3 天" }] : []),
       ...(isNovelBased ? [{ label: "文学巡礼线", desc: `跟随小说《${novelName}》的情节场景顺序游览相关地点` }] : []),
     ];
@@ -418,7 +419,7 @@ Deno.serve(async (req: Request) => {
     for (let attempt = 0; attempt < 2 && routes.length < routeReqs.length; attempt++) {
       const rr = await deepseek([
         { role: "system", content: "你是旅游路线规划师。只返回JSON。" },
-        { role: "user", content: `${destName}路线。可选地点（id: 名称）: ${locs.map(l => `${l.id}: ${l.name}`).join(", ")}\n\n按序严格生成 ${routeReqs.length} 条路线：\n${routeReqText}\n\n要求：\n1. 每条路线覆盖其主题对应的地点，形成完整行程（从某入口/索道进 → 逐点游览 → 出口/索道出）。\n2. narrative 各写 150-300 字完整行程描述：从哪个入口/索道进、每段用什么交通（徒步/索道/观光车）、依次经过哪些地点、从哪里出。narrative 中必须写地点的中文名（如"玉京峰"），严禁写 id 代号。\n3. **路线覆盖以"景区/大区域"为容量单位，每个主要景区（如天门山、武陵源、黄龙洞、大峡谷）各需约一整天**：按地点名称归组到所属景区（如\"天门山国家森林公园-鬼谷栈道\"属于天门山景区）。1日精华游只含目的地核心景区（≤6 站）；2日全景游只含 2 个景区（核心景区 + 紧邻主景区，如天门山+武陵源，共 ≤10 站，narrative 明确第1天/第2天各去哪）；主题游含全部景区（narrative 按景区数安排天数）。**严禁把 3 个以上景区塞进 2 日游**；**若某景区距核心景区 >40km（如张家界大峡谷、黄龙洞与天门山相距甚远），不得放入 1日/2日游，只能放入主题游**。\n4. **主题游必须包含目的地核心景点**；1日精华/2日全景/主题游覆盖范围逐步扩大且互补（精华⊂全景⊂主题游）。\n5. 地点少时压缩天数，严禁编造不存在的多日行程。\n6. stops 数组顺序必须与 narrative 中的实际游览顺序一致（入口/索道在前，依次游览，出口/索道在后）；stops 只能从上面给出的 id 中逐字复制，严禁自创或使用列表外的 id。\n7. 路线条数必须与上述完全一致（${routeReqs.length} 条），缺一不可。\nJSON: {"routes":[{"day_label":"","title":"","stops":["id1","id2"],"narrative":"完整行程描述"}]}` },
+        { role: "user", content: `${destName}路线。可选地点（id: 名称）: ${locs.map(l => `${l.id}: ${l.name}`).join(", ")}\n\n按序严格生成 ${routeReqs.length} 条路线：\n${routeReqText}\n\n要求：\n1. 每条路线覆盖其主题对应的地点，形成完整行程（从某入口/索道进 → 逐点游览 → 出口/索道出）。\n2. narrative 各写 150-300 字完整行程描述：从哪个入口/索道进、每段用什么交通（徒步/索道/观光车）、依次经过哪些地点、从哪里出。narrative 中必须写地点的中文名（如"玉京峰"），严禁写 id 代号。\n3. **路线覆盖以"景区/大区域"为容量单位，每个主要景区（如天门山、武陵源、黄龙洞、大峡谷）各需约一整天**：按地点名称归组到所属景区。1日精华游只含目的地核心景区（≤6 站）；2日全景游 = 第1天核心景区（如天门山）+ 第2天主景区（如武陵源），**第2天应尽量覆盖主景区的全部著名子景点（天子山、黄石寨、杨家界、袁家界、金鞭溪、十里画廊、百龙天梯、水绕四门等，可达 6-8 站）**，每天 ≤8 站、总 ≤14，narrative 明确第1天/第2天各去哪；主题游含全部景区（narrative 按景区数安排天数）。**严禁把 3 个以上景区塞进 2 日游**；**若某景区距核心景区 >40km（如张家界大峡谷、黄龙洞与天门山相距甚远），不得放入 1日/2日游，只能放入主题游**。\n4. **主题游必须包含目的地核心景点**；1日精华/2日全景/主题游覆盖范围逐步扩大且互补（精华⊂全景⊂主题游）。\n5. 地点少时压缩天数，严禁编造不存在的多日行程。\n6. stops 数组顺序必须与 narrative 中的实际游览顺序一致（入口/索道在前，依次游览，出口/索道在后）；stops 只能从上面给出的 id 中逐字复制，严禁自创或使用列表外的 id。\n7. 路线条数必须与上述完全一致（${routeReqs.length} 条），缺一不可。\nJSON: {"routes":[{"day_label":"","title":"","stops":["id1","id2"],"narrative":"完整行程描述"}]}` },
       ]);
       // Route stop validation: resolve and report mismatches
       const allRoutes = (rr.routes || []).map((r: any, i: number) => {
