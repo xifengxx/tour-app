@@ -285,10 +285,10 @@ Deno.serve(async (req: Request) => {
       try {
         const regionScenics = await gaodeRegionScenics(destRegion);
         const distinct = regionScenics.filter(p => locs.every(l => haversineM(l, p) > 5000)); // 与核心全部 >5km
-        const dedupedRegion = distinct.filter((p, i) => !distinct.slice(0, i).some(q => haversineM(q, p) < 5000)); // 地区点间互去重
+        const dedupedRegion = distinct.filter((p, i) => !distinct.slice(0, i).some(q => haversineM(q, p) < 2000)); // 地区点间互去重(2km，保留武陵源等密集区子景点)
         const regionFinal = dedupedRegion; // 保留子景点(武陵源的天子山/袁家界/金鞭溪等), 让武陵源区域在路线中内容充实
         if (regionFinal.length >= 3) {
-          const addN = Math.min(6, regionFinal.length);
+          const addN = Math.min(10, regionFinal.length); // 最多并入10个地区景点（用户上限偏好，不超12）
           for (const p of regionFinal.slice(0, addN)) {
             locs.push({ id: `reg-${locs.length}`, name: p.name, lat: p.lat, lng: p.lng, elevation: "", importance: 4, tags: ["地区景点"], layers: {}, reflection: "", practical: {} });
           }
