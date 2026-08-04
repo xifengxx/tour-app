@@ -339,7 +339,7 @@ export default function TourView() {
         />
       )}
 
-      {showShare && <ShareModal tour={tour} onClose={() => setShowShare(false)} />}
+      {showShare && <ShareModal tour={tour} tourId={tourId} onClose={() => setShowShare(false)} />}
 
       {showComments && <CommentsModal tourId={tourId} onClose={() => setShowComments(false)} />}
 

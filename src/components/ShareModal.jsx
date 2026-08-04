@@ -3,13 +3,14 @@ import { QRCodeCanvas } from 'qrcode.react';
 import { drawTourPoster } from '../lib/poster';
 import { Check, Download, Link2, X } from 'lucide-react';
 
-export default function ShareModal({ tour, onClose }) {
+export default function ShareModal({ tour, tourId, onClose }) {
   const qrRef = useRef(null);
   const posterRef = useRef(null);
   const [copied, setCopied] = useState(false);
   const [saved, setSaved] = useState(false);
 
-  const shareUrl = `${window.location.origin}/tour/${tour.id}`;
+  // tourId 用路由参数（静态导览的 tour.id 可能为 undefined，meta.tourId 才是 id）
+  const shareUrl = `${window.location.origin}/tour/${tourId || tour.meta?.tourId || tour.id}`;
   const title = tour.meta?.title || tour.title || '';
 
   // 打开时绘制海报预览
