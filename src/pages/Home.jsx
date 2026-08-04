@@ -107,19 +107,18 @@ export default function Home() {
         to={`/tour/${tour.id}`}
         className="block bg-card rounded-2xl p-5 hover:bg-secondary transition-colors border border-border"
       >
-        <div className="flex items-start justify-between mb-2">
-          <h2 className="text-base font-serif font-bold text-foreground pr-2">{tour.title}</h2>
-          <span className="text-xs px-2 py-1 rounded-full bg-black/5 text-muted-foreground flex-shrink-0">
-            {tour.stats?.locations ?? tour.locations?.[0]?.count ?? '?'} 地点
-          </span>
-        </div>
+        {/* 标题留右侧空间给「已发布 + ⋮」徽标区，避免重叠 */}
+        <h2 className={`text-base font-serif font-bold text-foreground mb-2 ${isMyTour ? 'pr-28' : ''}`}>{tour.title}</h2>
         <p className="text-sm text-muted-foreground mb-3 line-clamp-2">{tour.subtitle}</p>
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <span>📍 {tour.destination?.name || '—'}</span>
-          <span>{tour.destination?.region || ''}</span>
+        <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+          <span>📍 {tour.destination?.name || '—'}{tour.destination?.region ? ` · ${tour.destination.region}` : ''}</span>
           {(tour.stats?.routes ?? tour.routes?.[0]?.count) != null && (
             <span>🗺 {tour.stats?.routes ?? tour.routes?.[0]?.count} 路线</span>
           )}
+          {/* 地点数移至底部信息行，与右上角状态徽标分离 */}
+          <span className="px-2 py-0.5 rounded-full bg-black/5">
+            {tour.stats?.locations ?? tour.locations?.[0]?.count ?? '?'} 地点
+          </span>
         </div>
       </Link>
 
