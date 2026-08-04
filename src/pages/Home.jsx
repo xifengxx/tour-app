@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
+import { searchTours, filterByCategory } from '../lib/filterTours';
 import { useAuth } from '../contexts/AuthContext';
 import NavBar from '../components/NavBar';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import { Plus, MoreHorizontal } from 'lucide-react';
+import { Plus, MoreHorizontal, Heart } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -36,14 +37,19 @@ export default function Home() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const [tab, setTab] = useState(searchParams.get('tab') === 'my' ? 'my' : 'explore');
+  const tabFromParams = p => (p.get('tab') === 'my' || p.get('tab') === 'fav') ? p.get('tab') : 'explore';
+  const [tab, setTab] = useState(tabFromParams(searchParams));
   const [publicTours, setPublicTours] = useState([]);
   const [myTours, setMyTours] = useState([]);
   const [myToursLoading, setMyToursLoading] = useState(false);
+  const [keyword, setKeyword] = useState('');
+  const [category, setCategory] = useState('全部');
+  const [favIds, setFavIds] = useState(new Set());
+  const [favTours, setFavTours] = useState([]);
 
   // Sync tab from URL params (for dropdown menu navigation)
   useEffect(() => {
-    setTab(searchParams.get('tab') === 'my' ? 'my' : 'explore');
+    setTab(tabFromParams(searchParams));
   }, [searchParams]);
 
   // Fetch public tours
@@ -73,10 +79,53 @@ export default function Home() {
       });
   }, [user]);
 
+  // 加载我的收藏（DB + 静态导览混合）
+  useEffect(() => {
+    if (!user) { setFavIds(new Set()); setFavTours([]); return; }
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase.from('favorites').select('tour_id').eq('user_id', user.id);
+      if (cancelled || !data) { if (!cancelled) { setFavIds(new Set()); setFavTours([]); } return; }
+      const ids = data.map(f => f.tour_id);
+      setFavIds(new Set(ids));
+      const staticFavs = STATIC_TOURS.filter(s => ids.includes(s.id));
+      const dbIds = ids.filter(id => !STATIC_TOURS.find(s => s.id === id));
+      let dbFavs = [];
+      if (dbIds.length > 0) {
+        const { data: rows } = await supabase
+          .from('tours')
+          .select('id, title, subtitle, destination, theme, is_public, created_at, locations(count), routes(count)')
+          .in('id', dbIds);
+        dbFavs = rows || [];
+      }
+      if (!cancelled) setFavTours([...dbFavs, ...staticFavs]);
+    })();
+    return () => { cancelled = true; };
+  }, [user]);
+
+  // 切换收藏
+  const toggleFav = async (tour) => {
+    if (!user) { navigate('/login'); return; }
+    const isFav = favIds.has(tour.id);
+    if (isFav) {
+      await supabase.from('favorites').delete().eq('user_id', user.id).eq('tour_id', tour.id);
+      setFavIds(prev => { const s = new Set(prev); s.delete(tour.id); return s; });
+      setFavTours(prev => prev.filter(t => t.id !== tour.id));
+    } else {
+      await supabase.from('favorites').insert({ user_id: user.id, tour_id: tour.id });
+      setFavIds(prev => new Set(prev).add(tour.id));
+      setFavTours(prev => [tour, ...prev]);
+    }
+  };
+
   const allTours = [
     ...STATIC_TOURS,
     ...publicTours.filter(st => !STATIC_TOURS.find(s => s.id === st.id)),
   ];
+
+  // 搜索 + 分类过滤（客户端，数据量小）
+  const filteredTours = filterByCategory(searchTours(allTours, keyword), category);
+  const CATEGORIES = ['全部', '名山', '湖泊', '人文', '其他'];
 
   // 切换公开/私密
   const togglePublic = async (tour) => {
@@ -121,6 +170,18 @@ export default function Home() {
           </span>
         </div>
       </Link>
+
+      {/* 收藏 ♥（发现/收藏 tab 卡片） */}
+      {!isMyTour && user && (
+        <button
+          onClick={() => toggleFav(tour)}
+          className="absolute top-3 right-3 w-7 h-7 rounded-full bg-black/5 flex items-center justify-center hover:bg-black/10 transition-colors"
+          title={favIds.has(tour.id) ? '取消收藏' : '收藏'}
+          aria-label={favIds.has(tour.id) ? '取消收藏' : '收藏'}
+        >
+          <Heart className={`h-3.5 w-3.5 ${favIds.has(tour.id) ? 'fill-primary text-primary' : 'text-muted-foreground'}`} />
+        </button>
+      )}
 
       {/* My tour: status badge + actions menu */}
       {isMyTour && (
@@ -174,6 +235,11 @@ export default function Home() {
               <TabsTrigger value="my" className="data-[state=active]:bg-primary/10 data-[state=active]:text-primary data-[state=active]:border data-[state=active]:border-primary/20 text-muted-foreground">
                 📋 我的导览
               </TabsTrigger>
+              {user && (
+                <TabsTrigger value="fav" className="data-[state=active]:bg-primary/10 data-[state=active]:text-primary data-[state=active]:border data-[state=active]:border-primary/20 text-muted-foreground">
+                  🔖 我的收藏
+                </TabsTrigger>
+              )}
             </TabsList>
 
             {user && (
@@ -189,18 +255,52 @@ export default function Home() {
 
           {/* Subtitle */}
           <p className="text-muted-foreground text-xs mt-3 mb-2">
-            {tab === 'explore' ? '带着小说去旅行，在每一处山崖找到书中的江湖' : '管理你创建的导览'}
+            {tab === 'explore' ? '带着小说去旅行，在每一处山崖找到书中的江湖'
+              : tab === 'fav' ? '收藏想去的导览，随时出发'
+              : '管理你创建的导览'}
           </p>
 
           {/* Tour Cards */}
           <TabsContent value="explore" className="mt-0">
+            {/* 搜索 + 分类 */}
+            <div className="mb-4 space-y-2">
+              <div className="relative">
+                <input
+                  value={keyword}
+                  onChange={e => setKeyword(e.target.value)}
+                  placeholder="搜索导览：目的地 / 作品 / 地区…"
+                  className="w-full bg-card text-foreground rounded-xl px-4 py-2.5 text-sm border border-border outline-none focus:border-primary transition-colors"
+                />
+                {keyword && (
+                  <button
+                    onClick={() => setKeyword('')}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm hover:text-foreground"
+                    aria-label="清空搜索"
+                  >✕</button>
+                )}
+              </div>
+              <div className="flex gap-2 overflow-x-auto">
+                {CATEGORIES.map(c => (
+                  <button
+                    key={c}
+                    onClick={() => setCategory(c)}
+                    className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs transition-colors ${
+                      category === c
+                        ? 'bg-primary text-white'
+                        : 'bg-black/5 text-muted-foreground hover:bg-black/10'
+                    }`}
+                  >{c}</button>
+                ))}
+              </div>
+            </div>
+
             <div className="grid gap-4 sm:grid-cols-2">
-              {allTours.length > 0 ? (
-                allTours.map(tour => renderTourCard(tour, false))
+              {filteredTours.length > 0 ? (
+                filteredTours.map(tour => renderTourCard(tour, false))
               ) : (
                 <div className="col-span-2 text-center py-16 text-muted-foreground">
-                  <div className="text-4xl mb-3">🗺️</div>
-                  <p>暂无公开导览</p>
+                  <div className="text-4xl mb-3">🔍</div>
+                  <p>没有匹配的导览</p>
                 </div>
               )}
             </div>
@@ -235,6 +335,30 @@ export default function Home() {
                   >
                     + 创建第一条导览
                   </button>
+                </div>
+              )}
+            </div>
+          </TabsContent>
+
+          <TabsContent value="fav" className="mt-0">
+            <div className="grid gap-4 sm:grid-cols-2">
+              {!user ? (
+                <div className="col-span-2 text-center py-16">
+                  <div className="text-4xl mb-3">🔐</div>
+                  <p className="text-muted-foreground mb-4">登录后查看你的收藏</p>
+                  <button
+                    onClick={() => navigate('/login')}
+                    className="px-6 py-2 bg-primary text-primary-foreground rounded-xl text-sm font-semibold hover:bg-primary/90 transition-colors"
+                  >
+                    去登录
+                  </button>
+                </div>
+              ) : favTours.length > 0 ? (
+                favTours.map(tour => renderTourCard(tour, false))
+              ) : (
+                <div className="col-span-2 text-center py-16 text-muted-foreground">
+                  <div className="text-4xl mb-3">🤍</div>
+                  <p>还没有收藏的导览，去发现页点 ♥ 收藏吧</p>
                 </div>
               )}
             </div>

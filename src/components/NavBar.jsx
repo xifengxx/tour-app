@@ -24,7 +24,7 @@ export default function NavBar({ title, showBack, rightContent }) {
     <nav className="sticky top-0 z-30 bg-card/95 backdrop-blur border-b border-border pointer-events-auto">
       <div className="flex items-center justify-between h-12 px-4 max-w-4xl mx-auto">
         {/* Left */}
-        <div className="w-16">
+        <div className="flex-shrink-0 w-16">
           {showBackArrow && (
             <button
               onClick={() => navigate(-1)}
@@ -39,13 +39,13 @@ export default function NavBar({ title, showBack, rightContent }) {
         {/* Center */}
         <button
           onClick={() => navigate('/')}
-          className="text-foreground font-serif font-bold text-base hover:text-primary transition-colors"
+          className="flex-1 min-w-0 text-center text-foreground font-serif font-bold text-base hover:text-primary transition-colors truncate px-2"
         >
           {title || '文学巡礼'}
         </button>
 
         {/* Right */}
-        <div className="w-16 flex justify-end">
+        <div className="flex-shrink-0 flex items-center justify-end gap-0.5">
           {rightContent != null ? rightContent : (
             user ? (
               <DropdownMenu>

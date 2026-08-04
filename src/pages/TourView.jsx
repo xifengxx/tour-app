@@ -7,7 +7,9 @@ import { Button } from '@/components/ui/button';
 import RouteBar from '../components/RouteBar';
 import ContentCard from '../components/ContentCard';
 import DetailModal from '../components/DetailModal';
-import { Share2, Check } from 'lucide-react';
+import ShareModal from '../components/ShareModal';
+import CommentsModal from '../components/CommentsModal';
+import { Share2, Check, Heart, MessageCircle } from 'lucide-react';
 import { extractMarkerLoc, findNearestLocation, buildPinIcon } from '../lib/mapUtils';
 
 const ROUTE_COLORS = ['#e74c3c','#f39c12','#3498db','#2ecc71','#9b59b6'];
@@ -46,11 +48,37 @@ export default function TourView() {
   const [currentRouteId, setCurrentRouteId] = useState(null);
   const [showCard, setShowCard] = useState(true);
   const [showDetail, setShowDetail] = useState(false);
+  const [showShare, setShowShare] = useState(false);
+  const [showComments, setShowComments] = useState(false);
+  const [isFav, setIsFav] = useState(false);
   const [toast, setToast] = useState(null);
 
   const { tour, loading } = useTourData(tourId);
 
   currentLocRef.current = currentLoc; // 供 renderMarker 闭包读取最新选中态
+
+  // 收藏状态（登录后）
+  useEffect(() => {
+    if (!user) { setIsFav(false); return; }
+    supabase
+      .from('favorites')
+      .select('id')
+      .eq('user_id', user.id)
+      .eq('tour_id', tourId)
+      .maybeSingle()
+      .then(({ data }) => setIsFav(!!data));
+  }, [user, tourId]);
+
+  const toggleFav = async () => {
+    if (!user) { navigate('/login'); return; }
+    if (isFav) {
+      await supabase.from('favorites').delete().eq('user_id', user.id).eq('tour_id', tourId);
+      setIsFav(false);
+    } else {
+      await supabase.from('favorites').insert({ user_id: user.id, tour_id: tourId });
+      setIsFav(true);
+    }
+  };
 
   // Init map
   useEffect(() => {
@@ -150,16 +178,6 @@ export default function TourView() {
   }, [currentLoc]);
 
   // ── Actions ──
-  const handleShare = () => {
-    const url = window.location.href;
-    navigator.clipboard.writeText(url).then(() => {
-      setToast('已复制链接');
-      setTimeout(() => setToast(null), 2000);
-    }).catch(() => {
-      setToast('复制失败，请手动复制');
-      setTimeout(() => setToast(null), 2000);
-    });
-  };
 
   const selectLoc = useCallback((loc) => {
     setCurrentLoc(loc);
@@ -234,12 +252,18 @@ export default function TourView() {
         <NavBar
           title={tour.meta.title}
           rightContent={
-            <div className="flex items-center gap-1">
-              <Button variant="ghost" size="icon" onClick={handleShare} title="分享链接">
+            <div className="flex items-center gap-0.5">
+              <Button variant="ghost" size="icon" onClick={toggleFav} title={isFav ? '取消收藏' : '收藏'}>
+                <Heart className={`h-4 w-4 ${isFav ? 'fill-primary text-primary' : ''}`} />
+              </Button>
+              <Button variant="ghost" size="icon" onClick={() => setShowComments(true)} title="评论">
+                <MessageCircle className="h-4 w-4" />
+              </Button>
+              <Button variant="ghost" size="icon" onClick={() => setShowShare(true)} title="分享导览">
                 <Share2 className="h-4 w-4" />
               </Button>
               {user && tour.userId === user.id && (
-                <Button variant="secondary" size="sm" onClick={() => navigate(`/tour/${tourId}/edit`)}>
+                <Button variant="secondary" size="sm" className="ml-1" onClick={() => navigate(`/tour/${tourId}/edit`)}>
                   编辑
                 </Button>
               )}
@@ -313,6 +337,10 @@ export default function TourView() {
           onClose={() => setShowDetail(false)}
         />
       )}
+
+      {showShare && <ShareModal tour={tour} onClose={() => setShowShare(false)} />}
+
+      {showComments && <CommentsModal tourId={tourId} onClose={() => setShowComments(false)} />}
 
       {/* Toast */}
       {toast && (
