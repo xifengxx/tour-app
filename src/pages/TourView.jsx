@@ -10,8 +10,8 @@ import DetailModal from '../components/DetailModal';
 import { Share2, Check } from 'lucide-react';
 
 const ROUTE_COLORS = ['#e74c3c','#f39c12','#3498db','#2ecc71','#9b59b6'];
-const DEFAULT_PIN_COLOR = '#95a5a6'; // 未选中标记：统一灰色（避免重要性红/蓝/橙配色与选中色混淆）
-const SELECTED_COLOR = '#f5a623'; // 选中标记：琥珀金
+const DEFAULT_PIN_COLOR = '#b3ae9e'; // 未选中标记：暖灰
+const SELECTED_COLOR = '#c96442'; // 选中标记：陶土（亮底高对比）
 
 // 生成图钉 SVG data-URI。selected 时加白色描边放大，用于视觉区分当前选中地点
 const buildPinIcon = (color, size, selected) => 'data:image/svg+xml,' + encodeURIComponent(
@@ -109,7 +109,7 @@ export default function TourView() {
             const m = ctx.marker;
             const n = ctx.count;
             const d = n >= 100 ? 52 : n >= 10 ? 44 : 36;
-            m.setContent(`<div style="width:${d}px;height:${d}px;border-radius:50%;background:rgba(220,38,38,.88);border:2px solid rgba(255,255,255,.9);color:#fff;font-weight:700;font-size:${d >= 44 ? 15 : 13}px;display:flex;align-items:center;justify-content:center;box-shadow:0 3px 8px rgba(0,0,0,.35);cursor:pointer">${n}</div>`);
+            m.setContent(`<div style="width:${d}px;height:${d}px;border-radius:50%;background:rgba(201,100,66,.9);border:2px solid rgba(255,255,255,.9);color:#fff;font-weight:700;font-size:${d >= 44 ? 15 : 13}px;display:flex;align-items:center;justify-content:center;box-shadow:0 3px 8px rgba(0,0,0,.2);cursor:pointer">${n}</div>`);
             m.setSize(new window.AMap.Size(d, d));
             m.on('click', () => {
               // 点击聚合气泡 → 选中簇内最近的地点：内容栏立即更新并放大到该点，
@@ -245,11 +245,11 @@ export default function TourView() {
   const activeRoute = currentRouteId ? (tour?.routes || []).find(r => r.id === currentRouteId) : null;
 
   // ── Render ──
-  if (loading) return <div className="min-h-screen bg-[#0f0f1a] flex items-center justify-center text-gray-400">加载中...</div>;
-  if (!tour) return <div className="min-h-screen bg-[#0f0f1a] flex items-center justify-center text-gray-400">未找到导览</div>;
+  if (loading) return <div className="min-h-screen bg-background flex items-center justify-center text-muted-foreground">加载中...</div>;
+  if (!tour) return <div className="min-h-screen bg-background flex items-center justify-center text-muted-foreground">未找到导览</div>;
 
   return (
-    <div className="h-screen flex flex-col bg-[#0f0f1a] relative">
+    <div className="h-screen flex flex-col bg-background relative">
       {/* NavBar + subtitle */}
       <div className="absolute top-0 left-0 right-0 z-20 pointer-events-none">
         <NavBar
@@ -267,8 +267,8 @@ export default function TourView() {
             </div>
           }
         />
-        <div className="px-4 pb-2 bg-gradient-to-b from-[#0f0f1a] to-transparent pointer-events-none">
-          <p className="text-gray-400 text-xs">{tour.meta.subtitle}</p>
+        <div className="px-4 pb-2 bg-gradient-to-b from-background to-transparent pointer-events-none">
+          <p className="text-muted-foreground text-xs">{tour.meta.subtitle}</p>
         </div>
       </div>
 
@@ -279,9 +279,9 @@ export default function TourView() {
 
       {/* Bottom card zone — 置于正常文档流而非覆盖地图：地图容器止于卡片上缘，
           高德版权条不再压在卡片底部内容上；卡片折叠时地图随之扩展 */}
-      <div className="z-20 bg-[#1c1c32] rounded-t-3xl max-h-[50vh] flex flex-col shadow-2xl">
+      <div className="z-20 bg-card rounded-t-3xl max-h-[50vh] flex flex-col shadow-2xl">
         <div className="flex justify-center py-2 cursor-pointer" onClick={() => setShowCard(s => !s)}>
-          <div className="w-8 h-1 rounded-full bg-white/20" />
+          <div className="w-8 h-1 rounded-full bg-black/10" />
         </div>
 
         {showCard && (
@@ -289,7 +289,7 @@ export default function TourView() {
             {/* Route narrative: 完整行程描述（入口/交通方式/出口） */}
             {activeRoute?.narrative && (
               <div className="px-4 pb-2">
-                <p className="text-xs text-gray-300 leading-relaxed bg-[#0f0f1a] rounded-xl p-3 border border-white/5 max-h-24 overflow-y-auto">{activeRoute.narrative}</p>
+                <p className="text-xs text-muted-foreground leading-relaxed bg-background rounded-xl p-3 border border-border max-h-24 overflow-y-auto">{activeRoute.narrative}</p>
               </div>
             )}
             {/* Location strip — 右缘渐变提示可横向滚动查看更多 */}
@@ -300,7 +300,7 @@ export default function TourView() {
                   key={loc.id}
                   onClick={() => selectLoc(loc)}
                   className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs whitespace-nowrap transition-colors
-                    ${currentLoc?.id === loc.id ? 'bg-red-600/20 text-red-400 border border-red-600/30' : 'bg-white/5 text-gray-400 border border-transparent'}`}
+                    ${currentLoc?.id === loc.id ? 'bg-primary/20 text-primary border border-primary/30' : 'bg-black/5 text-muted-foreground border border-transparent'}`}
                 >
                   {'⭐'.repeat(loc.importance || 1)} {loc.name}
                 </button>
@@ -319,7 +319,7 @@ export default function TourView() {
               <div className="flex-1 flex items-center justify-center text-center px-4 pb-6">
                 <div>
                   <div className="text-4xl mb-3">🗺️</div>
-                  <p className="text-gray-400 text-sm">点击地图标记或上方地点<br/>查看此地的小说场景与人文故事</p>
+                  <p className="text-muted-foreground text-sm">点击地图标记或上方地点<br/>查看此地的小说场景与人文故事</p>
                 </div>
               </div>
             )}
@@ -338,8 +338,8 @@ export default function TourView() {
       {/* Toast */}
       {toast && (
         <div className="fixed top-16 left-1/2 -translate-x-1/2 z-50 px-4 py-2 bg-card border border-border rounded-xl shadow-lg flex items-center gap-2 animate-in fade-in slide-in-from-top-2">
-          <Check className="h-4 w-4 text-green-400" />
-          <span className="text-sm text-white">{toast}</span>
+          <Check className="h-4 w-4 text-green-700" />
+          <span className="text-sm text-foreground">{toast}</span>
         </div>
       )}
     </div>

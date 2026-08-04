@@ -21,14 +21,14 @@ export default function NavBar({ title, showBack, rightContent }) {
   const avatarLetter = user?.email ? user.email[0].toUpperCase() : '?';
 
   return (
-    <nav className="sticky top-0 z-30 bg-[#0f0f1a]/95 backdrop-blur border-b border-white/5 pointer-events-auto">
+    <nav className="sticky top-0 z-30 bg-card/95 backdrop-blur border-b border-border pointer-events-auto">
       <div className="flex items-center justify-between h-12 px-4 max-w-4xl mx-auto">
         {/* Left */}
         <div className="w-16">
           {showBackArrow && (
             <button
               onClick={() => navigate(-1)}
-              className="text-gray-400 hover:text-white transition-colors text-sm flex items-center gap-1"
+              className="text-muted-foreground hover:text-primary transition-colors text-sm flex items-center gap-1"
             >
               <ChevronLeft className="h-4 w-4" />
               <span className="hidden sm:inline">返回</span>
@@ -39,7 +39,7 @@ export default function NavBar({ title, showBack, rightContent }) {
         {/* Center */}
         <button
           onClick={() => navigate('/')}
-          className="text-white font-bold text-base hover:text-red-400 transition-colors"
+          className="text-foreground font-serif font-bold text-base hover:text-primary transition-colors"
         >
           {title || '文学巡礼'}
         </button>
@@ -70,7 +70,7 @@ export default function NavBar({ title, showBack, rightContent }) {
             ) : (
               <button
                 onClick={() => navigate('/login')}
-                className="text-xs text-gray-400 hover:text-white transition-colors"
+                className="text-xs text-muted-foreground hover:text-primary transition-colors"
               >
                 登录
               </button>

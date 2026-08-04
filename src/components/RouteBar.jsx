@@ -17,7 +17,7 @@ export default function RouteBar({ routes, currentRouteId, onSelectRoute }) {
             key={route.id}
             onClick={() => onSelectRoute(route)}
             className={`pointer-events-auto px-4 py-2 rounded-full text-xs font-semibold whitespace-nowrap backdrop-blur border transition-all flex items-center gap-1.5
-              ${active ? 'text-white border-transparent' : 'bg-[#1c1c32]/90 text-gray-400 border-white/10'}`}
+              ${active ? 'text-white border-transparent' : 'bg-card/90 text-muted-foreground border-border'}`}
             style={active ? { background: color } : {}}
           >
             <span className="w-2 h-2 rounded-full" style={{ background: color }} />
@@ -28,7 +28,7 @@ export default function RouteBar({ routes, currentRouteId, onSelectRoute }) {
       {currentRouteId && (
         <button
           onClick={() => onSelectRoute(null)}
-          className="pointer-events-auto px-3 py-2 rounded-full text-xs bg-white/10 text-gray-300 whitespace-nowrap"
+          className="pointer-events-auto px-3 py-2 rounded-full text-xs bg-black/10 text-muted-foreground whitespace-nowrap"
         >
           ✕ 清除筛选
         </button>

@@ -143,22 +143,22 @@ export default function MapSearchModal({ show, onClose, onAdd, initialRegion }) 
   if (!show) return null;
 
   return (
-    <div className="fixed inset-0 z-50 bg-[#0f0f1a] flex flex-col">
+    <div className="fixed inset-0 z-50 bg-background flex flex-col">
       {/* Header */}
-      <div className="flex items-center gap-2 p-3 bg-[#1c1c32] border-b border-white/5">
-        <button onClick={onClose} className="text-gray-400 px-3 py-2 rounded-xl bg-white/5 text-sm">✕ 关闭</button>
+      <div className="flex items-center gap-2 p-3 bg-card border-b border-border">
+        <button onClick={onClose} className="text-muted-foreground px-3 py-2 rounded-xl bg-black/5 text-sm">✕ 关闭</button>
         <div className="flex-1 flex items-center gap-2">
           <input
             value={query}
             onChange={e => setQuery(e.target.value)}
             onKeyDown={handleKeyDown}
-            className="flex-1 bg-[#0f0f1a] text-white rounded-xl px-4 py-2.5 text-sm border border-white/10 outline-none focus:border-red-600"
+            className="flex-1 bg-background text-foreground rounded-xl px-4 py-2.5 text-sm border border-border outline-none focus:border-primary"
             placeholder="搜索地点（如：祝融峰、华山北峰...）"
             autoFocus
           />
           <button
             onClick={doSearch}
-            className="px-4 py-2.5 bg-red-600 text-white rounded-xl text-sm font-semibold"
+            className="px-4 py-2.5 bg-primary text-white rounded-xl text-sm font-semibold"
           >
             🔍 搜索
           </button>
@@ -175,7 +175,7 @@ export default function MapSearchModal({ show, onClose, onAdd, initialRegion }) 
 
       {/* Hint */}
       <div className="absolute bottom-4 left-4 right-4 pointer-events-none">
-        <div className="bg-[#1c1c32]/90 backdrop-blur rounded-xl px-4 py-2 text-gray-400 text-xs text-center max-w-xs mx-auto">
+        <div className="bg-card/90 backdrop-blur rounded-xl px-4 py-2 text-muted-foreground text-xs text-center max-w-xs mx-auto">
           💡 搜索地点点击标记添加，或直接点地图任意位置放置标记
         </div>
       </div>

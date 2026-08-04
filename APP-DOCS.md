@@ -204,5 +204,10 @@ CREATE TRIGGER ai_process_trigger_update
 
 1. **坐标查询需逐一进行**：高德 Web API 不支持批量查询
 2. **旧版静态 HTML 仍可用**：`~/lib/tour-guide/` 下 build.sh 独立运行，与 App 无关
-3. **图片不支持**：当前版本无地点实景照片上传功能
+3. **图片功能暂不做**（2026-08 评估后搁置）。实测高德照片 API 部分可用：
+   - `place/text` + `extensions=all` 正常返回 `pois[].photos[]`，大部分地点有 2-3 张
+   - **只有 `store.is.autonavi.com/showpic/xxx` URL 能加载**（HTTP 200 / JPEG，低清 ~500px）；`aos-comment.amap.com` 用户评论图 URL 全部 404 不可用
+   - 覆盖不全：部分地点（如三清宫、忠烈祠）返回 0 张
+   - 若日后重启：Edge Function 查图 → 只保留 `store.is.autonavi.com` 的 URL → 存 `image` 字段；无图地点留空
+   - 备选：手动上传（`image` 字段 + 上传入口，图质可控但全人工）
 4. **PWA 当前已移除**：workbox 拦截 API 请求，待修复后重新启用

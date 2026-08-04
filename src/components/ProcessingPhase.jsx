@@ -101,22 +101,22 @@ export default function ProcessingPhase({
   if (error) {
     return (
       <div className="space-y-4">
-        <section className="bg-card rounded-2xl p-6 border border-red-500/30 text-center">
+        <section className="bg-card rounded-2xl p-6 border border-primary/30 text-center">
           <div className="text-4xl mb-3">⚠️</div>
-          <h2 className="text-white font-bold text-lg mb-2">AI 处理失败</h2>
-          <p className="text-red-400 text-sm mb-5">{error}</p>
+          <h2 className="text-foreground font-serif font-bold text-lg mb-2">AI 处理失败</h2>
+          <p className="text-primary text-sm mb-5">{error}</p>
           <div className="flex gap-2">
             {onRetry && (
               <button
                 onClick={onRetry}
-                className="flex-1 py-3 bg-gradient-to-r from-red-600 to-purple-600 text-white rounded-xl text-sm font-bold hover:from-red-700 hover:to-purple-700 transition-colors"
+                className="flex-1 py-3 bg-gradient-to-r from-primary to-[#d97757] text-white rounded-xl text-sm font-bold hover:from-primary hover:to-[#d97757] transition-colors"
               >
                 🔄 重新处理
               </button>
             )}
             <button
               onClick={onBack}
-              className="flex-1 py-3 bg-white/5 text-muted-foreground rounded-xl text-sm hover:bg-white/10 transition-colors"
+              className="flex-1 py-3 bg-black/5 text-muted-foreground rounded-xl text-sm hover:bg-black/10 transition-colors"
             >
               ← 返回修改
             </button>
@@ -134,10 +134,10 @@ export default function ProcessingPhase({
     <div className="space-y-4">
       <section className="bg-card rounded-2xl p-6 border border-border text-center">
         <div className="mb-4">
-          <div className="inline-block w-16 h-16 border-4 border-white/10 border-t-primary rounded-full animate-spin" />
+          <div className="inline-block w-16 h-16 border-4 border-border border-t-primary rounded-full animate-spin" />
         </div>
 
-        <h2 className="text-white font-bold text-lg mb-2">🤖 AI 正在分析处理</h2>
+        <h2 className="text-foreground font-serif font-bold text-lg mb-2">🤖 AI 正在分析处理</h2>
         <p className="text-muted-foreground text-sm mb-4">服务器正在自动调用 AI 提取地点、生成内容、规划路线</p>
 
         <div className="flex items-center justify-center gap-4 text-xs text-muted-foreground mb-5">
@@ -155,24 +155,24 @@ export default function ProcessingPhase({
           <div className="text-muted-foreground text-xs mb-2">⏱ 预估时间</div>
           <div className="flex justify-between text-xs">
             <div className="text-center px-2">
-              <div className="text-white font-bold">30–60 秒</div>
+              <div className="text-foreground font-bold">30–60 秒</div>
               <div className="text-muted-foreground">简单导览</div>
             </div>
             <div className="w-px bg-border" />
             <div className="text-center px-2">
-              <div className="text-white font-bold">1–2 分钟</div>
+              <div className="text-foreground font-bold">1–2 分钟</div>
               <div className="text-muted-foreground">完整导览</div>
             </div>
             <div className="w-px bg-border" />
             <div className="text-center px-2">
-              <div className="text-white font-bold">2–5 分钟</div>
+              <div className="text-foreground font-bold">2–5 分钟</div>
               <div className="text-muted-foreground">大型导览</div>
             </div>
           </div>
         </div>
 
         <div className="text-left bg-background rounded-xl p-4 mb-5">
-          <h3 className="text-white text-xs font-bold mb-3">📋 AI 自动处理流程</h3>
+          <h3 className="text-foreground text-xs font-bold mb-3">📋 AI 自动处理流程</h3>
           <div className="space-y-2">
             {[
               '草稿已保存到数据库',
@@ -183,10 +183,10 @@ export default function ProcessingPhase({
               '数据写入数据库，页面自动刷新',
             ].map((text, i) => (
               <div key={i} className="flex items-center gap-2 text-xs">
-                <span className={i < 2 ? 'text-green-400' : 'text-muted-foreground'}>
+                <span className={i < 2 ? 'text-green-700' : 'text-muted-foreground'}>
                   {i < 2 ? '●' : '○'}
                 </span>
-                <span className={i < 2 ? 'text-green-400/80' : 'text-muted-foreground'}>{text}</span>
+                <span className={i < 2 ? 'text-green-700/80' : 'text-muted-foreground'}>{text}</span>
               </div>
             ))}
           </div>
@@ -195,9 +195,9 @@ export default function ProcessingPhase({
         <div className="text-left bg-background rounded-xl p-4 mb-5">
           <h3 className="text-muted-foreground text-xs mb-2">📦 已提交的材料</h3>
           <div className="space-y-1.5 text-xs">
-            {title && <div className="text-white"><strong>标题：</strong>{title}</div>}
-            {destName && <div className="text-white"><strong>目的地：</strong>{destName}{destRegion ? `（${destRegion}）` : ''}</div>}
-            {novelTitle && <div className="text-white"><strong>作品：</strong>{novelTitle}{novelAuthor ? ` — ${novelAuthor}` : ''}</div>}
+            {title && <div className="text-foreground"><strong>标题：</strong>{title}</div>}
+            {destName && <div className="text-foreground"><strong>目的地：</strong>{destName}{destRegion ? `（${destRegion}）` : ''}</div>}
+            {novelTitle && <div className="text-foreground"><strong>作品：</strong>{novelTitle}{novelAuthor ? ` — ${novelAuthor}` : ''}</div>}
             {sourceText && <div className="text-muted-foreground"><strong>文本：</strong>已粘贴 {sourceText.length} 字</div>}
             {!sourceText && !novelTitle && <div className="text-yellow-400">⚠️ 未提供源材料，AI 只能做基础分析</div>}
           </div>
@@ -207,13 +207,13 @@ export default function ProcessingPhase({
       <div className="flex gap-2">
         <button
           onClick={onBack}
-          className="flex-1 py-3 bg-white/5 text-muted-foreground rounded-xl text-sm hover:bg-white/10 transition-colors"
+          className="flex-1 py-3 bg-black/5 text-muted-foreground rounded-xl text-sm hover:bg-black/10 transition-colors"
         >
           ← 返回修改
         </button>
         <button
           onClick={onSkip}
-          className="flex-1 py-3 bg-white/5 text-muted-foreground rounded-xl text-sm hover:bg-white/10 transition-colors"
+          className="flex-1 py-3 bg-black/5 text-muted-foreground rounded-xl text-sm hover:bg-black/10 transition-colors"
         >
           跳过 → 手动编辑
         </button>

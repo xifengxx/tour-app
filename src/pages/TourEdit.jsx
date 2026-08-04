@@ -319,14 +319,14 @@ export default function TourEdit() {
   };
 
   // ── Render ──
-  if (loading) return <div className="min-h-screen bg-[#0f0f1a] flex items-center justify-center text-gray-400">加载中...</div>;
+  if (loading) return <div className="min-h-screen bg-background flex items-center justify-center text-muted-foreground">加载中...</div>;
   if (!isNew && !isOwner && tour) {
     return (
-      <div className="min-h-screen bg-[#0f0f1a]">
+      <div className="min-h-screen bg-background">
         <NavBar title="无权限" />
         <div className="flex items-center justify-center text-center p-4 pt-20">
           <div>
-            <p className="text-gray-400 mb-4">你没有编辑此导览的权限</p>
+            <p className="text-muted-foreground mb-4">你没有编辑此导览的权限</p>
             <Button onClick={() => navigate(`/tour/${tourId}`)}>返回导览</Button>
           </div>
         </div>
@@ -335,7 +335,7 @@ export default function TourEdit() {
   }
 
   return (
-    <div className="min-h-screen bg-[#0f0f1a] flex flex-col">
+    <div className="min-h-screen bg-background flex flex-col">
       {/* Header */}
       <NavBar
         title={isNew ? '创建新导览' : phase === 'input' ? '编辑基本信息' : '编辑导览'}
@@ -350,10 +350,10 @@ export default function TourEdit() {
 
       {saveMsg && (
         <div className={`px-4 py-2.5 text-xs text-center font-medium flex items-center justify-center gap-3 ${
-          saveMsg.includes('✅') ? 'bg-green-600/10 text-green-400' :
-          saveMsg.includes('💡') ? 'bg-blue-600/10 text-blue-400' :
-          'bg-red-600/10 text-red-400'
-        }`}>{saveMsg}{saveMsg.includes('✅') && <a href={`/tour/${draftTourId}`} className="underline hover:text-white transition-colors">查看导览 →</a>}</div>
+          saveMsg.includes('✅') ? 'bg-green-600/10 text-green-700' :
+          saveMsg.includes('💡') ? 'bg-blue-600/10 text-blue-700' :
+          'bg-primary/10 text-primary'
+        }`}>{saveMsg}{saveMsg.includes('✅') && <a href={`/tour/${draftTourId}`} className="underline hover:text-primary transition-colors">查看导览 →</a>}</div>
       )}
 
       <div className="flex-1 overflow-y-auto p-4 max-w-2xl mx-auto w-full pb-24">
@@ -365,92 +365,92 @@ export default function TourEdit() {
           <div className="space-y-4">
             {/* Step indicator */}
             <div className="flex items-center gap-2 mb-2">
-              <div className="w-8 h-8 rounded-full bg-red-600 text-white flex items-center justify-center text-xs font-bold">1</div>
-              <div className="text-white font-semibold text-sm">基本信息与源材料</div>
-              <div className="flex-1 h-px bg-white/10" />
-              <div className="w-8 h-8 rounded-full bg-white/5 text-gray-500 flex items-center justify-center text-xs">2</div>
-              <div className="w-8 h-8 rounded-full bg-white/5 text-gray-500 flex items-center justify-center text-xs">3</div>
+              <div className="w-8 h-8 rounded-full bg-primary text-white flex items-center justify-center text-xs font-bold">1</div>
+              <div className="text-foreground font-semibold text-sm">基本信息与源材料</div>
+              <div className="flex-1 h-px bg-black/10" />
+              <div className="w-8 h-8 rounded-full bg-black/5 text-muted-foreground flex items-center justify-center text-xs">2</div>
+              <div className="w-8 h-8 rounded-full bg-black/5 text-muted-foreground flex items-center justify-center text-xs">3</div>
             </div>
 
             {/* Basic info */}
-            <section className="bg-[#1c1c32] rounded-2xl p-5 border border-white/5 space-y-3">
-              <h2 className="text-white font-bold text-sm">📋 导览信息</h2>
+            <section className="bg-card rounded-2xl p-5 border border-border space-y-3">
+              <h2 className="text-foreground font-bold text-sm">📋 导览信息</h2>
               <div>
-                <label className="text-gray-400 text-xs">标题 *</label>
+                <label className="text-muted-foreground text-xs">标题 *</label>
                 <input value={title} onChange={e => setTitle(e.target.value)}
-                  className="w-full bg-[#0f0f1a] text-white rounded-xl px-3 py-2.5 text-sm border border-white/10 mt-1 outline-none focus:border-red-600"
+                  className="w-full bg-background text-foreground rounded-xl px-3 py-2.5 text-sm border border-border mt-1 outline-none focus:border-primary"
                   placeholder="如：剑出衡山 · 南岳巡礼" />
               </div>
               <div>
-                <label className="text-gray-400 text-xs">副标题</label>
+                <label className="text-muted-foreground text-xs">副标题</label>
                 <input value={subtitle} onChange={e => setSubtitle(e.target.value)}
-                  className="w-full bg-[#0f0f1a] text-white rounded-xl px-3 py-2.5 text-sm border border-white/10 mt-1 outline-none focus:border-red-600"
+                  className="w-full bg-background text-foreground rounded-xl px-3 py-2.5 text-sm border border-border mt-1 outline-none focus:border-primary"
                   placeholder="如：跟着赵荣的脚步，登五神峰寻剑神之路" />
               </div>
               <div className="flex gap-3">
                 <div className="flex-1">
-                  <label className="text-gray-400 text-xs">目的地</label>
+                  <label className="text-muted-foreground text-xs">目的地</label>
                   <input value={destName} onChange={e => setDestName(e.target.value)}
-                    className="w-full bg-[#0f0f1a] text-white rounded-xl px-3 py-2.5 text-sm border border-white/10 mt-1 outline-none focus:border-red-600"
+                    className="w-full bg-background text-foreground rounded-xl px-3 py-2.5 text-sm border border-border mt-1 outline-none focus:border-primary"
                     placeholder="如：南岳衡山" />
                 </div>
                 <div className="flex-1">
-                  <label className="text-gray-400 text-xs">地区</label>
+                  <label className="text-muted-foreground text-xs">地区</label>
                   <input value={destRegion} onChange={e => setDestRegion(e.target.value)}
-                    className="w-full bg-[#0f0f1a] text-white rounded-xl px-3 py-2.5 text-sm border border-white/10 mt-1 outline-none focus:border-red-600"
+                    className="w-full bg-background text-foreground rounded-xl px-3 py-2.5 text-sm border border-border mt-1 outline-none focus:border-primary"
                     placeholder="如：湖南省衡阳市" />
                 </div>
               </div>
               <div className="flex gap-3 items-center">
                 <div>
-                  <label className="text-gray-400 text-xs">主题色</label>
+                  <label className="text-muted-foreground text-xs">主题色</label>
                   <input type="color" value={primaryColor} onChange={e => setPrimaryColor(e.target.value)}
                     className="w-10 h-10 rounded-lg border-0 cursor-pointer mt-1 bg-transparent" />
                 </div>
-                <label className="flex items-center gap-2 text-gray-400 text-xs">
+                <label className="flex items-center gap-2 text-muted-foreground text-xs">
                   <input type="checkbox" checked={isPublic} onChange={e => setIsPublic(e.target.checked)}
-                    className="rounded accent-red-600" />
+                    className="rounded accent-primary" />
                   公开（其他人可见）
                 </label>
               </div>
             </section>
 
             {/* Source materials */}
-            <section className="bg-[#1c1c32] rounded-2xl p-5 border border-white/5 space-y-3">
-              <h2 className="text-white font-bold text-sm">📚 源材料 — 提供得越多，AI 分析越精准</h2>
+            <section className="bg-card rounded-2xl p-5 border border-border space-y-3">
+              <h2 className="text-foreground font-bold text-sm">📚 源材料 — 提供得越多，AI 分析越精准</h2>
               <div>
-                <label className="text-gray-400 text-xs">小说 / 作品名称</label>
+                <label className="text-muted-foreground text-xs">小说 / 作品名称</label>
                 <input value={novelTitle} onChange={e => setNovelTitle(e.target.value)}
-                  className="w-full bg-[#0f0f1a] text-white rounded-xl px-3 py-2.5 text-sm border border-white/10 mt-1 outline-none focus:border-red-600"
+                  className="w-full bg-background text-foreground rounded-xl px-3 py-2.5 text-sm border border-border mt-1 outline-none focus:border-primary"
                   placeholder="如：笑傲江湖" />
               </div>
               <div className="flex gap-3">
                 <div className="flex-1">
-                  <label className="text-gray-400 text-xs">作者</label>
+                  <label className="text-muted-foreground text-xs">作者</label>
                   <input value={novelAuthor} onChange={e => setNovelAuthor(e.target.value)}
-                    className="w-full bg-[#0f0f1a] text-white rounded-xl px-3 py-2.5 text-sm border border-white/10 mt-1 outline-none focus:border-red-600"
+                    className="w-full bg-background text-foreground rounded-xl px-3 py-2.5 text-sm border border-border mt-1 outline-none focus:border-primary"
                     placeholder="如：金庸" />
                 </div>
                 <div className="flex-1">
-                  <label className="text-gray-400 text-xs">时代背景</label>
+                  <label className="text-muted-foreground text-xs">时代背景</label>
                   <input value={novelEra} onChange={e => setNovelEra(e.target.value)}
-                    className="w-full bg-[#0f0f1a] text-white rounded-xl px-3 py-2.5 text-sm border border-white/10 mt-1 outline-none focus:border-red-600"
+                    className="w-full bg-background text-foreground rounded-xl px-3 py-2.5 text-sm border border-border mt-1 outline-none focus:border-primary"
                     placeholder="如：明代" />
                 </div>
               </div>
               <div>
-                <label className="text-gray-400 text-xs">故事梗概</label>
+                <label className="text-muted-foreground text-xs">故事梗概</label>
                 <textarea value={novelSynopsis} onChange={e => setNovelSynopsis(e.target.value)} rows={3}
-                  className="w-full bg-[#0f0f1a] text-white rounded-xl px-3 py-2.5 text-sm border border-white/10 mt-1 outline-none focus:border-red-600 resize-none"
+                  className="w-full bg-background text-foreground rounded-xl px-3 py-2.5 text-sm border border-border mt-1 outline-none focus:border-primary resize-none"
                   placeholder="简要概述故事与目的地的关系..." />
               </div>
               <div>
-                <label className="text-gray-400 text-xs">
+                <label className="text-muted-foreground text-xs">
                   小说文本 / 关键章节
-                  <span className="text-gray-600 ml-1">（粘贴涉及目的地的章节文字，AI 会从中提取地点和原文引用）</span>
+                  <span className="text-muted-foreground ml-1">（粘贴涉及目的地的章节文字，AI 会从中提取地点和原文引用）</span>
                 </label>
                 <textarea value={sourceText} onChange={e => setSourceText(e.target.value)} rows={8}
-                  className="w-full bg-[#0f0f1a] text-white rounded-xl px-3 py-2.5 text-sm border border-white/10 mt-1 outline-none focus:border-red-600 resize-none font-mono"
+                  className="w-full bg-background text-foreground rounded-xl px-3 py-2.5 text-sm border border-border mt-1 outline-none focus:border-primary resize-none font-mono"
                   placeholder={"粘贴小说中涉及该目的地的章节，AI 会从中提取地点与原文引用...\n\n留空时 AI 将基于目的地常识生成导览。"} />
               </div>
 
@@ -459,7 +459,7 @@ export default function TourEdit() {
                   <button
                     onClick={handleSaveBasic}
                     disabled={saving}
-                    className="flex-1 py-3.5 bg-white/5 text-white rounded-xl text-sm font-bold hover:bg-white/10 transition-colors disabled:opacity-50"
+                    className="flex-1 py-3.5 bg-black/5 text-foreground rounded-xl text-sm font-bold hover:bg-black/10 transition-colors disabled:opacity-50"
                   >
                     {saving ? '⏳ 保存中...' : '💾 保存修改'}
                   </button>
@@ -467,12 +467,12 @@ export default function TourEdit() {
                 <button
                   onClick={handleSaveDraft}
                   disabled={saving}
-                  className="flex-1 py-3.5 bg-gradient-to-r from-red-600 to-purple-600 text-white rounded-xl text-sm font-bold disabled:opacity-50 hover:from-red-700 hover:to-purple-700 transition-colors shadow-lg shadow-red-600/20"
+                  className="flex-1 py-3.5 bg-gradient-to-r from-primary to-[#d97757] text-white rounded-xl text-sm font-bold disabled:opacity-50 hover:from-primary hover:to-[#d97757] transition-colors shadow-lg shadow-primary/20"
                 >
                   {saving ? '⏳ 保存中...' : draftTourId ? '🤖 AI 重新分析' : '🤖 AI 分析：生成地点、内容与路线'}
                 </button>
               </div>
-              <p className="text-gray-500 text-xs text-center leading-relaxed">
+              <p className="text-muted-foreground text-xs text-center leading-relaxed">
                 点击「AI 分析」后全自动完成：<br/>
                 ① 分析文本提取所有地点 → ② 高德 API 校验精确坐标<br/>
                 ③ 生成四层内容（小说/历史/传说/民俗）→ ④ 规划游览路线 → ⑤ 写入数据库
@@ -516,28 +516,28 @@ export default function TourEdit() {
         {/* PHASE 3: Review — locations, content, routes */}
         {/* ════════════════════════════════════════════════ */}
         {phase === 'review' && loading && (
-          <div className="text-center py-16 text-gray-400">加载数据中...</div>
+          <div className="text-center py-16 text-muted-foreground">加载数据中...</div>
         )}
         {phase === 'review' && !loading && (!tour || (!locations.length && !routes.length)) && (
           tour ? (
             // 导览加载成功，但 AI 没有生成任何地点 —— 重试加载没用，给出正确操作
             <div className="text-center py-16 space-y-4">
               <div className="text-4xl">🗺️</div>
-              <p className="text-gray-400">AI 没有生成任何地点</p>
-              <p className="text-gray-500 text-xs">可能原因：源文本过少、地点未识别、或坐标校验全被过滤</p>
+              <p className="text-muted-foreground">AI 没有生成任何地点</p>
+              <p className="text-muted-foreground text-xs">可能原因：源文本过少、地点未识别、或坐标校验全被过滤</p>
               <div className="flex gap-2 justify-center">
                 <button onClick={() => setPhase('input')}
-                  className="px-6 py-2 bg-white/5 text-muted-foreground rounded-xl text-sm">← 修改基本信息</button>
+                  className="px-6 py-2 bg-black/5 text-muted-foreground rounded-xl text-sm">← 修改基本信息</button>
                 <button onClick={handleReprocess}
-                  className="px-6 py-2 bg-red-600 text-white rounded-xl text-sm">🔄 AI 重新分析</button>
+                  className="px-6 py-2 bg-primary text-white rounded-xl text-sm">🔄 AI 重新分析</button>
               </div>
             </div>
           ) : (
             // 导览数据加载失败（网络/权限问题）
             <div className="text-center py-16 space-y-4">
               <div className="text-4xl">📡</div>
-              <p className="text-gray-400">数据加载失败，请检查网络后重试</p>
-              <button onClick={() => reloadTour()} className="px-6 py-2 bg-red-600 text-white rounded-xl text-sm">🔄 重试加载</button>
+              <p className="text-muted-foreground">数据加载失败，请检查网络后重试</p>
+              <button onClick={() => reloadTour()} className="px-6 py-2 bg-primary text-white rounded-xl text-sm">🔄 重试加载</button>
             </div>
           )
         )}
@@ -547,10 +547,10 @@ export default function TourEdit() {
             <div className="flex items-center gap-2 mb-2">
               <div className="w-8 h-8 rounded-full bg-green-600 text-white flex items-center justify-center text-xs">✓</div>
               <div className="flex-1 h-px bg-green-600/30" />
-              <div className="w-8 h-8 rounded-full bg-red-600 text-white flex items-center justify-center text-xs font-bold">2</div>
-              <div className="text-white font-semibold text-sm">审核地点与内容</div>
-              <div className="flex-1 h-px bg-white/10" />
-              <div className="w-8 h-8 rounded-full bg-white/5 text-gray-500 flex items-center justify-center text-xs">3</div>
+              <div className="w-8 h-8 rounded-full bg-primary text-white flex items-center justify-center text-xs font-bold">2</div>
+              <div className="text-foreground font-semibold text-sm">审核地点与内容</div>
+              <div className="flex-1 h-px bg-black/10" />
+              <div className="w-8 h-8 rounded-full bg-black/5 text-muted-foreground flex items-center justify-center text-xs">3</div>
             </div>
 
             {/* 公开/私密切换 + 编辑基本信息 */}
@@ -559,40 +559,40 @@ export default function TourEdit() {
                 onClick={() => setIsPublic(!isPublic)}
                 className={`flex items-center gap-2 text-xs px-3 py-2 rounded-xl border transition-colors ${
                   isPublic
-                    ? 'bg-green-600/10 border-green-600/30 text-green-400'
-                    : 'bg-white/5 border-white/10 text-gray-400'
+                    ? 'bg-green-600/10 border-green-600/30 text-green-700'
+                    : 'bg-black/5 border-border text-muted-foreground'
                 }`}
               >
                 {isPublic ? '🌍 已公开（所有人可见）' : '🔒 私密（仅自己可见）'}
               </button>
               <button
                 onClick={() => setPhase('input')}
-                className="flex items-center gap-2 text-xs px-3 py-2 rounded-xl border border-white/10 bg-white/5 text-gray-300 hover:bg-white/10 transition-colors"
+                className="flex items-center gap-2 text-xs px-3 py-2 rounded-xl border border-border bg-black/5 text-muted-foreground hover:bg-black/10 transition-colors"
               >
                 📝 编辑基本信息（标题/目的地等）
               </button>
-              <span className="text-[10px] text-gray-500">点右上角「保存」后生效</span>
+              <span className="text-[10px] text-muted-foreground">点右上角「保存」后生效</span>
             </div>
 
             <button
               onClick={handleReprocess}
-              className="w-full py-2.5 bg-purple-600/10 text-purple-400 rounded-xl text-xs border border-purple-600/20 mb-3 hover:bg-purple-600/20 transition-colors"
+              className="w-full py-2.5 bg-primary/10 text-primary rounded-xl text-xs border border-primary/20 mb-3 hover:bg-primary/20 transition-colors"
             >
               🔄 AI 重新分析（重新调用 AI，覆盖当前 AI 生成的地点 / 内容 / 路线）
             </button>
 
             {/* Locations */}
-            <section className="bg-[#1c1c32] rounded-2xl p-5 border border-white/5">
+            <section className="bg-card rounded-2xl p-5 border border-border">
               <div className="flex items-center justify-between mb-4">
-                <h2 className="text-white font-bold text-sm">📍 地点 ({locations.length})</h2>
+                <h2 className="text-foreground font-bold text-sm">📍 地点 ({locations.length})</h2>
                 <button onClick={() => setShowMapSearch(true)}
-                  className="px-3 py-1.5 bg-red-600 text-white rounded-xl text-xs">+ 搜索添加</button>
+                  className="px-3 py-1.5 bg-primary text-white rounded-xl text-xs">+ 搜索添加</button>
               </div>
               {locations.length === 0 ? (
                 <div className="text-center py-8">
                   <div className="text-4xl mb-3">🗺️</div>
-                  <p className="text-gray-400 text-sm mb-2">还没有地点</p>
-                  <p className="text-gray-500 text-xs">点击「搜索添加」打开地图搜索，或让 AI 自动生成</p>
+                  <p className="text-muted-foreground text-sm mb-2">还没有地点</p>
+                  <p className="text-muted-foreground text-xs">点击「搜索添加」打开地图搜索，或让 AI 自动生成</p>
                 </div>
               ) : (
                 <div className="space-y-1 max-h-60 overflow-y-auto">
@@ -600,11 +600,11 @@ export default function TourEdit() {
                     <button key={loc.id}
                       onClick={() => setEditingLoc(editingLoc?.id === loc.id ? null : loc)}
                       className={`w-full text-left px-3 py-2 rounded-xl transition-colors ${
-                        editingLoc?.id === loc.id ? 'bg-red-600/10 border border-red-600/20' : 'bg-[#0f0f1a] hover:bg-[#242444]'
+                        editingLoc?.id === loc.id ? 'bg-primary/10 border border-primary/20' : 'bg-background hover:bg-secondary'
                       }`}>
                       <div className="flex items-center justify-between">
-                        <span className="text-white text-xs">{'⭐'.repeat(loc.importance || 1)} {loc.name}</span>
-                        <span className="text-gray-500 text-xs">{loc.lng?.toFixed(4)}, {loc.lat?.toFixed(4)}</span>
+                        <span className="text-foreground text-xs">{'⭐'.repeat(loc.importance || 1)} {loc.name}</span>
+                        <span className="text-muted-foreground text-xs">{loc.lng?.toFixed(4)}, {loc.lat?.toFixed(4)}</span>
                       </div>
                     </button>
                   ))}
@@ -614,28 +614,28 @@ export default function TourEdit() {
 
             {/* Location editor */}
             {editingLoc && (
-              <section className="bg-[#1c1c32] rounded-2xl p-5 border border-white/5 space-y-3">
+              <section className="bg-card rounded-2xl p-5 border border-border space-y-3">
                 <div className="flex items-center justify-between">
-                  <h3 className="text-white font-bold text-sm">✏️ {editingLoc.name}</h3>
+                  <h3 className="text-foreground font-bold text-sm">✏️ {editingLoc.name}</h3>
                   <button onClick={() => removeLocation(editingLoc.id)}
-                    className="px-3 py-1 bg-red-600/10 text-red-400 rounded-xl text-xs">删除</button>
+                    className="px-3 py-1 bg-primary/10 text-primary rounded-xl text-xs">删除</button>
                 </div>
                 <div className="flex gap-2">
                   <input value={editingLoc.name}
                     onChange={e => updateLocation(editingLoc.id, { name: e.target.value })}
-                    className="flex-1 bg-[#0f0f1a] text-white rounded-lg px-3 py-2 text-xs border border-white/10 outline-none" />
+                    className="flex-1 bg-background text-foreground rounded-lg px-3 py-2 text-xs border border-border outline-none" />
                   <select value={editingLoc.importance}
                     onChange={e => updateLocation(editingLoc.id, { importance: parseInt(e.target.value) })}
-                    className="bg-[#0f0f1a] text-white rounded-lg px-2 py-2 text-xs border border-white/10 outline-none">
+                    className="bg-background text-foreground rounded-lg px-2 py-2 text-xs border border-border outline-none">
                     {[1,2,3,4,5].map(n => <option key={n} value={n}>{'⭐'.repeat(n)}</option>)}
                   </select>
                   <input value={editingLoc.elevation || ''}
                     onChange={e => updateLocation(editingLoc.id, { elevation: e.target.value })}
-                    className="w-24 bg-[#0f0f1a] text-white rounded-lg px-3 py-2 text-xs border border-white/10 outline-none" placeholder="海拔" />
+                    className="w-24 bg-background text-foreground rounded-lg px-3 py-2 text-xs border border-border outline-none" placeholder="海拔" />
                 </div>
                 <input value={(editingLoc.tags || []).join(', ')}
                   onChange={e => updateLocation(editingLoc.id, { tags: e.target.value.split(',').map(t => t.trim()).filter(Boolean) })}
-                  className="w-full bg-[#0f0f1a] text-white rounded-lg px-3 py-2 text-xs border border-white/10 outline-none"
+                  className="w-full bg-background text-foreground rounded-lg px-3 py-2 text-xs border border-border outline-none"
                   placeholder="标签（逗号分隔）" />
                 <div>
                   <div className="flex gap-1 mb-2 flex-wrap">
@@ -654,52 +654,52 @@ export default function TourEdit() {
                       ? (editingLoc.layers || {})[editingLayer]
                       : ((editingLoc.layers || {})[editingLayer]?.text || '')}
                     onChange={e => updateLayerContent(editingLoc.id, editingLayer, e.target.value)} rows={4}
-                    className="w-full bg-[#0f0f1a] text-white rounded-lg px-3 py-2 text-xs border border-white/10 outline-none resize-none"
+                    className="w-full bg-background text-foreground rounded-lg px-3 py-2 text-xs border border-border outline-none resize-none"
                     placeholder="此分类内容（AI 可自动填充）" />
                 </div>
                 <textarea value={editingLoc.reflection || ''}
                   onChange={e => updateLocation(editingLoc.id, { reflection: e.target.value })} rows={2}
-                  className="w-full bg-[#0f0f1a] text-white rounded-lg px-3 py-2 text-xs border border-white/10 outline-none resize-none"
+                  className="w-full bg-background text-foreground rounded-lg px-3 py-2 text-xs border border-border outline-none resize-none"
                   placeholder="💭 停下来想一想" />
                 <div className="flex gap-2">
                   <input value={(editingLoc.practical || {}).access || ''}
                     onChange={e => updateLocation(editingLoc.id, { practical: { ...editingLoc.practical, access: e.target.value } })}
-                    className="flex-1 bg-[#0f0f1a] text-white rounded-lg px-3 py-2 text-xs border border-white/10 outline-none" placeholder="到达方式" />
+                    className="flex-1 bg-background text-foreground rounded-lg px-3 py-2 text-xs border border-border outline-none" placeholder="到达方式" />
                   <input value={(editingLoc.practical || {}).difficulty || ''}
                     onChange={e => updateLocation(editingLoc.id, { practical: { ...editingLoc.practical, difficulty: e.target.value } })}
-                    className="flex-1 bg-[#0f0f1a] text-white rounded-lg px-3 py-2 text-xs border border-white/10 outline-none" placeholder="难度" />
+                    className="flex-1 bg-background text-foreground rounded-lg px-3 py-2 text-xs border border-border outline-none" placeholder="难度" />
                 </div>
               </section>
             )}
 
             {/* Routes section */}
-            <section className="bg-[#1c1c32] rounded-2xl p-5 border border-white/5">
+            <section className="bg-card rounded-2xl p-5 border border-border">
               <div className="flex items-center justify-between mb-4">
-                <h2 className="text-white font-bold text-sm">🗺 游览路线 ({routes.length})</h2>
-                <button onClick={addRoute} className="px-3 py-1.5 bg-red-600 text-white rounded-xl text-xs">+ 添加路线</button>
+                <h2 className="text-foreground font-bold text-sm">🗺 游览路线 ({routes.length})</h2>
+                <button onClick={addRoute} className="px-3 py-1.5 bg-primary text-white rounded-xl text-xs">+ 添加路线</button>
               </div>
               {routes.length === 0 ? (
                 <div className="text-center py-6">
                   <div className="text-4xl mb-3">🥾</div>
-                  <p className="text-gray-400 text-sm mb-1">还没有路线</p>
-                  <p className="text-gray-500 text-xs">AI 可根据地点自动规划真实徒步路线，你也可以手动创建</p>
+                  <p className="text-muted-foreground text-sm mb-1">还没有路线</p>
+                  <p className="text-muted-foreground text-xs">AI 可根据地点自动规划真实徒步路线，你也可以手动创建</p>
                 </div>
               ) : (
                 routes.map(route => (
-                  <div key={route.id} className="bg-[#0f0f1a] rounded-xl p-3 mb-2 border border-white/5">
+                  <div key={route.id} className="bg-background rounded-xl p-3 mb-2 border border-border">
                     <div className="flex gap-2 items-center mb-2">
                       <input value={route.day}
                         onChange={e => updateRoute(route.id, { day: e.target.value })}
-                        className="w-20 bg-[#1c1c32] text-white rounded-lg px-2 py-1.5 text-xs outline-none" placeholder="第1天" />
+                        className="w-20 bg-card text-foreground rounded-lg px-2 py-1.5 text-xs outline-none" placeholder="第1天" />
                       <input value={route.title}
                         onChange={e => updateRoute(route.id, { title: e.target.value })}
-                        className="flex-1 bg-[#1c1c32] text-white rounded-lg px-2 py-1.5 text-xs outline-none" placeholder="路线标题" />
+                        className="flex-1 bg-card text-foreground rounded-lg px-2 py-1.5 text-xs outline-none" placeholder="路线标题" />
                       <button onClick={() => removeRoute(route.id)}
-                        className="text-red-400 text-xs px-2 py-0.5 rounded-full bg-red-600/10">删除</button>
+                        className="text-primary text-xs px-2 py-0.5 rounded-full bg-primary/10">删除</button>
                     </div>
                     <textarea value={route.narrative}
                       onChange={e => updateRoute(route.id, { narrative: e.target.value })} rows={2}
-                      className="w-full bg-[#1c1c32] text-white rounded-lg px-2 py-1.5 text-xs outline-none resize-none mb-2"
+                      className="w-full bg-card text-foreground rounded-lg px-2 py-1.5 text-xs outline-none resize-none mb-2"
                       placeholder="路线叙事" />
                     <div className="flex flex-wrap gap-1">
                       {locations.map(loc => {
@@ -707,13 +707,13 @@ export default function TourEdit() {
                         return (
                           <button key={loc.id} onClick={() => toggleRouteStop(route.id, loc.id)}
                             className={`px-2 py-1 rounded-full text-xs transition-colors ${
-                              inRoute ? 'bg-red-600 text-white' : 'bg-[#1c1c32] text-gray-500'
+                              inRoute ? 'bg-primary text-white' : 'bg-card text-muted-foreground'
                             }`}>{inRoute && '✓ '}{loc.name}</button>
                         );
                       })}
                     </div>
                     {route.stops.length > 0 && (
-                      <div className="text-gray-500 text-xs mt-2">
+                      <div className="text-muted-foreground text-xs mt-2">
                         途经: {route.stops.map(id => locations.find(l => l.id === id)?.name || id).join(' → ')}
                       </div>
                     )}

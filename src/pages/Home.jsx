@@ -108,12 +108,12 @@ export default function Home() {
         className="block bg-card rounded-2xl p-5 hover:bg-secondary transition-colors border border-border"
       >
         <div className="flex items-start justify-between mb-2">
-          <h2 className="text-base font-bold text-white pr-2">{tour.title}</h2>
-          <span className="text-xs px-2 py-1 rounded-full bg-white/5 text-muted-foreground flex-shrink-0">
+          <h2 className="text-base font-serif font-bold text-foreground pr-2">{tour.title}</h2>
+          <span className="text-xs px-2 py-1 rounded-full bg-black/5 text-muted-foreground flex-shrink-0">
             {tour.stats?.locations ?? tour.locations?.[0]?.count ?? '?'} 地点
           </span>
         </div>
-        <p className="text-sm text-gray-400 mb-3 line-clamp-2">{tour.subtitle}</p>
+        <p className="text-sm text-muted-foreground mb-3 line-clamp-2">{tour.subtitle}</p>
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <span>📍 {tour.destination?.name || '—'}</span>
           <span>{tour.destination?.region || ''}</span>
@@ -128,15 +128,15 @@ export default function Home() {
         <div className="absolute top-3 right-3 flex items-center gap-1.5">
           <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${
             tour.is_public
-              ? 'bg-green-600/20 text-green-400'
-              : 'bg-white/10 text-gray-400'
+              ? 'bg-green-600/20 text-green-700'
+              : 'bg-black/10 text-muted-foreground'
           }`}>
             {tour.is_public ? '已发布' : '私密'}
           </span>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button
-                className="w-6 h-6 rounded-full bg-white/10 text-gray-300 flex items-center justify-center hover:bg-white/20 transition-colors"
+                className="w-6 h-6 rounded-full bg-black/10 text-muted-foreground flex items-center justify-center hover:bg-black/10 transition-colors"
                 aria-label="导览操作"
               >
                 <MoreHorizontal className="h-3.5 w-3.5" />
@@ -150,7 +150,7 @@ export default function Home() {
                 {tour.is_public ? '🔒 设为私密' : '🌍 设为公开'}
               </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => deleteTour(tour)} className="text-red-400 focus:text-red-400 focus:bg-red-600/10">
+              <DropdownMenuItem onClick={() => deleteTour(tour)} className="text-primary focus:text-primary focus:bg-primary/10">
                 🗑️ 删除导览
               </DropdownMenuItem>
             </DropdownMenuContent>
@@ -169,10 +169,10 @@ export default function Home() {
         <Tabs value={tab} onValueChange={setTab} className="w-full">
           <div className="flex items-center justify-between">
             <TabsList className="bg-transparent p-0 h-auto gap-1">
-              <TabsTrigger value="explore" className="data-[state=active]:bg-red-600/10 data-[state=active]:text-red-400 data-[state=active]:border data-[state=active]:border-red-600/20 text-gray-400">
+              <TabsTrigger value="explore" className="data-[state=active]:bg-primary/10 data-[state=active]:text-primary data-[state=active]:border data-[state=active]:border-primary/20 text-muted-foreground">
                 🔍 发现
               </TabsTrigger>
-              <TabsTrigger value="my" className="data-[state=active]:bg-red-600/10 data-[state=active]:text-red-400 data-[state=active]:border data-[state=active]:border-red-600/20 text-gray-400">
+              <TabsTrigger value="my" className="data-[state=active]:bg-primary/10 data-[state=active]:text-primary data-[state=active]:border data-[state=active]:border-primary/20 text-muted-foreground">
                 📋 我的导览
               </TabsTrigger>
             </TabsList>
@@ -180,7 +180,7 @@ export default function Home() {
             {user && (
               <button
                 onClick={() => navigate('/create')}
-                className="flex items-center gap-1 px-3 py-2 bg-primary text-primary-foreground rounded-xl text-xs font-semibold hover:bg-red-700 transition-colors"
+                className="flex items-center gap-1 px-3 py-2 bg-primary text-primary-foreground rounded-xl text-xs font-semibold hover:bg-primary/90 transition-colors"
               >
                 <Plus className="h-3 w-3" />
                 创建
@@ -212,10 +212,10 @@ export default function Home() {
               {!user ? (
                 <div className="col-span-2 text-center py-16">
                   <div className="text-4xl mb-3">🔐</div>
-                  <p className="text-gray-400 mb-4">登录后查看你创建的导览</p>
+                  <p className="text-muted-foreground mb-4">登录后查看你创建的导览</p>
                   <button
                     onClick={() => navigate('/login')}
-                    className="px-6 py-2 bg-primary text-primary-foreground rounded-xl text-sm font-semibold hover:bg-red-700 transition-colors"
+                    className="px-6 py-2 bg-primary text-primary-foreground rounded-xl text-sm font-semibold hover:bg-primary/90 transition-colors"
                   >
                     去登录
                   </button>
@@ -232,7 +232,7 @@ export default function Home() {
                   <p className="mb-2">还没有创建导览</p>
                   <button
                     onClick={() => navigate('/create')}
-                    className="text-red-400 text-sm hover:text-red-300 transition-colors"
+                    className="text-primary text-sm hover:text-primary transition-colors"
                   >
                     + 创建第一条导览
                   </button>

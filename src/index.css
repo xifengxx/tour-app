@@ -1,34 +1,36 @@
 @import "tailwindcss";
 
-/* shadcn/ui theming — Tailwind CSS v4 */
+/* shadcn/ui theming — Tailwind CSS v4 · Claude/Anthropic 风格（羊皮纸 + 陶土） */
 @theme {
-  --color-background: #0f0f1a;
-  --color-foreground: #c8c8d8;
-  --color-card: #1c1c32;
-  --color-card-foreground: #c8c8d8;
-  --color-primary: #dc2626;
+  --color-background: #f5f4ed;        /* 羊皮纸页面底 */
+  --color-foreground: #141413;        /* 暖近黑正文 */
+  --color-card: #faf9f5;              /* 象牙卡片 */
+  --color-card-foreground: #141413;
+  --color-primary: #c96442;           /* 陶土（主按钮/强调/选中） */
   --color-primary-foreground: #ffffff;
-  --color-secondary: #242444;
-  --color-secondary-foreground: #c8c8d8;
-  --color-muted: #ffffff0d;
-  --color-muted-foreground: #6b7280;
-  --color-accent: #ffffff0d;
-  --color-accent-foreground: #c8c8d8;
-  --color-destructive: #ef4444;
+  --color-secondary: #e8e6dc;         /* 暖沙次级底 */
+  --color-secondary-foreground: #141413;
+  --color-muted: #eeece3;             /* 弱底 */
+  --color-muted-foreground: #6f6d63;  /* 暖灰次要文字 */
+  --color-accent: #e8e6dc;
+  --color-accent-foreground: #141413;
+  --color-destructive: #b53333;       /* 错误 */
   --color-destructive-foreground: #ffffff;
-  --color-border: #ffffff0d;
-  --color-input: #ffffff0d;
-  --color-ring: #dc2626;
-  --radius: 0.75rem;
+  --color-border: #e0ddd2;            /* 暖边框 */
+  --color-input: #e0ddd2;
+  --color-ring: #c96442;              /* 焦点环 */
+  --radius: 0.5rem;
+  --font-sans: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", "Noto Sans SC", sans-serif;
+  --font-serif: Georgia, "Songti SC", STSong, "Noto Serif SC", serif;
 }
 
 body {
   margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", "Noto Sans SC", sans-serif;
+  font-family: var(--font-sans);
   background: var(--color-background);
   color: var(--color-foreground);
 }
 #root { min-height: 100vh; }
 
 /* AMap container fixes */
-.amap-container { background: #0f0f1a !important; }
+.amap-container { background: #f5f4ed !important; }
