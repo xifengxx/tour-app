@@ -286,13 +286,9 @@ Deno.serve(async (req: Request) => {
         const regionScenics = await gaodeRegionScenics(destRegion);
         const distinct = regionScenics.filter(p => locs.every(l => haversineM(l, p) > 5000)); // 与核心全部 >5km
         const dedupedRegion = distinct.filter((p, i) => !distinct.slice(0, i).some(q => haversineM(q, p) < 5000)); // 地区点间互去重
-        // 包含关系过滤：两个"风景区/名胜区"类 POI 相距 <8km 时保留名称更长者（如武陵源 ⊃ 天子山，天子山不单列）
-        const umbrellaSuffix = /(风景区|名胜区|景区|森林公园)$/;
-        const regionFinal = dedupedRegion.filter(p =>
-          !dedupedRegion.some(q => q !== p && haversineM(q, p) < 8000 && umbrellaSuffix.test(q.name) && umbrellaSuffix.test(p.name) && q.name.length > p.name.length)
-        );
+        const regionFinal = dedupedRegion; // 保留子景点(武陵源的天子山/袁家界/金鞭溪等), 让武陵源区域在路线中内容充实
         if (regionFinal.length >= 3) {
-          const addN = Math.min(4, regionFinal.length);
+          const addN = Math.min(6, regionFinal.length);
           for (const p of regionFinal.slice(0, addN)) {
             locs.push({ id: `reg-${locs.length}`, name: p.name, lat: p.lat, lng: p.lng, elevation: "", importance: 4, tags: ["地区景点"], layers: {}, reflection: "", practical: {} });
           }
