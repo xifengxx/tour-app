@@ -40,6 +40,7 @@ tour-app/
 ├── scripts/             # 数据导入脚本
 │   └── insert-tour.mjs      # 标准化 Supabase 写入脚本
 ├── APP-DOCS.md          # 开发文档（完整流程、密钥、故障排查）
+├── DESIGN.md            # 设计规范（Claude/Anthropic 风格：羊皮纸+陶土+衬线）
 └── supabase-migration.sql
 ```
 
@@ -52,3 +53,4 @@ tour-app/
 - 数据写入方法对比
 - 常见问题与解决方案
 - 安全与已接受风险：**[SECURITY.md](./SECURITY.md)**
+- 设计规范（Claude 风格）：**[DESIGN.md](./DESIGN.md)**
