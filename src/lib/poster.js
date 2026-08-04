@@ -1,20 +1,20 @@
 /**
- * 导览分享海报绘制（canvas，Claude 风格）。
- * 设计：大标题 + 点睛副标题 + 印章 + 数字统计 + 行程预览 + 亮点地点 + 扫码 CTA。
+ * 导览分享海报绘制（canvas，Claude 风格，600×1150 竖版）。
+ * 设计：品牌 + 大标题 + 点睛副标题 + 红印章 + 数字统计 + 亮点地点 + 行程预览 + 扫码 CTA。
  * @param {HTMLCanvasElement} canvas 目标画布
  * @param {object} tour 导览对象（meta.title/subtitle, source, locations, routes）
  * @param {HTMLCanvasElement} [qrCanvas] 已渲染的二维码 canvas
  */
 export function drawTourPoster(canvas, tour, qrCanvas) {
   const W = 600;
-  const H = 940;
+  const H = 1150;
   canvas.width = W;
   canvas.height = H;
   const ctx = canvas.getContext('2d');
 
   const SERIF = 'Georgia,"Songti SC","Noto Serif SC",serif';
   const SANS = '-apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif';
-  const MAX_Y = H - 310; // 内容区下界，避免压到二维码/CTA
+  const MAX_Y = H - 350; // 内容区下界，CTA 在其下方留 ~54px
 
   const title = tour.meta?.title || tour.title || '文学巡礼';
   const subtitle = tour.meta?.subtitle || tour.subtitle || '';
@@ -67,8 +67,11 @@ export function drawTourPoster(canvas, tour, qrCanvas) {
   ctx.fillStyle = '#141413';
   ctx.font = `600 42px ${SERIF}`;
   const tLines = wrapText(title, W - 170, 2);
-  let y = 120 + (tLines.length - 1) * 52;
-  tLines.forEach((l, i) => ctx.fillText(l, W / 2, y - (tLines.length - 1 - i) * 52));
+  let y = 104;
+  tLines.forEach((l, i) => {
+    ctx.fillText(l, W / 2, y);
+    y += 52;
+  });
 
   // 印章（标题右侧）
   const sealX = W / 2 + 155;
@@ -81,77 +84,81 @@ export function drawTourPoster(canvas, tour, qrCanvas) {
   ctx.fillText('文', sealX + 23, 86 + 31);
 
   // 副标题（点睛句，陶土色）
-  y += 40;
+  y += 38;
   if (subtitle) {
     ctx.fillStyle = '#c96442';
     ctx.font = `400 21px ${SANS}`;
     const sLines = wrapText(subtitle, W - 130, 2);
-    sLines.forEach((l, i) => ctx.fillText(l, W / 2, y + i * 30));
-    y += sLines.length * 30 + 16;
+    sLines.forEach((l, i) => ctx.fillText(l, W / 2, y + i * 32));
+    y += sLines.length * 32 + 16;
   } else {
     y += 16;
   }
 
-  // 分隔线 + 统计
+  // 分隔线
   ctx.strokeStyle = '#e0ddd2';
   ctx.lineWidth = 1.5;
   ctx.beginPath();
   ctx.moveTo(70, y);
   ctx.lineTo(W - 70, y);
   ctx.stroke();
-  y += 34;
+  y += 38;
+
+  // 统计
   ctx.fillStyle = '#6f6d63';
   ctx.font = `400 17px ${SANS}`;
   const statLine = `★ ${(tour.locations || []).length} 个文学地点  ·  🗺 ${routes.length} 条路线`;
   ctx.fillText(statLine, W / 2, y);
-  y += 36;
+  y += 42;
 
-  // 亮点地点
+  // 亮点地点：星号与名字间用实测宽度留足间隙
   ctx.textAlign = 'left';
   ctx.fillStyle = '#c96442';
   ctx.font = `600 17px ${SANS}`;
   ctx.fillText('✨ 亮点地点', 48, y);
-  y += 36;
+  y += 38;
   ctx.font = `400 20px ${SANS}`;
   for (const l of locs) {
     if (y > MAX_Y) break;
+    const stars = '★'.repeat(Math.min(l.importance || 1, 5));
     ctx.fillStyle = '#c96442';
-    ctx.fillText('★'.repeat(Math.min(l.importance || 1, 5)), 48, y);
+    ctx.fillText(stars, 48, y);
+    const starsW = ctx.measureText(stars).width;
     ctx.fillStyle = '#141413';
-    ctx.fillText(l.name, 132, y);
+    ctx.fillText(l.name, 48 + starsW + 20, y); // 星号右侧固定留 20px
     y += 46;
   }
 
   // 行程预览
-  y += 18;
+  y += 22;
   if (y < MAX_Y) {
     ctx.fillStyle = '#c96442';
     ctx.font = `600 17px ${SANS}`;
     ctx.fillText('🗺 行程预览', 48, y);
-    y += 34;
+    y += 36;
     ctx.font = `400 18px ${SANS}`;
     for (const r of routes) {
       if (y > MAX_Y) break;
       const label = (r.day || r.day_label) ? `${r.day || r.day_label} · ${r.title}` : r.title;
       ctx.fillStyle = '#141413';
       ctx.fillText(label, 48, y);
-      y += 32;
+      y += 34;
     }
   }
 
-  // 底部：CTA + 二维码 + 品牌
+  // 底部：CTA + 二维码 + 品牌（固定位置，与内容区间距充裕）
   ctx.textAlign = 'center';
   ctx.fillStyle = '#6f6d63';
   ctx.font = `400 16px ${SANS}`;
   ctx.fillText('扫码开启你的文学之旅', W / 2, H - 300);
   if (qrCanvas) {
     try {
-      ctx.drawImage(qrCanvas, W / 2 - 92, H - 288, 184, 184);
+      ctx.drawImage(qrCanvas, W / 2 - 92, H - 286, 184, 184);
     } catch (e) {
       /* 二维码未就绪时忽略 */
     }
   }
   ctx.fillStyle = '#a5a29a';
   ctx.font = `400 14px ${SANS}`;
-  ctx.fillText('文学巡礼 · 跟着小说游山水', W / 2, H - 30);
+  ctx.fillText('文学巡礼 · 跟着小说游山水', W / 2, H - 40);
 }
