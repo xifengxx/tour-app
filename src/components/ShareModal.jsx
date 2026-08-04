@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { QRCodeCanvas } from 'qrcode.react';
 import { drawTourPoster } from '../lib/poster';
+import { buildShareUrl } from '../lib/share';
 import { Check, Download, Link2, X } from 'lucide-react';
 
 export default function ShareModal({ tour, tourId, onClose }) {
@@ -10,7 +11,7 @@ export default function ShareModal({ tour, tourId, onClose }) {
   const [saved, setSaved] = useState(false);
 
   // tourId 用路由参数（静态导览的 tour.id 可能为 undefined，meta.tourId 才是 id）
-  const shareUrl = `${window.location.origin}/tour/${tourId || tour.meta?.tourId || tour.id}`;
+  const shareUrl = buildShareUrl(window.location.origin, tourId, tour);
   const title = tour.meta?.title || tour.title || '';
 
   // 打开时绘制海报预览
