@@ -213,7 +213,7 @@ export default function TourView() {
     setCurrentRouteId(newId);
     const firstStop = newId ? locByIdRef.current[route.stops[0]] : null;
     setCurrentLoc(firstStop);
-    if (firstStop) { setCurrentLayer('novel'); setShowCard(true); }
+    if (firstStop) { setCurrentLayer(firstLayerIdRef.current); setShowCard(true); }
 
     Object.entries(routePolylinesRef.current).forEach(([rid, rp]) => {
       if (!newId || rid === newId) {
