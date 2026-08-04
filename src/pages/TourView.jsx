@@ -43,6 +43,7 @@ export default function TourView() {
   const locByIdRef = useRef({});
   const clustererRef = useRef(null);
   const currentLocRef = useRef(null);
+  const firstLayerIdRef = useRef('novel'); // 导览第一个内容层 id（泰山等自定义层导览没有 novel）
 
   const [currentLoc, setCurrentLoc] = useState(null);
   const [currentLayer, setCurrentLayer] = useState('novel');
@@ -57,6 +58,11 @@ export default function TourView() {
   const { tour, loading } = useTourData(tourId);
 
   currentLocRef.current = currentLoc; // 供 renderMarker 闭包读取最新选中态
+
+  // 记录导览第一个内容层 id：泰山等自定义层(无 novel)时选中地点默认落到第一个层
+  useEffect(() => {
+    firstLayerIdRef.current = tour?.contentLayers?.[0]?.id || 'novel';
+  }, [tour]);
 
   // 收藏状态（登录后）
   useEffect(() => {
@@ -182,7 +188,7 @@ export default function TourView() {
 
   const selectLoc = useCallback((loc) => {
     setCurrentLoc(loc);
-    setCurrentLayer('novel');
+    setCurrentLayer(firstLayerIdRef.current); // 用导览第一个内容层，而非硬编码 novel
     setShowCard(true);
     if (mapInstance.current) {
       mapInstance.current.setCenter([loc.lng, loc.lat]);
