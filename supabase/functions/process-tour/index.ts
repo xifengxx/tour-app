@@ -50,7 +50,7 @@ async function gaode(name: string, destCity: string) {
   const cityParam = encodeURIComponent((splitRegion(destCity).city || destCity).replace(/[市]$/g, ""));
   // 不做 location 偏置：目的地地理编码可能偏到行政中心（如"三清山"被编码到上饶市区，距真景点 50km），
   // 偏置反而排挤真景点。靠城市限定 + 类型过滤 + 后续聚类离群点剔除保证质量。
-  const r = await fetch(`https://restapi.amap.com/v3/place/text?keywords=${kw}&city=${cityParam}&key=${GAODE_KEY}&types=风景名胜|旅游景点&citylimit=true`);
+  const r = await fetch(`https://restapi.amap.com/v3/place/text?keywords=${kw}&city=${cityParam}&key=${GAODE_KEY}&types=风景名胜|旅游景点&citylimit=true`, { signal: AbortSignal.timeout(30000) });
   const d = await r.json();
   // 过滤地址式 POI：名称形如"湖北省武汉市洪山区象鼻山"（整串地址当名称）的多为非景点的幻觉点。
   // 真实景点名称是短的（"黄鹤楼""晴川阁"），不会带"省…市"。
@@ -63,7 +63,7 @@ async function gaode(name: string, destCity: string) {
 // 确定性来源，不依赖 AI 判断；配合离群去重，只保留与核心距离 >5km 的独立景点。
 async function gaodeRegionScenics(city: string): Promise<{ lng: number; lat: number; name: string }[]> {
   const cityParam = encodeURIComponent((splitRegion(city).city || city).replace(/[市]$/g, ""));
-  const r = await fetch(`https://restapi.amap.com/v3/place/text?city=${cityParam}&key=${GAODE_KEY}&types=风景名胜|旅游景点&citylimit=true&offset=30`);
+  const r = await fetch(`https://restapi.amap.com/v3/place/text?city=${cityParam}&key=${GAODE_KEY}&types=风景名胜|旅游景点&citylimit=true&offset=30`, { signal: AbortSignal.timeout(30000) });
   if (!r.ok) return [];
   const d = await r.json();
   return (d.pois || [])
@@ -73,7 +73,7 @@ async function gaodeRegionScenics(city: string): Promise<{ lng: number; lat: num
 
 // 以风景区/名胜区为锚点，查其内部子景点（如武陵源内的百龙天梯/金鞭溪/十里画廊等）
 async function gaodeAroundScenics(lng: number, lat: number): Promise<{ lng: number; lat: number; name: string }[]> {
-  const r = await fetch(`https://restapi.amap.com/v3/place/around?location=${lng},${lat}&key=${GAODE_KEY}&radius=30000&offset=100`);
+  const r = await fetch(`https://restapi.amap.com/v3/place/around?location=${lng},${lat}&key=${GAODE_KEY}&radius=30000&offset=100`, { signal: AbortSignal.timeout(30000) });
   if (!r.ok) return [];
   const d = await r.json();
   // 去掉 types 过滤后杂点多：清洗名称（剥掉"售票处/上站/游客中心/社区"等后缀，露出景点本名，
@@ -116,7 +116,7 @@ function pruneFarPoints(cands: { lng: number; lat: number }[]): { lng: number; l
 // 返回值三态：object=坐标可解析；undefined=API 不可达；null=坐标无法解析。
 async function regeo(lng: number, lat: number) {
   try {
-    const r = await fetch(`https://restapi.amap.com/v3/geocode/regeo?location=${lng},${lat}&key=${GAODE_KEY}`);
+    const r = await fetch(`https://restapi.amap.com/v3/geocode/regeo?location=${lng},${lat}&key=${GAODE_KEY}`, { signal: AbortSignal.timeout(30000) });
     if (!r.ok) return undefined;
     const d = await r.json();
     if (d.status === "1" && d.regeocode?.addressComponent) {
@@ -190,7 +190,7 @@ function haversineM(a: { lng: number; lat: number }, b: { lng: number; lat: numb
 
 async function deepseek(messages: { role: string; content: string }[], retries = 2) {
   for (let attempt = 0; attempt <= retries; attempt++) {
-    const r = await fetch("https://api.deepseek.com/v1/chat/completions", {
+    const r = await fetch("https://api.deepseek.com/v1/chat/completions", { signal: AbortSignal.timeout(120000), // 防止挂死
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${DEEPSEEK_KEY}` },
       body: JSON.stringify({ model: "deepseek-chat", messages, temperature: 0.7, max_tokens: 8192, response_format: { type: "json_object" } }),
