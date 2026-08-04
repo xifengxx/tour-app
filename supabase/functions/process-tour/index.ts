@@ -59,6 +59,18 @@ async function gaode(name: string, destCity: string) {
   return null;
 }
 
+// 查询目的地区域（城市）的知名风景/旅游景点，用于自动补地区景点 → 组主题游。
+// 确定性来源，不依赖 AI 判断；配合离群去重，只保留与核心距离 >5km 的独立景点。
+async function gaodeRegionScenics(city: string): Promise<{ lng: number; lat: number; name: string }[]> {
+  const cityParam = encodeURIComponent((splitRegion(city).city || city).replace(/[市]$/g, ""));
+  const r = await fetch(`https://restapi.amap.com/v3/place/text?city=${cityParam}&key=${GAODE_KEY}&types=风景名胜|旅游景点&citylimit=true&offset=30`);
+  if (!r.ok) return [];
+  const d = await r.json();
+  return (d.pois || [])
+    .filter((p: any) => p.location && !/省.*市/.test(p.name || ""))
+    .map((p: any) => { const [lng, lat] = p.location.split(",").map(Number); return { lng, lat, name: p.name }; });
+}
+
 // 离群点剔除：真实地点聚成簇，编造/过远点是离群点。
 // 以候选点中位数为中心，迭代剔除 >20km 的点（最多 3 轮）。
 // 不依赖地理编码中心 —— 某些目的地（三清山）地理编码会偏到行政中心，固定中心校验会误杀真景点。
@@ -203,11 +215,11 @@ Deno.serve(async (req: Request) => {
     // 2. Extract locations
     const lr = await deepseek([
       { role: "system", content: "你是中国旅游规划专家。只返回JSON。只提取真实存在的地点，不确定的地点不要提取。只列固定旅游景点/地标/古迹/公园/山峰/宫观，不要临时展览、活动、演出、商业店铺等非固定地点。" },
-      { role: "user", content: `目的地：${destName}（${destRegion}）\n文本：${src.slice(0, 6000)}\n\n提取值得探访的地点：有文本时以文本提到的地点为准；文本为空或未提及时，列出该目的地及周边真实存在的名胜，涵盖主要景点和次一级地标（山峰、宫观、栈道、园区、古迹等）。至少提取 8-12 个（景点多的目的地可更多）。宁可多列，坐标校验会过滤掉不存在的——不要遗漏真实景点。\n\n同时判断 hasRegionTour：若目的地所在城市/地区除核心景点外，还有多个值得一游的独立景点（名楼/古迹/博物馆/地标等，如武汉的黄鹤楼、晴川阁），可组成一条地区主题游路线 → 为 true；若只是单一景点或景点集中在一处的山脉（如庐山、黄山）→ 为 false。\nJSON: {"locations":[{"id":"en-id","name":"地点","importance":1-5,"elevation":"","tags":[]}],"hasRegionTour":true}` },
+      { role: "user", content: `目的地：${destName}（${destRegion}）\n文本：${src.slice(0, 6000)}\n\n提取值得探访的地点，分两部分：\n【第一部分·目的地核心】先完整提取目的地自身的景点（如天门山：天门山索道、天门洞、鬼谷栈道、天门山寺、云梦仙顶、通天大道等），这是本次旅行的主角，必须覆盖。有文本时以文本提到的地点为准。\n【第二部分·地区景点】若目的地所在城市/地区是知名的多景点旅游区（如天门山在张家界市，武陵源、天子山、杨家界、金鞭溪、黄龙洞、宝峰湖等也是张家界必游），则把这些地区知名景点也提取进来——它们是同一趟旅行的目的地（如东湖在武汉市，也要提黄鹤楼、晴川阁）。若地区没有可并联的其他知名景点（如庐山、黄山，景点都在同一山内），则只提取目的地核心。\n涵盖主要景点和次一级地标（山峰、宫观、栈道、园区、古迹、名楼等）。至少提取 8-12 个（景点多的目的地可更多）。宁可多列，坐标校验会过滤掉不存在的——不要遗漏真实景点。\n\n同时判断 hasRegionTour：目的地所在城市/地区有多个知名独立景点可组主题游（张家界市、武汉市 → true）→ true；景点都集中在同一景点/山脉内（庐山、黄山 → false）→ false。若 true，则 locations 必须同时含目的地核心与地区知名景点。\nJSON: {"locations":[{"id":"en-id","name":"地点","importance":1-5,"elevation":"","tags":[]}],"hasRegionTour":true}` },
     ]);
 
     const warnings: string[] = [];
-    const hasRegionTour = !!lr.hasRegionTour; // 地区是否有多个独立景点可组主题游
+    let hasRegionTour = !!lr.hasRegionTour; // AI 判定；下述高德地区查询可确定性补正
     const locs: any[] = [];
     for (const l of (lr.locations || [])) {
       const c = await gaode(l.name, destRegion);
@@ -266,6 +278,25 @@ Deno.serve(async (req: Request) => {
     locs.length = 0;
     locs.push(...deduped);
     console.log(`${locs.length} locations (${warnings.length} warnings)`);
+
+    // 地区景点补充（确定性）：查询目的地区域知名景点，与核心所有点相距 >5km 的独立景点 ≥3 个
+    // → 并入并触发主题游（不依赖 AI 随机判断；如张家界市并入国家森林公园/黄龙洞等）
+    if (destRegion && locs.length >= 3) {
+      try {
+        const regionScenics = await gaodeRegionScenics(destRegion);
+        const distinct = regionScenics.filter(p => locs.every(l => haversineM(l, p) > 5000)); // 与核心全部 >5km
+        const dedupedRegion = distinct.filter((p, i) => !distinct.slice(0, i).some(q => haversineM(q, p) < 5000)); // 地区点间互去重
+        if (dedupedRegion.length >= 3) {
+          const addN = Math.min(4, dedupedRegion.length);
+          for (const p of dedupedRegion.slice(0, addN)) {
+            locs.push({ id: `reg-${locs.length}`, name: p.name, lat: p.lat, lng: p.lng, elevation: "", importance: 4, tags: ["地区景点"], layers: {}, reflection: "", practical: {} });
+          }
+          locs.forEach((l, i) => (l.sort_order = i));
+          hasRegionTour = true;
+          warnings.push(`🌏 自动并入 ${addN} 个地区知名景点（可组主题游）`);
+        }
+      } catch (e) { /* 区域查询失败不阻断 */ }
+    }
 
     // 3. Content
     const cr = await deepseek([
