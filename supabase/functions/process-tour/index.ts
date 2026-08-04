@@ -73,12 +73,23 @@ async function gaodeRegionScenics(city: string): Promise<{ lng: number; lat: num
 
 // 以风景区/名胜区为锚点，查其内部子景点（如武陵源内的百龙天梯/金鞭溪/十里画廊等）
 async function gaodeAroundScenics(lng: number, lat: number): Promise<{ lng: number; lat: number; name: string }[]> {
-  const r = await fetch(`https://restapi.amap.com/v3/place/around?location=${lng},${lat}&key=${GAODE_KEY}&types=风景名胜|旅游景点&radius=30000&offset=100`);
+  const r = await fetch(`https://restapi.amap.com/v3/place/around?location=${lng},${lat}&key=${GAODE_KEY}&radius=30000&offset=100`);
   if (!r.ok) return [];
   const d = await r.json();
+  // 去掉 types 过滤后杂点多：清洗名称（剥掉"售票处/上站/游客中心/社区"等后缀，露出景点本名，
+  // 如"百龙天梯上站"→"百龙天梯"、"十里画廊观光电车售票处"→"十里画廊"、"袁家界游客基地"→"袁家界"），
+  // 并过滤明显非景点（餐饮/咖啡/酒店/商场等）。
+  const JUNK = /咖啡|餐厅|奶茶|小吃|甜品|麦当劳|瑞幸|宾馆|酒店|超市|银行|加油站|KTV|健身房/;
+  // 正向过滤：仅保留名称含景点特征的 POI（去掉无 types 查询混入的餐馆/商店/驿站等）
+  const ATTRACTION = /景|峰|峡|桥|梯|画廊|溪|界|寨|洞|寺|观|湖|湾|山|岭|谷|岩|石|门|瀑|泉|亭|阁|殿|庙|祠|塔|墓|园|池|林|松|海|台|田|索道|温泉|漂流|故居|书院/;
+  const strip = (n: string) => n
+    .replace(/^.*风景名胜区-|^.*国家森林公园-?/, "")
+    .replace(/观光电车|世界第一梯/, "")
+    .replace(/售票处|上站|下站|游客中心|游客基地|社区|集邮点|入口|出口$/, "")
+    .trim();
   return (d.pois || [])
-    .filter((p: any) => p.location && !/省.*市/.test(p.name || ""))
-    .map((p: any) => { const [lng2, lat2] = p.location.split(",").map(Number); return { lng: lng2, lat: lat2, name: p.name }; });
+    .filter((p: any) => p.location && !/省.*市/.test(p.name || "") && !JUNK.test(p.name || "") && ATTRACTION.test(p.name || ""))
+    .map((p: any) => { const [lng2, lat2] = p.location.split(",").map(Number); return { lng: lng2, lat: lat2, name: strip(p.name) || p.name }; });
 }
 
 // 离群点剔除：真实地点聚成簇，编造/过远点是离群点。
@@ -293,15 +304,32 @@ Deno.serve(async (req: Request) => {
     // → 并入并触发主题游（不依赖 AI 随机判断；如张家界市并入国家森林公园/黄龙洞等）
     if (destRegion && locs.length >= 3) {
       try {
-        const JUNK = /观景台|乘车处|上站|下站|停车场|轿运|站前广场|检票|售票|中站|索道站|摆渡/;
-        const regionScenics = await gaodeRegionScenics(destRegion); // 市级知名景点
-        // 以风景区/名胜区类 umbrella 为锚点，查其内部子景点（百龙天梯/金鞭溪/十里画廊等）
-        const anchor = regionScenics.find(p => /风景区|名胜区|国家森林公园/.test(p.name));
-        const aroundScenics = anchor ? await gaodeAroundScenics(anchor.lng, anchor.lat) : [];
-        const allRegion = [...regionScenics, ...aroundScenics].filter(p => !JUNK.test(p.name));
-        const distinct = allRegion.filter(p => locs.every(l => haversineM(l, p) > 5000)); // 与核心全部 >5km
-        const dedupedRegion = distinct.filter((p, i) => !distinct.slice(0, i).some(q => haversineM(q, p) < 2000)); // 地区点间互去重(2km，保留武陵源等密集区子景点)
-        const regionFinal = dedupedRegion; // 保留子景点(武陵源的天子山/袁家界/金鞭溪等), 让武陵源区域在路线中内容充实
+        const regionScenics = await gaodeRegionScenics(destRegion); // 市级知名景点（types过滤，干净）
+        // 网络搜索式：用 AI 知识列出地区著名景点/知名景区著名子景点，再逐个用高德校验坐标。
+        // 比在高德杂音里过滤更可靠——AI 知道袁家界/金鞭溪/十里画廊/百龙天梯等名胜名，高德负责确认真实坐标。
+        let aiAttractions: string[] = [];
+        try {
+          const rr2 = await deepseek([
+            { role: "system", content: "你是中国旅游专家。只返回JSON。" },
+            { role: "user", content: `目的地：${destName}（${destRegion}）。列出该地区除\"${destName}\"自身外、最值得一游的著名独立景点，以及 ${destName} 所在知名景区的著名子景点。只列真实存在、广为人知的著名景点（示例：若在张家界武陵源，则含天子山、黄石寨、杨家界、袁家界、金鞭溪、十里画廊、百龙天梯、水绕四门、宝峰湖、黄龙洞、张家界大峡谷）。8-15 个。JSON: {\"attractions\":[\"名称1\",\"名称2\"]}` },
+          ]);
+          aiAttractions = (rr2.attractions || []).map(String).filter(Boolean);
+        } catch (e) { /* AI 提议失败不阻断 */ }
+        const nameSeen = new Set<string>();
+        const regionFinal: { lng: number; lat: number; name: string }[] = [];
+        for (const p of regionScenics) {
+          if (!nameSeen.has(p.name)) { nameSeen.add(p.name); regionFinal.push(p); }
+        }
+        for (const name of aiAttractions) {
+          if (nameSeen.has(name)) continue;
+          const c = await gaode(name, destRegion);
+          if (!c || !c.lat) continue;
+          if (locs.some(l => haversineM(l, c) < 5000)) continue; // 距核心太近 → 非独立地区点
+          const n = c.name || name;
+          if (nameSeen.has(n)) continue;
+          nameSeen.add(n);
+          regionFinal.push({ lng: c.lng, lat: c.lat, name: n });
+        }
         if (regionFinal.length >= 3) {
           const addN = Math.min(20, regionFinal.length); // 最多并入20个地区景点（用户上限，不超20）
           for (const p of regionFinal.slice(0, addN)) {
@@ -390,7 +418,7 @@ Deno.serve(async (req: Request) => {
     for (let attempt = 0; attempt < 2 && routes.length < routeReqs.length; attempt++) {
       const rr = await deepseek([
         { role: "system", content: "你是旅游路线规划师。只返回JSON。" },
-        { role: "user", content: `${destName}路线。可选地点（id: 名称）: ${locs.map(l => `${l.id}: ${l.name}`).join(", ")}\n\n按序严格生成 ${routeReqs.length} 条路线：\n${routeReqText}\n\n要求：\n1. 每条路线覆盖其主题对应的地点，形成完整行程（从某入口/索道进 → 逐点游览 → 出口/索道出）。\n2. narrative 各写 150-300 字完整行程描述：从哪个入口/索道进、每段用什么交通（徒步/索道/观光车）、依次经过哪些地点、从哪里出。narrative 中必须写地点的中文名（如"玉京峰"），严禁写 id 代号。\n3. **路线覆盖以"景区/大区域"为容量单位，每个主要景区（如天门山、武陵源、黄龙洞、大峡谷）各需约一整天**：按地点名称归组到所属景区（如\"天门山国家森林公园-鬼谷栈道\"属于天门山景区）。1日精华游只含目的地核心景区（≤6 站）；2日全景游只含 2 个景区（核心景区 + 紧邻主景区，如天门山+武陵源，共 ≤10 站，narrative 明确第1天/第2天各去哪）；主题游含全部景区（narrative 按景区数安排天数）。**严禁把 3 个以上景区塞进 2 日游**；**若某景区距核心景区 >40km（如张家界大峡谷、黄龙洞与天门山相距甚远），不得放入 1日/2日游，只能放入主题游**。\n4. **主题游必须包含目的地核心景点**；1日精华/2日全景/主题游覆盖范围逐步扩大且互补（精华⊂全景⊂主题游）。\n5. 地点少时压缩天数，严禁编造不存在的多日行程。\n6. stops 只能从上面给出的 id 中逐字复制，必须出现在上面列表中，严禁自创、改动或使用列表外的 id。\n7. 路线条数必须与上述完全一致（${routeReqs.length} 条），缺一不可。\nJSON: {"routes":[{"day_label":"","title":"","stops":["id1","id2"],"narrative":"完整行程描述"}]}` },
+        { role: "user", content: `${destName}路线。可选地点（id: 名称）: ${locs.map(l => `${l.id}: ${l.name}`).join(", ")}\n\n按序严格生成 ${routeReqs.length} 条路线：\n${routeReqText}\n\n要求：\n1. 每条路线覆盖其主题对应的地点，形成完整行程（从某入口/索道进 → 逐点游览 → 出口/索道出）。\n2. narrative 各写 150-300 字完整行程描述：从哪个入口/索道进、每段用什么交通（徒步/索道/观光车）、依次经过哪些地点、从哪里出。narrative 中必须写地点的中文名（如"玉京峰"），严禁写 id 代号。\n3. **路线覆盖以"景区/大区域"为容量单位，每个主要景区（如天门山、武陵源、黄龙洞、大峡谷）各需约一整天**：按地点名称归组到所属景区（如\"天门山国家森林公园-鬼谷栈道\"属于天门山景区）。1日精华游只含目的地核心景区（≤6 站）；2日全景游只含 2 个景区（核心景区 + 紧邻主景区，如天门山+武陵源，共 ≤10 站，narrative 明确第1天/第2天各去哪）；主题游含全部景区（narrative 按景区数安排天数）。**严禁把 3 个以上景区塞进 2 日游**；**若某景区距核心景区 >40km（如张家界大峡谷、黄龙洞与天门山相距甚远），不得放入 1日/2日游，只能放入主题游**。\n4. **主题游必须包含目的地核心景点**；1日精华/2日全景/主题游覆盖范围逐步扩大且互补（精华⊂全景⊂主题游）。\n5. 地点少时压缩天数，严禁编造不存在的多日行程。\n6. stops 数组顺序必须与 narrative 中的实际游览顺序一致（入口/索道在前，依次游览，出口/索道在后）；stops 只能从上面给出的 id 中逐字复制，严禁自创或使用列表外的 id。\n7. 路线条数必须与上述完全一致（${routeReqs.length} 条），缺一不可。\nJSON: {"routes":[{"day_label":"","title":"","stops":["id1","id2"],"narrative":"完整行程描述"}]}` },
       ]);
       // Route stop validation: resolve and report mismatches
       const allRoutes = (rr.routes || []).map((r: any, i: number) => {
@@ -406,7 +434,7 @@ Deno.serve(async (req: Request) => {
           id: `${scope}-r${i + 1}`,
           day_label: String(r.day_label || ""),
           title: String(r.title || `路线${i + 1}`),
-          stops: reorderByProximity(resolved),
+          stops: resolved, // 信任 AI 的游览顺序（入口/索道在前），不按地理重排
           narrative: typeof r.narrative === "string" ? r.narrative : "",
           sort_order: i,
         };
