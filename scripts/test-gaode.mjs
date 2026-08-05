@@ -24,6 +24,7 @@ function loadKey() {
 const GAODE_KEY = loadKey();
 
 const PROV_PREFIX = /^(北京|天津|上海|重庆|河北|山西|辽宁|吉林|黑龙江|江苏|浙江|安徽|福建|江西|山东|河南|湖北|湖南|广东|海南|四川|贵州|云南|陕西|甘肃|青海|台湾|内蒙古|广西|西藏|宁夏|新疆|香港|澳门)/;
+const PROV_EXACT = /^(北京|天津|上海|重庆|河北|山西|辽宁|吉林|黑龙江|江苏|浙江|安徽|福建|江西|山东|河南|湖北|湖南|广东|海南|四川|贵州|云南|陕西|甘肃|青海|台湾|内蒙古|广西|西藏|宁夏|新疆|香港|澳门)$/;
 function splitRegion(t) {
   const sheng = t.indexOf("省");
   if (sheng > -1) return { prov: t.slice(0, sheng + 1), city: t.slice(sheng + 1) };
@@ -66,9 +67,12 @@ function regionMatch(geo, targetRegion) {
 }
 
 // 与 index.ts gaode() 一致的逻辑（名称重叠过滤 + 类型优先 + 限流重试 + 兜底放宽）
-async function gaode(name, destCity) {
+async function gaode(name, destCity, bias) {
   const kw = encodeURIComponent(name);
-  const cityParam = encodeURIComponent((splitRegion(destCity).city || destCity).replace(/[市]$/g, ""));
+  const biasParam = bias ? `&location=${bias.lng},${bias.lat}` : "";
+  const rawCity = (splitRegion(destCity).city || destCity).replace(/[市]$/g, "");
+  const cityIsProvince = !!rawCity && PROV_EXACT.test(rawCity.replace(/省$/g, ""));
+  const cityPart = cityIsProvince ? "" : `&city=${encodeURIComponent(rawCity)}&citylimit=true`;
   const overlaps = (pois) => pois.filter((p) => p.name?.includes(name) || name.includes(p.name || ""));
   const preferScenic = (pois) => {
     const s = pois.filter((p) => /风景名胜|旅游景点|名胜|景区|公园/.test(p.type || ""));
@@ -77,7 +81,7 @@ async function gaode(name, destCity) {
   const query = async (types) => {
     const typesParam = types ? `&types=${encodeURIComponent(types)}` : "";
     for (let attempt = 0; attempt < 2; attempt++) {
-      const r = await fetch(`https://restapi.amap.com/v3/place/text?keywords=${kw}&city=${cityParam}&key=${GAODE_KEY}${typesParam}&citylimit=true`, { signal: AbortSignal.timeout(30000) });
+      const r = await fetch(`https://restapi.amap.com/v3/place/text?keywords=${kw}${cityPart}&key=${GAODE_KEY}${typesParam}${biasParam}`, { signal: AbortSignal.timeout(30000) });
       const d = await r.json();
       if (d.info === "CUQPS_HAS_EXCEEDED_THE_LIMIT") { await new Promise((r2) => setTimeout(r2, 300)); continue; }
       return (d.pois || []).filter((p) => !/省.*市/.test(p.name || ""));

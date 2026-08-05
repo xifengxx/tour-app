@@ -43,13 +43,18 @@ async function deleteRows(table: string, tourId: string) {
   if (!res.ok) throw new Error(`DELETE ${table}: ${res.status} ${await res.text()}`);
 }
 
-async function gaode(name: string, destCity: string) {
+async function gaode(name: string, destCity: string, bias?: { lng: number; lat: number }) {
   const kw = encodeURIComponent(name);
   // 高德 city 参数只接受城市名/adcode，不能是"省+市"。
   // "安徽省黄山市" → "黄山"；否则 citylimit=true 被静默忽略，全国同名点乱入。
-  const cityParam = encodeURIComponent((splitRegion(destCity).city || destCity).replace(/[市]$/g, ""));
-  // 不做 location 偏置：目的地地理编码可能偏到行政中心（如"三清山"被编码到上饶市区，距真景点 50km），
-  // 偏置反而排挤真景点。靠城市限定 + 类型过滤 + 后续聚类离群点剔除保证质量。
+  // location 位置偏置：目的地地区是裸省名（如"四川"）时 city 无效 → 全省搜索会把
+  // "祖师殿/朝阳洞/老君阁"解析到全省同名错点（广汉/遂宁）。传入目的地坐标可让高德优先返回其周边同名点。
+  const biasParam = bias ? `&location=${bias.lng},${bias.lat}` : "";
+  // city 只接受真实城市名：裸省名（四川/江西/河南省）时 city 无效且 citylimit=true 会压过 location 偏置
+  // （实测 city=四川 + bias=青城山 仍把"朝阳洞"解析到遂宁 105.17）→ 不带 city，靠偏置定位。
+  const rawCity = (splitRegion(destCity).city || destCity).replace(/[市]$/g, "");
+  const cityIsProvince = !!rawCity && PROV_EXACT.test(rawCity.replace(/省$/g, ""));
+  const cityPart = cityIsProvince ? "" : `&city=${encodeURIComponent(rawCity)}&citylimit=true`;
   // 名称重叠过滤：高德文本搜索 top 常是同景区相关点（搜"袁家界"→"杨家界乘车处"、"十里画廊"→"索溪峪"），
   // 必须要求 POI 名称真正包含目标名，否则会把袁家界放到杨家界坐标。
   const overlaps = (pois: any[]) => pois.filter((p: any) => p.name?.includes(name) || name.includes(p.name || ""));
@@ -62,7 +67,7 @@ async function gaode(name: string, destCity: string) {
     const typesParam = types ? `&types=${encodeURIComponent(types)}` : "";
     // 高德限流(CUQPS_HAS_EXCEEDED_THE_LIMIT)在连续查询时高频出现 → 延迟 300ms 重试一次
     for (let attempt = 0; attempt < 2; attempt++) {
-      const r = await fetch(`https://restapi.amap.com/v3/place/text?keywords=${kw}&city=${cityParam}&key=${GAODE_KEY}${typesParam}&citylimit=true`, { signal: AbortSignal.timeout(30000) });
+      const r = await fetch(`https://restapi.amap.com/v3/place/text?keywords=${kw}${cityPart}&key=${GAODE_KEY}${typesParam}${biasParam}`, { signal: AbortSignal.timeout(30000) });
       const d = await r.json();
       if (d.info === "CUQPS_HAS_EXCEEDED_THE_LIMIT") { await new Promise(r2 => setTimeout(r2, 300)); continue; }
       return (d.pois || []).filter((p: any) => !/省.*市/.test(p.name || ""));
@@ -83,9 +88,13 @@ async function gaode(name: string, destCity: string) {
 
 // 查询目的地区域（城市）的知名风景/旅游景点，用于自动补地区景点 → 组主题游。
 // 确定性来源，不依赖 AI 判断；配合离群去重，只保留与核心距离 >5km 的独立景点。
-async function gaodeRegionScenics(city: string): Promise<{ lng: number; lat: number; name: string }[]> {
-  const cityParam = encodeURIComponent((splitRegion(city).city || city).replace(/[市]$/g, ""));
-  const r = await fetch(`https://restapi.amap.com/v3/place/text?city=${cityParam}&key=${GAODE_KEY}&types=风景名胜|旅游景点&citylimit=true&offset=30`, { signal: AbortSignal.timeout(30000) });
+async function gaodeRegionScenics(city: string, bias?: { lng: number; lat: number }): Promise<{ lng: number; lat: number; name: string }[]> {
+  // 与 gaode() 同规则：裸省名时不带 city（无效且压过 location 偏置）
+  const rawCity = (splitRegion(city).city || city).replace(/[市]$/g, "");
+  const cityIsProvince = !!rawCity && PROV_EXACT.test(rawCity.replace(/省$/g, ""));
+  const cityPart = cityIsProvince ? "" : `city=${encodeURIComponent(rawCity)}&citylimit=true&`;
+  const biasParam = bias ? `&location=${bias.lng},${bias.lat}` : "";
+  const r = await fetch(`https://restapi.amap.com/v3/place/text?${cityPart}key=${GAODE_KEY}&types=风景名胜|旅游景点&offset=30${biasParam}`, { signal: AbortSignal.timeout(30000) });
   if (!r.ok) return [];
   const d = await r.json();
   return (d.pois || [])
@@ -112,6 +121,8 @@ const ANCHOR_CAP = 12;         // 每锚点子景点上限
 const SUB_TOTAL_CAP = 10;      // 全局子景点上限（控制内容生成长度）
 const SUB_DEDUP_M = 300;       // 子景点坐标去重阈值：1000m 会把真子景点误杀（百龙天梯距张家界森林公园仅 700m、
                                // 袁家界距金鞭溪仅 900m 都被当成同一地点剔除）。300m 只去重真正的同点 POI。
+const REGION_RADIUS = 60000;   // 地区合并只收核心周边 60km 内：防目的地地区是裸省名（如"四川"）时
+                               // 把九寨沟/四姑娘山/峨眉山/泸沽湖（150-500km）整个省的名胜拉进主题游/2日游
 // 设施排除：只杀无歧义非景点节点，勿杀 台/桥/亭/塔/门（迷魂台/天下第一桥/水绕四门是真景点）
 const FACILITY_RE = /停车场|售票处|售票点|售票大厅|检票口|检票|乘车处|候车(?:处|亭|室)|索道(?:上站|下站|中站|入口|出口|站)?$|缆车$|观光车(?:站|场|停靠点)|游客中心|游客服务(?:点|中心)?|服务区|服务站|服务中心|管理处|管委会|委员会|居委会|村委会|派出所|加油站|银行|超市|商店|小卖部|商业街|饭店|餐厅|宾馆|酒店|客栈|民宿|山庄|农家乐|厕所|卫生间|洗手间|公厕|入口$|出口$|北门|南门|东门|西门|中门|大门|广场$|车站$|码头$|步道$|栈道$|观景台$|平台$|通道|门店|店\)|店$|综合服务|街道|步行街|(?<!故)居$|邮政|快递|营业厅|窗口|咨询台|工会|党员|人社|村委会/;
 
@@ -269,6 +280,8 @@ async function regeo(lng: number, lat: number) {
 // "安徽省黄山市" → {prov:"安徽省", city:"黄山市"}; "黄山市" → {prov:"", city:"黄山市"}
 // "湖南张家界"（省名+市名连写，无"省/市"分隔符）→ {prov:"湖南", city:"张家界"}
 const PROV_PREFIX = /^(北京|天津|上海|重庆|河北|山西|辽宁|吉林|黑龙江|江苏|浙江|安徽|福建|江西|山东|河南|湖北|湖南|广东|海南|四川|贵州|云南|陕西|甘肃|青海|台湾|内蒙古|广西|西藏|宁夏|新疆|香港|澳门)/;
+// 是否整个串就是一个省级区划名（用于判定"城市"其实是裸省名 → 高德 city 参数无效）
+const PROV_EXACT = /^(北京|天津|上海|重庆|河北|山西|辽宁|吉林|黑龙江|江苏|浙江|安徽|福建|江西|山东|河南|湖北|湖南|广东|海南|四川|贵州|云南|陕西|甘肃|青海|台湾|内蒙古|广西|西藏|宁夏|新疆|香港|澳门)$/;
 function splitRegion(t: string) {
   const sheng = t.indexOf("省");
   if (sheng > -1) return { prov: t.slice(0, sheng + 1), city: t.slice(sheng + 1) };
@@ -393,6 +406,10 @@ Deno.serve(async (req: Request) => {
     const src = tour.source?.rawText || "";
     console.log(`Processing: ${tour.title}, ${src.length} chars`);
 
+    // 目的地坐标：作所有高德搜索的 location 位置偏置。目的地地区是裸省名（如"四川"）时，
+    // 没有偏置会把"祖师殿/朝阳洞/老君阁"等常见名解析到全省同名错点。
+    const destLoc = destName ? await gaode(destName, destRegion).catch(() => null) : null;
+
     // 副标题：用户创建导览时没填 → AI 生成（短输出、与提取并行，不占关键路径）
     const subtitlePromise = (tour.subtitle || "").trim() ? Promise.resolve(null)
       : deepseek([
@@ -412,7 +429,7 @@ Deno.serve(async (req: Request) => {
     const locs: any[] = [];
     // 与提取并行的地区准备：AI 提议知名景点 + 高德地区查询（与核心提取互不依赖，提前并发省 ~15s）
     const regionPrep = destRegion ? (async () => {
-      const regionScenics = await gaodeRegionScenics(destRegion).catch(() => []);
+      const regionScenics = await gaodeRegionScenics(destRegion, destLoc || undefined).catch(() => []);
       let aiFromPrep: string[] = [];
       try {
         const rr2 = await deepseek([
@@ -425,7 +442,7 @@ Deno.serve(async (req: Request) => {
     })() : Promise.resolve({ regionScenics: [], aiAttractions: [] as string[] });
     // 并行校验（原串行：12 地点 × gaode+regeo 两次往返 ≈ 10-20s，会吃满 60s 预算）
     const extract = await mapLimit(lr.locations || [], 6, async (l: any) => {
-      const c = await gaode(l.name, destRegion);
+      const c = await gaode(l.name, destRegion, destLoc || undefined);
       if (!c || !c.lat) return { warn: `⚠️ "${l.name}" 未找到坐标，已跳过`, loc: null as any };
       // Verify coordinate is in the target region
       const geo = await regeo(c.lng, c.lat);
@@ -492,7 +509,7 @@ Deno.serve(async (req: Request) => {
         const nameSeen = new Set<string>();
         const regionFinal: { lng: number; lat: number; name: string }[] = [];
         const aiPts = await mapLimit(aiAttractions.filter(n => !nameSeen.has(n)), 5, async (name: string) => {
-          const c = await gaode(name, destRegion);
+          const c = await gaode(name, destRegion, destLoc || undefined);
           if (!c || !c.lat) return null;
           if (locs.some(l => haversineM(l, c) < 5000)) return null; // 距核心太近 → 非独立地区点
           return { lng: c.lng, lat: c.lat, name: c.name || name };
@@ -513,6 +530,14 @@ Deno.serve(async (req: Request) => {
           nameSeen.add(p.name);
           regionFinal.push(p);
         }
+        // 半径过滤：只并核心周边 REGION_RADIUS 内的地区点（目的地地区是裸省名如"四川"时，
+        // 高德/AI 会把九寨沟/四姑娘山/峨眉山等整个省的名胜拉进来，150-500km 必须剔除）
+        const coreCenter = locs.reduce((acc, l) => ({ lng: acc.lng + l.lng, lat: acc.lat + l.lat }), { lng: 0, lat: 0 });
+        const coreN = locs.length || 1;
+        const center = { lng: coreCenter.lng / coreN, lat: coreCenter.lat / coreN };
+        const near = regionFinal.filter(p => haversineM(center, p) <= REGION_RADIUS);
+        regionFinal.length = 0;
+        regionFinal.push(...near);
         if (regionFinal.length >= 3) {
           const addN = Math.min(20, regionFinal.length); // 最多并入20个地区景点（用户上限，不超20）
           for (const p of regionFinal.slice(0, addN)) {
@@ -559,11 +584,13 @@ Deno.serve(async (req: Request) => {
     const coreAnchor = anchors.find(a => destName && (a.name.includes(destName) || destName.includes(a.name)))
       || anchors[0] || null;
     const coreScenicName = coreAnchor?.scenicName || (destName || "");
+    // 主景区须为真实景区（≥2 个子点）。"独立"是兜底标签不是景区——若让它当主景区，2日 day-2
+    // 会被要求"只含独立景区站点"，把九寨沟/四姑娘山等远点全塞进来。无主景区时留空，2日 day-2 继续覆盖核心景区。
     const countByScenic = new Map<string, number>();
-    for (const l of locs) if (l.scenic && l.scenic !== coreScenicName) countByScenic.set(l.scenic, (countByScenic.get(l.scenic) || 0) + 1);
+    for (const l of locs) if (l.scenic && l.scenic !== coreScenicName && l.scenic !== "独立") countByScenic.set(l.scenic, (countByScenic.get(l.scenic) || 0) + 1);
     let mainScenicName = "", maxC = -1;
     for (const [k, v] of countByScenic) if (v > maxC) { maxC = v; mainScenicName = k; }
-    if (!mainScenicName) { const nc = anchors.find(a => a.scenicName !== coreScenicName); mainScenicName = nc?.scenicName || ""; }
+    if (maxC < 2) mainScenicName = ""; // 没有 ≥2 子景区的非核心景区 → 无主景区
 
     // 3+4. Content 与 Routes 并行生成（互不依赖：路线只用 locs/id，内容独立按 loc 分批）。
     // 串行 4-6 个 DeepSeek 调用会吃满 Edge Function 60s 预算 → 两者并发，各内部再并行。
@@ -588,7 +615,7 @@ Deno.serve(async (req: Request) => {
     const novelName = String(tour.source?.title || tour.source?.novelTitle || '');
     const routeReqs = [
       { label: "1日精华游", desc: "目的地核心必看景点，1天内完成（≤6 站）" },
-      ...(locs.length >= 8 ? [{ label: "2日全景游", desc: `核心景区${coreScenicName ? `（${coreScenicName}）` : ''}第1天 + 主景区${mainScenicName ? `（${mainScenicName}）` : '（子景点最多的非核心景区）'}第2天；第2天只含主景区全部著名子景点（可达 6-8 站）` }] : []),
+      ...(locs.length >= 8 ? [{ label: "2日全景游", desc: `核心景区${coreScenicName ? `（${coreScenicName}）` : ''}第1天 + ${mainScenicName ? `主景区${mainScenicName}第2天，覆盖其全部著名子景点` : `第2天继续覆盖核心景区${coreScenicName}的其余著名子景点（不重复第1天）`}（可达 6-8 站）` }] : []),
       ...(hasRegionTour ? [{ label: "主题游", desc: "完整地区行程：目的地核心景点 + 地区其他知名景点（如天门山+武陵源+黄龙洞+大峡谷），narrative 可写 3 天" }] : []),
       ...(isNovelBased ? [{ label: "文学巡礼线", desc: `跟随小说《${novelName}》的情节场景顺序游览相关地点` }] : []),
     ];
@@ -600,7 +627,7 @@ Deno.serve(async (req: Request) => {
    - 主景区 = "${mainScenicName}"：2日全景游第2天**只含景区"${mainScenicName}"的站点**，覆盖该景区全部著名子景点（袁家界、十里画廊、水绕四门、天子山、黄石寨、杨家界、金鞭溪、百龙天梯等，可达 6-8 站）。
    - **其他独立景区（标注"（景区:XXX）"且 XXX 不是"${coreScenicName}"也不是"${mainScenicName}"的，如七星山、黄龙洞、大峡谷等）只能放入主题游，严禁放入 1日/2日游**；若某独立景区距核心景区 >40km，同样只进主题游。
    - 每个子景点只能出现在其所属景区的那一天；每天 ≤8 站、总 ≤14，narrative 明确第1天/第2天各去哪。`
-      : `3. **以"景区"为容量单位**：1日精华游、2日全景游第1天只含核心景区"${coreScenicName}"的站点（≤6 站）；2日第2天为主景区（子景点最多的非核心景区），只含主景区站点并覆盖其全部著名子景点（可达 6-8 站）；**其他独立景区（标注"（景区:XXX）"且 XXX 不是核心景区的，如七星山、黄龙洞、大峡谷）只能放入主题游，严禁放入 1日/2日游**。每天 ≤8 站、总 ≤14，narrative 明确第1天/第2天各去哪。`;
+      : `3. **以"景区"为容量单位**：1日精华游、2日全景游第1天只含核心景区"${coreScenicName}"的站点（≤6 站）；**2日全景游第2天继续覆盖核心景区"${coreScenicName}"的其余著名子景点（不重复第1天，可达 6-8 站），附近的主要景区（如都江堰）若顺路可并入**；**其他独立景区（标注"（景区:XXX）"且 XXX 不是核心景区的，如九寨沟、四姑娘山、峨眉山等）只能放入主题游，严禁放入 1日/2日游**；**严禁在 1日/2日游放入距核心景区 >50km 的地点**。每天 ≤8 站、总 ≤14，narrative 明确第1天/第2天各去哪。`;
 
     const [contentById, routes] = await Promise.all([
       // 3. Content：按 ~8 个分批、并发生成（子景点并入后 locs 可达 25-40；单次输出超 max_tokens=8192 会截断 JSON → 分批）
