@@ -32,6 +32,26 @@ const applyPinStyle = (m, loc, isSel) => {
   m.setzIndex(isSel ? 500 : 100);
 };
 
+// 路线渐绘：选中路线时像运笔一样画出。animToken 防止切换路线时旧动画残留半截线
+const animateDraw = (rp, fullPath, duration = 900) => {
+  rp.animToken = (rp.animToken || 0) + 1;
+  const token = rp.animToken;
+  if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
+    rp.polyline.setPath(fullPath);
+    return;
+  }
+  const start = performance.now();
+  const tick = (now) => {
+    if (rp.animToken !== token) return; // 被新的选择打断
+    const t = Math.min((now - start) / duration, 1);
+    const eased = 1 - (1 - t) ** 2;
+    const n = Math.max(2, Math.round(2 + (fullPath.length - 2) * eased));
+    rp.polyline.setPath(fullPath.slice(0, n));
+    if (t < 1) requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+};
+
 export default function TourView() {
   const { tourId } = useParams();
   const navigate = useNavigate();
@@ -155,7 +175,8 @@ export default function TourView() {
           });
           routePolylinesRef.current[route.id] = {
             polyline: poly, route,
-            color: ROUTE_COLORS[ri % ROUTE_COLORS.length]
+            color: ROUTE_COLORS[ri % ROUTE_COLORS.length],
+            path, // 完整路径，渐绘动画/打断恢复用
           };
         }
       });
@@ -190,9 +211,11 @@ export default function TourView() {
     setCurrentLoc(loc);
     setCurrentLayer(firstLayerIdRef.current); // 用导览第一个内容层，而非硬编码 novel
     setShowCard(true);
-    if (mapInstance.current) {
-      mapInstance.current.setCenter([loc.lng, loc.lat]);
-      mapInstance.current.setZoom(16);
+    const map = mapInstance.current;
+    if (map) {
+      if (map.panTo) map.panTo([loc.lng, loc.lat]); // 平滑移动，比 setCenter 瞬移更有翻卷感
+      else map.setCenter([loc.lng, loc.lat]);
+      map.setZoom(16);
     }
   }, []);
 
@@ -202,6 +225,8 @@ export default function TourView() {
       setCurrentLoc(null);
       markersRef.current.forEach(m => m.setOptions({ opacity: 1 }));
       Object.values(routePolylinesRef.current).forEach(rp => {
+        rp.animToken = (rp.animToken || 0) + 1; // 打断进行中的渐绘
+        if (rp.path) rp.polyline.setPath(rp.path); // 恢复完整路径
         rp.polyline.setOptions({ strokeOpacity: 0.6, strokeWeight: 4 });
         rp.polyline.show();
       });
@@ -229,6 +254,9 @@ export default function TourView() {
       markersRef.current.forEach(m => {
         m.setOptions({ opacity: stopIds.includes(m._locData?.id) ? 1 : 0.2 });
       });
+      // 运笔渐绘：选中的路线从第一站画出
+      const rp = routePolylinesRef.current[newId];
+      if (rp?.path) animateDraw(rp, rp.path);
       const map = mapInstance.current;
       if (!map) return;
       const firstLoc = locByIdRef.current[route.stops[0]];
@@ -237,6 +265,10 @@ export default function TourView() {
       }
     } else {
       markersRef.current.forEach(m => m.setOptions({ opacity: 1 }));
+      Object.values(routePolylinesRef.current).forEach(rp => {
+        rp.animToken = (rp.animToken || 0) + 1;
+        if (rp.path) rp.polyline.setPath(rp.path);
+      });
       if (mapInstance.current) mapInstance.current.setFitView();
     }
   }, [currentRouteId]);
@@ -298,7 +330,7 @@ export default function TourView() {
         </div>
 
         {showCard && (
-          <>
+          <div className="anim-content flex flex-col flex-1 min-h-0">
             {/* Route narrative · 卷首语：完整行程描述（入口/交通方式/出口） */}
             {activeRoute?.narrative && (
               <div className="px-4 pb-2">
@@ -312,7 +344,7 @@ export default function TourView() {
                 <button
                   key={loc.id}
                   onClick={() => selectLoc(loc)}
-                  className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs whitespace-nowrap transition-colors
+                  className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs whitespace-nowrap transition-all hover:-translate-y-px
                     ${currentLoc?.id === loc.id ? 'bg-primary/15 text-primary border border-primary/30' : 'bg-black/[0.04] text-muted-foreground border border-transparent'}`}
                 >
                   <span className={`font-serif font-semibold mr-1 ${currentLoc?.id === loc.id ? 'text-primary' : 'text-gamboge'}`}>{cnOrdinal(i)}</span>
@@ -340,7 +372,7 @@ export default function TourView() {
                 </div>
               </div>
             )}
-          </>
+          </div>
         )}
       </div>
 

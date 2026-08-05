@@ -107,7 +107,14 @@
 | `.anim-seal-pulse` | 朱印呼吸（ProcessingPhase 研墨展卷） |
 | `.anim-ink` | 墨线流动（ProcessingPhase 进度条） |
 | `.anim-content` | 翻页式淡入（切换地点/内容层，key 重挂载触发） |
+| `.btn-press` | 按钮按压感（active scale 0.965 回弹） |
 | `.book-card` | 导览卡 hover 浮出双线框（outline 3px offset，如书页出函套） |
+
+**组件动效约定**（JS 侧）：
+- 朱印盖印入场：`<SealLogo animate />`（首页 hero / Login）；`.seal:hover` 轻摆（盖印动画播放时不叠加）
+- tab / 卡片标题：朱砂下划线 `scale-x` 从左展开（300ms）
+- 地图：`selectLoc` 用 `map.panTo` 平滑移动（不瞬移）；选中路线时 polyline **运笔渐绘**（`animateDraw`，rAF + easeOut，`animToken` 防打断残留半截线，deselect 恢复完整 path）
+- 手卷卡片展开：`.anim-content` 包裹内容区，展开时整区淡入
 | `.gold-hairline` | 金泥细线（导航栏底部分隔） |
 | `.rule-ornament` | 菱形饰线分隔 — ◆ —（hero 与区块之间） |
 

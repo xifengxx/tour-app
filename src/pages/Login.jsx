@@ -44,7 +44,7 @@ export default function Login() {
       <div className="w-full max-w-sm anim-rise">
         <div className="text-center mb-8">
           <div className="flex justify-center mb-4">
-            <SealLogo size={52} />
+            <SealLogo size={52} animate />
           </div>
           <h1 className="text-3xl font-serif font-black tracking-wide text-foreground mb-2">文学巡礼</h1>
           <p className="font-kai text-muted-foreground text-sm">

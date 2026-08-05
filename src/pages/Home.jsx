@@ -164,7 +164,9 @@ export default function Home() {
         <div className="absolute left-0 top-0 bottom-0 w-[3px] bg-primary/85 transition-all duration-200 group-hover:w-[5px]" />
         <div className="p-5 pl-6">
           {/* 标题留右侧空间给「已发布 + ⋮」徽标区，避免重叠 */}
-          <h2 className={`text-lg font-serif font-bold text-foreground leading-snug mb-1.5 group-hover:text-primary transition-colors ${isMyTour ? 'pr-28' : 'pr-8'}`}>{tour.title}</h2>
+          <h2 className={`relative text-lg font-serif font-bold text-foreground leading-snug mb-1.5 group-hover:text-primary transition-colors
+            after:absolute after:left-0 after:-bottom-0.5 after:h-[2px] after:w-0 after:bg-primary/70 after:transition-all after:duration-300 group-hover:after:w-10
+            ${isMyTour ? 'pr-28' : 'pr-8'}`}>{tour.title}</h2>
           <p className="text-sm text-muted-foreground mb-4 line-clamp-2 leading-relaxed">{tour.subtitle}</p>
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs text-muted-foreground">
             <span className="inline-flex items-center gap-1">
@@ -258,7 +260,7 @@ export default function Home() {
 
           <div className="flex-1 text-center anim-rise">
             <div className="flex items-center justify-center gap-3.5 mb-2.5">
-              <SealLogo size={44} />
+              <SealLogo size={44} animate />
               <h1 className="font-serif font-black text-4xl sm:text-[2.6rem] tracking-[0.12em] text-foreground">文学巡礼</h1>
             </div>
             <p className="text-[11px] tracking-[0.35em] text-muted-foreground uppercase">
@@ -291,8 +293,9 @@ export default function Home() {
                   className="relative rounded-none px-1 pt-1 pb-2.5 text-sm font-serif font-semibold text-muted-foreground shadow-none
                     data-[state=active]:bg-transparent data-[state=active]:text-primary data-[state=active]:shadow-none
                     hover:text-foreground transition-colors
-                    after:absolute after:left-0 after:right-0 after:-bottom-px after:h-[2px] after:bg-transparent
-                    data-[state=active]:after:bg-primary"
+                    after:absolute after:left-0 after:right-0 after:-bottom-px after:h-[2px] after:bg-primary
+                    after:origin-left after:scale-x-0 after:transition-transform after:duration-300
+                    data-[state=active]:after:scale-x-100"
                 >
                   <Icon className="h-3.5 w-3.5 mr-1.5 opacity-80" />
                   {label}
@@ -303,7 +306,7 @@ export default function Home() {
             {user && (
               <button
                 onClick={() => navigate('/create')}
-                className="flex items-center gap-1 px-3 py-2 mb-1 bg-primary text-primary-foreground rounded-lg text-xs font-semibold hover:bg-primary/90 transition-colors"
+                className="btn-press flex items-center gap-1 px-3 py-2 mb-1 bg-primary text-primary-foreground rounded-lg text-xs font-semibold hover:bg-primary/90"
               >
                 <Plus className="h-3 w-3" />
                 创建
@@ -343,7 +346,7 @@ export default function Home() {
                   <button
                     key={c}
                     onClick={() => setCategory(c)}
-                    className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs border transition-colors ${
+                    className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs border transition-all hover:-translate-y-px ${
                       category === c
                         ? 'bg-primary text-primary-foreground border-primary'
                         : 'bg-transparent text-muted-foreground border-border hover:border-primary/40 hover:text-foreground'

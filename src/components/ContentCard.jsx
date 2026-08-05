@@ -117,13 +117,13 @@ export default function ContentCard({ loc, layer, layers, onLayerChange, onShowD
         <div className="flex gap-2 mt-3">
           <button
             onClick={() => window.open(`https://uri.amap.com/marker?position=${loc.lng},${loc.lat}&name=${encodeURIComponent(loc.name)}`, '_blank')}
-            className="flex-1 py-3 bg-primary text-primary-foreground rounded-lg text-sm font-semibold flex items-center justify-center gap-1.5 hover:bg-primary/90 transition-colors"
+            className="btn-press flex-1 py-3 bg-primary text-primary-foreground rounded-lg text-sm font-semibold flex items-center justify-center gap-1.5 hover:bg-primary/90"
           >
             <Navigation className="h-4 w-4" /> 导航到这里
           </button>
           <button
             onClick={() => onShowDetail(true)}
-            className="flex-1 py-3 bg-black/[0.05] text-muted-foreground rounded-lg text-sm font-semibold flex items-center justify-center gap-1.5 hover:bg-black/[0.08] transition-colors"
+            className="btn-press flex-1 py-3 bg-black/[0.05] text-muted-foreground rounded-lg text-sm font-semibold flex items-center justify-center gap-1.5 hover:bg-black/[0.08]"
           >
             <BookOpen className="h-4 w-4" /> 查看全文
           </button>

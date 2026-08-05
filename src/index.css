@@ -165,6 +165,19 @@ body::after {
   box-shadow: inset 0 0 0 1px rgba(253, 249, 240, 0.4), inset 0 -2px 4px rgba(90, 20, 8, 0.25), 0 1px 2px rgba(28, 26, 22, 0.18);
   user-select: none;
   line-height: 1;
+  transition: transform 0.25s cubic-bezier(0.3, 1.3, 0.5, 1);
+}
+/* 印章 hover 轻摆（如印在手里掂了一下）；盖印动画播放时不叠加 */
+.seal:not(.anim-stamp):hover {
+  transform: rotate(1.5deg) scale(1.05);
+}
+
+/* 按钮按压感：active 微缩回弹 */
+.btn-press {
+  transition: transform 0.12s ease, background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.btn-press:active {
+  transform: scale(0.965);
 }
 
 /* 朱印（线框印章，如「已发布」状态戳） */
