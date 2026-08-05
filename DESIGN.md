@@ -13,6 +13,7 @@
 | Phase 1 门面 | NavBar（朱印 logo）+ Home（hero + 书页卡）+ Login | ✅ 完成 |
 | Phase 2 核心 | TourView（RouteBar / ContentCard / 底部手卷 / DetailModal）+ 路线国画五色 | ✅ 完成 |
 | Phase 3 收尾 | TourEdit/Review、其余弹窗、研墨展卷等待动画 | ✅ 完成 |
+| 海报重绘 | ShareModal 海报（`src/lib/poster.js`）按「纸上山河」整体重绘 | ✅ 完成 |
 
 > Phase 3 已落地：ProcessingPhase「研墨展卷」等待动画（朱印呼吸 + 墨线流动 + 竖排装饰）；步骤指示器改壹贰叁篆刻；saveMsg 类型化（去 ✅❌ emoji 判断）；海报/二维码/地图搜索弹窗色值同步新色板；全站 emoji 图标清零（内容数据中的 layer icon 除外）。触摸目标基线 36-44px 沿旧布局保留。
 
@@ -81,8 +82,12 @@
 | `.double-frame` | 古籍双线框（border + outline offset 3px） |
 | `.anim-rise` | 交错浮现（配合 `animationDelay` 做 stagger） |
 | `.anim-stamp` | 盖印动效（收藏 ❤ 盖章感） |
+| `.anim-seal-pulse` | 朱印呼吸（ProcessingPhase 研墨展卷） |
+| `.anim-ink` | 墨线流动（ProcessingPhase 进度条） |
 
 另：`body::before` 全局 4.5% 纸纹噪点（SVG feTurbulence data-URI），`pointer-events:none` 不影响交互。尊重 `prefers-reduced-motion`。
+
+> 方案中曾考虑 LXGW WenKai（霞鹜文楷）webfont，最终**弃用**：系统楷体栈（Kaiti SC/STKaiti）已够用，免外部 CDN 依赖。
 
 ## 5. 组件约定（Phase 1 后）
 
@@ -108,6 +113,26 @@
 | 路线五色 | `src/lib/routeColors.js` | 朱砂/黛青/赭石/苍绿/藤黄，选中 5px/80% 未选中 2px/15% |
 
 **原则不变**：地图上只有"灰 vs 朱砂"两态，绝不引入第三色。
+
+## 6.5 分享海报（`src/lib/poster.js` · canvas 600×1150）
+
+海报与页面同属「纸上山河」体系，复用 `routeColors.js` 常量，不引入页面之外的色值：
+
+| 区块 | 规范 |
+|------|------|
+| 版式 | 古籍双线框（外 2px + 内 1px，`#d8cfba`）；右缘极淡竖排「纸上山河」侧签（`#ddd5c1` 楷体） |
+| 品牌头 | 「巡」朱印（drawSeal：朱砂方印 + 白字 + 内描边 + 微旋转）+ spaced「文 学 巡 礼」 |
+| 标题 | Noto Serif SC 900 38px 居中 ≤2 行；副标题楷体 19px 暖灰 |
+| 统计行 | 朱砂/黛青小方点 + 衬线数字（不用 ★/🗺 emoji） |
+| 亮点地点 | 居中混排：壹贰叁朱砂序号 + 墨色名 + 藤黄小星（≤5 个，按重要度排序） |
+| 行程预览 | 国画五色圆点 + 朱砂天数（衬线）+ 标题（≤4 条） |
+| 二维码 | 双线框笺纸卡（`#fdfbf5`）；上方楷体「扫码开启你的文学之旅」 |
+| 落款 | 小朱印 + 「文学巡礼 · 跟着小说游山水」 |
+
+**绘制规则**：
+- `drawTourPoster` 为 **async**：先 `document.fonts.load`（上限 1.5s）再画，否则 canvas 落不到 Noto Serif SC / 楷体；调用方（ShareModal 下载流程）必须 `await`。
+- canvas 字体栈与页面 token 一致（`SERIF` / `KAI` / `SANS` 常量），章节小标用「— 文字 —」两侧饰线 + 端点菱形。
+- 内容超界用 `MAX_Y` 截断（地点/行程超行即停），二维码区与落款固定底部。
 
 ## 7. 卡片布局规则（我的导览）
 
