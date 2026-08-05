@@ -34,6 +34,7 @@
 | Phase 3 收尾 | TourEdit/Review、其余弹窗、研墨展卷等待动画 | ✅ 完成 |
 | 海报重绘 | ShareModal 海报（`src/lib/poster.js`）按「纸上山河」整体重绘 | ✅ 完成 |
 | v2 精进 | 质感层（纸边晕影/朱印渐变/品牌化选中·滚动条·焦点）+ hero 对联 + 翻页淡入 | ✅ 完成 |
+| 交互动效层 | 盖印入场/印章轻摆/下划线展开/按钮按压/panTo 平滑/路线运笔渐绘/手卷展开淡入 | ✅ 完成 |
 
 > v2 已落地：① `body::after` 陈年纸边晕影（radial-gradient，四角泛黄如旧卷天头地脚）；② `.seal` 朱印改径向渐变（印泥蘸色感 + 底部内阴影）；③ `::selection` 朱砂底白字、暖色细滚动条、`:focus-visible` 朱砂环；④ 首页 hero 改对联式双竖排（右上联「带着小说去旅行」/ 左下联「于山水间读江湖」，从右往左读）+ `.rule-ornament` 菱形饰线；⑤ 导航栏 `.gold-hairline` 金泥细线；⑥ 导览卡 `.book-card` hover 浮出双线框 + 书脊生长；⑦ 切换地点/内容层 `.anim-content` 翻页式淡入（key 重挂载触发）。
 
