@@ -238,6 +238,79 @@ function attachScenicTags(locs: any[], anchors: any[]) {
   return locs;
 }
 
+// ── 确定性路线站点规划（路线组成=代码算，AI 只写 narrative/排序）────────────────
+// 背景：路线站点曾由 DeepSeek 自由选择，AI 屡次不遵守景区分区规则（九寨沟/四姑娘山混入 2日、
+// 七星山混入 2日、2日=1日+2点）。站点组成必须确定性：1日=前山核心、2日=前山+后山、
+// 主题游=4热核心+统一地区景点。见 scripts/test-gaode.mjs 的 planRoutes 单测。
+const CLUSTER_R = 8000; // 地区景点聚类半径：后山/五龙沟/白云万佛洞 相距 ~2-3km 成一簇，都江堰独立成簇
+
+// 地区景点空间聚类：剔除与核心同坐标的重复点（青城山景区）→ 贪心聚类（距已有簇代表 <8km 并入）
+function clusterRegionPts(locs: any[], corePool: any[]) {
+  const pts = locs.filter((l: any) => (l.tags || []).includes("地区景点"))
+    .filter((p: any) => !corePool.some((c: any) => haversineM(c, p) < SUB_DEDUP_M));
+  const clusters: { rep: any; locs: any[] }[] = [];
+  for (const p of pts) {
+    const c = clusters.find((c) => haversineM(c.rep, p) < CLUSTER_R);
+    if (c) c.locs.push(p);
+    else clusters.push({ rep: p, locs: [p] });
+  }
+  return clusters;
+}
+
+// 簇代表：含 destName 前缀优先（青城后山 vs 五龙沟/白云万佛洞），否则 importance 高、名短
+function pickRep(cluster: { locs: any[] }, destName: string): any {
+  const d2 = destName.slice(0, 2);
+  return cluster.locs.slice().sort((a: any, b: any) =>
+    (b.importance || 3) - (a.importance || 3)
+    || ((b.name.startsWith(d2) ? 1 : 0) - (a.name.startsWith(d2) ? 1 : 0))
+    || (a.name.length - b.name.length)
+  )[0];
+}
+
+// 路线组成规划。ctx: { coreScenicName, mainScenicName, destName, isNovelBased, novelName, hasRegionTour }
+// 后山池（2日第2天）优先 mainScenicName（张家界：武陵源子景点 scan 时 scenic="武陵源"）；
+// 为空（青城山：青城后山非锚点、region 点全被吸进核心 scenic）→ 地区景点空间聚类最大簇（≥2）。
+function planRoutes(locs: any[], ctx: { coreScenicName: string; mainScenicName: string; destName: string; isNovelBased: boolean; novelName: string; hasRegionTour: boolean }) {
+  const isRegion = (l: any) => (l.tags || []).includes("地区景点");
+  const byImp = (a: any, b: any) => (b.importance || 3) - (a.importance || 3);
+  // 核心池 = 前山（非地区景点、scenic===核心）→ 青城山 8 点
+  const corePool = locs.filter((l: any) => !isRegion(l) && l.scenic === ctx.coreScenicName).sort(byImp);
+  // 后山池
+  let mainPool = ctx.mainScenicName ? locs.filter((l: any) => l.scenic === ctx.mainScenicName).sort(byImp) : [];
+  if (!mainPool.length) {
+    const clusters = clusterRegionPts(locs, corePool);
+    const big = clusters.slice().sort((a, b) => b.locs.length - a.locs.length)[0];
+    mainPool = big && big.locs.length >= 2 ? big.locs : [];
+  }
+  // 核心质心：判定后山池/统一景点是否「真正属于核心」的距离基准。
+  // 西岭雪山(45km)/安仁古镇(44km) 是另一片区域，不该当 2日 day2 或 主题游 主力 —— 需距离过滤。
+  const coreCenter = corePool.reduce((acc, l) => ({ lng: acc.lng + l.lng, lat: acc.lat + l.lat }), { lng: 0, lat: 0 });
+  const coreN = corePool.length || 1;
+  const cc = { lng: coreCenter.lng / coreN, lat: coreCenter.lat / coreN };
+  const nearCore = (l: any, maxM: number) => haversineM(cc, l) <= maxM;
+  // 后山池必须距核心 ≤25km（青城后山 8-10km；西岭雪山 45km 是另一座山，排除）
+  if (mainPool.length && !mainPool.every(l => nearCore(l, 25000))) mainPool = [];
+  // 统一地区景点（主题游）只收核心周边 30km 内 —— 西岭/安仁等远点只当背景，不逐站罗列
+  const unifiedRegion30 = clusterRegionPts(locs, corePool).map((c) => pickRep(c, ctx.destName)).filter((l: any) => nearCore(l, 30000));
+
+  const plans: { label: string; title: string; allow: string[] | null }[] = [];
+  // 1日精华游 = 前山核心 ≤8
+  plans.push({ label: "1日精华游", title: `${ctx.destName}一日精华游`, allow: corePool.slice(0, 8).map((l) => l.id) });
+  // 2日全景游 = 前山(第1天) + 后山(第2天)。无后山池时退化为核心池分两天
+  if (mainPool.length) {
+    plans.push({ label: "2日全景游", title: `${ctx.destName}两日全景游`, allow: [...corePool.slice(0, 8).map((l) => l.id), ...mainPool.slice(0, 8).map((l) => l.id)] });
+  } else if (corePool.length >= 8) {
+    plans.push({ label: "2日全景游", title: `${ctx.destName}两日全景游`, allow: corePool.slice(0, 14).map((l) => l.id) });
+  }
+  // 主题游 = 4 热核心 + 统一地区景点（≤30km）
+  if (ctx.hasRegionTour && unifiedRegion30.length) {
+    plans.push({ label: "主题游", title: `${ctx.destName}深度主题游`, allow: [...corePool.slice(0, 4).map((l) => l.id), ...unifiedRegion30.map((l) => l.id)] });
+  }
+  // 文学巡礼线：AI 自由选点（保留）
+  if (ctx.isNovelBased) plans.push({ label: "文学巡礼线", title: `《${ctx.novelName}》文学巡礼`, allow: null });
+  return plans;
+}
+
 // 离群点剔除：真实地点聚成簇，编造/过远点是离群点。
 // 以候选点中位数为中心，迭代剔除 >20km 的点（最多 3 轮）。
 // 不依赖地理编码中心 —— 某些目的地（三清山）地理编码会偏到行政中心，固定中心校验会误杀真景点。
@@ -581,7 +654,10 @@ Deno.serve(async (req: Request) => {
     } catch (e) { /* 子景点扫描失败不阻断 */ }
 
     // 计算核心/主景区（供路线 prompt 分区：核心景区=第1天，主景区=第2天，其他独立景区只进主题游）
-    const coreAnchor = anchors.find(a => destName && (a.name.includes(destName) || destName.includes(a.name)))
+    // 核心锚点必须优先精确匹配 destName（"青城山"），否则"青城山景区前山"（含 destName 子串）会抢先
+    // → scenicName="青城山前山" → 核心池匹配断裂、1日只剩 2 站。先查 cleanScenicName 或原名 === destName。
+    const coreAnchor = anchors.find(a => destName && (a.name === destName || a.scenicName === destName))
+      || anchors.find(a => destName && (a.name.includes(destName) || destName.includes(a.name)))
       || anchors[0] || null;
     const coreScenicName = coreAnchor?.scenicName || (destName || "");
     // 主景区须为真实景区（≥2 个子点）。"独立"是兜底标签不是景区——若让它当主景区，2日 day-2
@@ -610,24 +686,18 @@ Deno.serve(async (req: Request) => {
       return hit ? slugToDbId.get(hit.id) : undefined;
     };
 
-    // 4. Routes — 新结构：1日精华游(必有) + 2日全景游(地点≥8) + 主题游(地区多景点) + 文学巡礼线(小说源)
+    // 4. Routes — 确定性站点规划：1日精华游(必有) + 2日全景游(前山+后山) + 主题游(4热核心+统一地区景点) + 文学巡礼线(小说源)
+    // 路线「组成」由 planRoutes 代码决定（AI 屡次不遵守景区分区规则）；DeepSeek 只写 narrative + 站内排序。
     const isNovelBased = !!(tour.source?.title || tour.source?.novelTitle);
     const novelName = String(tour.source?.title || tour.source?.novelTitle || '');
-    const routeReqs = [
-      { label: "1日精华游", desc: "目的地核心必看景点，1天内完成（≤6 站）" },
-      ...(locs.length >= 8 ? [{ label: "2日全景游", desc: `核心景区${coreScenicName ? `（${coreScenicName}）` : ''}第1天 + ${mainScenicName ? `主景区${mainScenicName}第2天，覆盖其全部著名子景点` : `第2天继续覆盖核心景区${coreScenicName}的其余著名子景点（不重复第1天）`}（可达 6-8 站）` }] : []),
-      ...(hasRegionTour ? [{ label: "主题游", desc: "完整地区行程：目的地核心景点 + 地区其他知名景点（如天门山+武陵源+黄龙洞+大峡谷），narrative 可写 3 天" }] : []),
-      ...(isNovelBased ? [{ label: "文学巡礼线", desc: `跟随小说《${novelName}》的情节场景顺序游览相关地点` }] : []),
-    ];
-    const routeReqText = routeReqs.map((r, i) => `${i + 1}. ${r.label} — ${r.desc}`).join("\n");
-    // 景区分区规则：核心景区=第1天，主景区=第2天，其他独立景区只进主题游（七星山/黄龙洞/大峡谷不混入 1日/2日）
-    const req3 = mainScenicName
-      ? `3. **以"景区"为容量单位，1日/2日游的两天各自只含一个景区**：
-   - 核心景区 = "${coreScenicName}"：1日精华游、2日全景游第1天**只含景区"${coreScenicName}"的站点**（如天门山），≤6 站。
-   - 主景区 = "${mainScenicName}"：2日全景游第2天**只含景区"${mainScenicName}"的站点**，覆盖该景区全部著名子景点（袁家界、十里画廊、水绕四门、天子山、黄石寨、杨家界、金鞭溪、百龙天梯等，可达 6-8 站）。
-   - **其他独立景区（标注"（景区:XXX）"且 XXX 不是"${coreScenicName}"也不是"${mainScenicName}"的，如七星山、黄龙洞、大峡谷等）只能放入主题游，严禁放入 1日/2日游**；若某独立景区距核心景区 >40km，同样只进主题游。
-   - 每个子景点只能出现在其所属景区的那一天；每天 ≤8 站、总 ≤14，narrative 明确第1天/第2天各去哪。`
-      : `3. **以"景区"为容量单位**：1日精华游、2日全景游第1天只含核心景区"${coreScenicName}"的站点（≤6 站）；**2日全景游第2天继续覆盖核心景区"${coreScenicName}"的其余著名子景点（不重复第1天，可达 6-8 站），附近的主要景区（如都江堰）若顺路可并入**；**其他独立景区（标注"（景区:XXX）"且 XXX 不是核心景区的，如九寨沟、四姑娘山、峨眉山等）只能放入主题游，严禁放入 1日/2日游**；**严禁在 1日/2日游放入距核心景区 >50km 的地点**。每天 ≤8 站、总 ≤14，narrative 明确第1天/第2天各去哪。`;
+    const plans = planRoutes(locs, { coreScenicName, mainScenicName, destName, isNovelBased, novelName, hasRegionTour });
+    // 每条路线的指定站点清单（文学巡礼线无 allow，AI 自由选）
+    const planText = plans.map((p, i) => {
+      const stopsTxt = p.allow
+        ? p.allow.map(id => { const l = locs.find(x => x.id === id); return l ? `${id}: ${l.name}` : id; }).join(", ")
+        : "（文学巡礼线：自由选点）";
+      return `${i + 1}. ${p.label}「${p.title}」 — 指定站点: ${stopsTxt}`;
+    }).join("\n");
 
     const [contentById, routes] = await Promise.all([
       // 3. Content：按 ~8 个分批、并发生成（子景点并入后 locs 可达 25-40；单次输出超 max_tokens=8192 会截断 JSON → 分批）
@@ -649,27 +719,50 @@ Deno.serve(async (req: Request) => {
       // 4. Routes：与内容并行（只用 locs/id，不依赖内容）
       (async () => {
         let routes: any[] = [];
-        for (let attempt = 0; attempt < 2 && routes.length < routeReqs.length; attempt++) {
+        for (let attempt = 0; attempt < 2 && routes.length < plans.length; attempt++) {
           const rr = await deepseek([
             { role: "system", content: "你是旅游路线规划师。只返回JSON。" },
-            { role: "user", content: `${destName}路线。可选地点（id: 名称（景区:X））: ${locs.map(l => `${l.id}: ${l.name}${l.scenic ? `（景区:${l.scenic}）` : ""}`).join(", ")}\n\n按序严格生成 ${routeReqs.length} 条路线：\n${routeReqText}\n\n要求：\n1. 每条路线覆盖其主题对应的地点，形成完整行程（从某入口/索道进 → 逐点游览 → 出口/索道出）。\n2. narrative 各写 150-300 字完整行程描述：从哪个入口/索道进、每段用什么交通（徒步/索道/观光车）、依次经过哪些地点、从哪里出。narrative 中必须写地点的中文名（如"玉京峰"），严禁写 id 代号。\n${req3}\n4. **主题游必须包含目的地核心景点**；1日精华/2日全景/主题游覆盖范围逐步扩大且互补（精华⊂全景⊂主题游）。\n5. 地点少时压缩天数，严禁编造不存在的多日行程。\n6. stops 数组顺序必须与 narrative 中的实际游览顺序一致（入口/索道在前，依次游览，出口/索道在后）；stops 只能从上面给出的 id 中逐字复制，严禁自创或使用列表外的 id。\n7. 路线条数必须与上述完全一致（${routeReqs.length} 条），缺一不可。\nJSON: {"routes":[{"day_label":"","title":"","stops":["id1","id2"],"narrative":"完整行程描述"}]}` },
+            { role: "user", content: `${destName}路线。**每条路线的站点已由系统指定，stops 必须恰好包含这些 id（可调整顺序使行走合理），严禁增删替换；文学巡礼线除外（可自由选点）。**\n\n${planText}\n\n要求：\n1. 每条路线按上面的指定站点生成完整行程（从入口/索道进 → 逐点游览 → 出口/索道出）。\n2. narrative 各写 150-300 字完整行程描述：从哪个入口/索道进、每段用什么交通（徒步/索道/观光车）、依次经过哪些地点、从哪里出。narrative 中必须写地点的中文名（如"玉京峰"），严禁写 id 代号。\n3. **2日全景游 narrative 必须明确「第1天前山」「第2天后山」各去哪**；主题游写明主题与串联逻辑。\n4. day_label 必须是上面给定的标签（1日精华游/2日全景游/主题游/文学巡礼线）。\n5. 地点少时压缩天数，严禁编造不存在的多日行程。\n6. stops 数组顺序必须与 narrative 中的实际游览顺序一致（入口/索道在前，依次游览，出口/索道在后）；stops 只能从上面指定 id 中逐字复制。\n7. 路线条数必须与上述完全一致（${plans.length} 条），缺一不可。\nJSON: {"routes":[{"day_label":"","title":"","stops":["id1","id2"],"narrative":"完整行程描述"}]}` },
           ]);
-          // Route stop validation: resolve and report mismatches
-          const allRoutes = (rr.routes || []).map((r: any, i: number) => {
-            const rawStops: string[] = (Array.isArray(r.stops) ? r.stops : [])
+          // Route stop validation: resolve + 确定性兜底。
+          // 注意：不能按数组下标取 plan（AI 返回 routes 的顺序常与 plans 不一致 → 会张冠李戴，
+          // 2日 混入 西岭雪山 就是顺序错位导致的）。按 day_label 模糊匹配 plan，找不到才回退下标。
+          // day_label/title/stops 全部以 plan 为准（路线组成 100% 确定），AI 只贡献 narrative 与站内相对顺序。
+          const aiRoutes = rr.routes || [];
+          const allRoutes = plans.map((plan: any, i: number) => {
+            const ai = aiRoutes.find((x: any) => {
+              const lbl = String(x?.day_label || "").trim();
+              return lbl && (lbl.includes(plan.label) || plan.label.includes(lbl));
+            }) || aiRoutes[i] || {};
+            const rawStops: string[] = (Array.isArray(ai.stops) ? ai.stops : [])
               .map((s: any) => s && typeof s === "object" ? (s.poi ?? s.id ?? s.name) : s)
               .filter(Boolean);
             const resolved = rawStops.map((s: string) => resolveStop(s)).filter(Boolean);
             const unresolved = rawStops.filter((_, j) => !resolved[j]);
             if (unresolved.length > 0) {
-              warnings.push(`⚠️ 路线"${r.title || r.day_label || `路线${i+1}`}"有 ${unresolved.length} 个站点无法匹配：${unresolved.join(', ')}`);
+              warnings.push(`⚠️ 路线"${ai.title || ai.day_label || `路线${i+1}`}"有 ${unresolved.length} 个站点无法匹配：${unresolved.join(', ')}`);
+            }
+            let stops: string[] = [];
+            if (plan.allow) {
+              const allowDb = plan.allow.map(id => slugToDbId.get(id)).filter(Boolean);
+              const allowSet = new Set(allowDb);
+              const keep = resolved.filter(s => allowSet.has(s));
+              const extra = resolved.filter(s => !allowSet.has(s));
+              const missing = allowDb.filter(id => !keep.includes(id));
+              if (missing.length || extra.length) {
+                if (missing.length) warnings.push(`♻️ 路线"${plan.label}"补齐缺失站点 ${missing.length} 个`);
+                if (extra.length) warnings.push(`⚠️ 路线"${plan.label}"剔除多出站点 ${extra.length} 个`);
+              }
+              stops = [...keep, ...missing]; // 按 AI 相对顺序保留 allow 内站点 + 末尾补齐缺失
+            } else {
+              stops = resolved; // 文学巡礼线：AI 自由选点
             }
             return {
               id: `${scope}-r${i + 1}`,
-              day_label: String(r.day_label || ""),
-              title: String(r.title || `路线${i + 1}`),
-              stops: resolved, // 信任 AI 的游览顺序（入口/索道在前），不按地理重排
-              narrative: typeof r.narrative === "string" ? r.narrative : "",
+              day_label: plan.label,
+              title: plan.title,
+              stops,
+              narrative: typeof ai.narrative === "string" ? ai.narrative : "",
               sort_order: i,
             };
           }).filter(r => r.stops.length > 0);

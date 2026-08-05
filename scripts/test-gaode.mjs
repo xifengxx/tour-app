@@ -197,6 +197,56 @@ function haversineM(a, b) {
   const s = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(a.lat)) * Math.cos(toRad(b.lat)) * Math.sin(dLng / 2) ** 2;
   return 2 * 6371000 * Math.asin(Math.sqrt(s));
 }
+// ── 镜像 index.ts 确定性路线站点规划（1日=前山 / 2日=前山+后山 / 主题游=4热核心+统一地区景点）──
+const CLUSTER_R = 8000;
+function clusterRegionPts(locs, corePool) {
+  const pts = locs.filter((l) => (l.tags || []).includes("地区景点"))
+    .filter((p) => !corePool.some((c) => haversineM(c, p) < SUB_DEDUP_M));
+  const clusters = [];
+  for (const p of pts) {
+    const c = clusters.find((c) => haversineM(c.rep, p) < CLUSTER_R);
+    if (c) c.locs.push(p);
+    else clusters.push({ rep: p, locs: [p] });
+  }
+  return clusters;
+}
+function pickRep(cluster, destName) {
+  const d2 = destName.slice(0, 2);
+  return cluster.locs.slice().sort((a, b) =>
+    (b.importance || 3) - (a.importance || 3)
+    || ((b.name.startsWith(d2) ? 1 : 0) - (a.name.startsWith(d2) ? 1 : 0))
+    || (a.name.length - b.name.length)
+  )[0];
+}
+function planRoutes(locs, ctx) {
+  const isRegion = (l) => (l.tags || []).includes("地区景点");
+  const byImp = (a, b) => (b.importance || 3) - (a.importance || 3);
+  const corePool = locs.filter((l) => !isRegion(l) && l.scenic === ctx.coreScenicName).sort(byImp);
+  let mainPool = ctx.mainScenicName ? locs.filter((l) => l.scenic === ctx.mainScenicName).sort(byImp) : [];
+  if (!mainPool.length) {
+    const clusters = clusterRegionPts(locs, corePool);
+    const big = clusters.slice().sort((a, b) => b.locs.length - a.locs.length)[0];
+    mainPool = big && big.locs.length >= 2 ? big.locs : [];
+  }
+  // 核心质心 + 距离过滤（镜像 index.ts）：后山池 ≤25km，统一景点 ≤30km（西岭雪山45km/安仁44km被排除）
+  const coreCenter = corePool.reduce((acc, l) => ({ lng: acc.lng + l.lng, lat: acc.lat + l.lat }), { lng: 0, lat: 0 });
+  const cc = { lng: coreCenter.lng / (corePool.length || 1), lat: coreCenter.lat / (corePool.length || 1) };
+  const nearCore = (l, maxM) => haversineM(cc, l) <= maxM;
+  if (mainPool.length && !mainPool.every((l) => nearCore(l, 25000))) mainPool = [];
+  const unifiedRegion = clusterRegionPts(locs, corePool).map((c) => pickRep(c, ctx.destName)).filter((l) => nearCore(l, 30000));
+  const plans = [];
+  plans.push({ label: "1日精华游", title: `${ctx.destName}一日精华游`, allow: corePool.slice(0, 8).map((l) => l.id) });
+  if (mainPool.length) {
+    plans.push({ label: "2日全景游", title: `${ctx.destName}两日全景游`, allow: [...corePool.slice(0, 8).map((l) => l.id), ...mainPool.slice(0, 8).map((l) => l.id)] });
+  } else if (corePool.length >= 8) {
+    plans.push({ label: "2日全景游", title: `${ctx.destName}两日全景游`, allow: corePool.slice(0, 14).map((l) => l.id) });
+  }
+  if (ctx.hasRegionTour && unifiedRegion.length) {
+    plans.push({ label: "主题游", title: `${ctx.destName}深度主题游`, allow: [...corePool.slice(0, 4).map((l) => l.id), ...unifiedRegion.map((l) => l.id)] });
+  }
+  if (ctx.isNovelBased) plans.push({ label: "文学巡礼线", title: `《${ctx.novelName}》文学巡礼`, allow: null });
+  return plans;
+}
 // 镜像 index.ts gaodeAroundScenics：周边扫描 + 清洗
 async function gaodeAroundScenics(lng, lat, radius = SCAN_RADIUS) {
   const JUNK = /咖啡|餐厅|奶茶|小吃|甜品|麦当劳|瑞幸|肯德基|烧仙草|汉堡|客栈|民宿|山庄|农家乐|火锅|三下锅|菜馆|私房菜|家常菜|中餐馆|餐馆|乡厨|烧烤|快餐|美食|门店|服务社|宾馆|酒店|超市|银行|加油站|KTV|健身房|旅行社|蜜雪|面包|饮品|烘焙|酸奶|烤面包|速递|快递/;
@@ -324,9 +374,47 @@ okLog(!regionMatch(zjjGeo, "湖北武汉"), "regionMatch 湖北武汉 ↔ 张家
 okLog(!regionMatch({ province: "湖南省", city: "株洲市" }, "湖南张家界"), "regionMatch 湖南张家界 ↔ 株洲市 → 拒绝(同省他市)");
 okLog(!regionMatch(beijingGeo, "湖南张家界"), "regionMatch 湖南张家界 ↔ 北京 → 拒绝");
 
+// ── planRoutes 确定性路线站点规划（青城山 13 点 mock，无需密钥）──
+console.log("\n=== planRoutes 路线组成（青城山 mock） ===");
+let planPass = true;
+const okPlan = (cond, label) => { if (!cond) planPass = false; console.log(`  ${cond ? "✓" : "✗"} ${label}`); };
+const qcsLocs = [
+  { id: "qcs-m", name: "青城山", lng: 103.563817, lat: 30.9044, importance: 5, scenic: "青城山" },
+  { id: "qcs-tianshi", name: "天师洞", lng: 103.560597, lat: 30.902104, importance: 5, scenic: "青城山" },
+  { id: "qcs-jianfu", name: "建福宫", lng: 103.572736, lat: 30.897265, importance: 4, scenic: "青城山" },
+  { id: "qcs-shangqing", name: "上清宫", lng: 103.563293, lat: 30.910143, importance: 5, scenic: "青城山" },
+  { id: "qcs-laojun", name: "老君阁", lng: 103.560715, lat: 30.90794, importance: 4, scenic: "青城山" },
+  { id: "qcs-chaoyang", name: "朝阳洞", lng: 103.557884, lat: 30.905498, importance: 3, scenic: "青城山" },
+  { id: "qcs-shanmen", name: "青城山山门", lng: 103.59482, lat: 30.896613, importance: 3, scenic: "青城山" },
+  { id: "qcs-yuecheng", name: "月城湖", lng: 103.568615, lat: 30.902283, importance: 3, scenic: "青城山" },
+  { id: "qcs-dujiangyan", name: "都江堰", lng: 103.610529, lat: 31.003363, importance: 4, tags: ["地区景点"], scenic: "青城山" },
+  { id: "qcs-houshan", name: "青城后山", lng: 103.487136, lat: 30.93071, importance: 4, tags: ["地区景点"], scenic: "青城山" },
+  { id: "qcs-wulong", name: "五龙沟", lng: 103.473101, lat: 30.923365, importance: 4, tags: ["地区景点"], scenic: "青城山" },
+  { id: "qcs-baiyun", name: "白云万佛洞", lng: 103.483152, lat: 30.946046, importance: 4, tags: ["地区景点"], scenic: "青城山" },
+  { id: "qcs-jingqu", name: "青城山景区", lng: 103.563817, lat: 30.9044, importance: 4, tags: ["地区景点"], scenic: "青城山" },
+];
+const qcsPlans = planRoutes(qcsLocs, { coreScenicName: "青城山", mainScenicName: "", destName: "青城山", isNovelBased: false, novelName: "", hasRegionTour: true });
+const planByName = (n) => qcsPlans.find((p) => p.label === n);
+const namesOf = (p) => (p?.allow || []).map((id) => qcsLocs.find((l) => l.id === id)?.name);
+okPlan(qcsPlans.length === 3, `路线条数=3（实际 ${qcsPlans.map(p=>p.label).join("/")}）`);
+okPlan(planByName("1日精华游")?.allow?.length === 8, `1日精华游 = 8 站（实际 ${planByName("1日精华游")?.allow?.length}）`);
+okPlan(!namesOf(planByName("1日精华游")).includes("都江堰"), "1日精华游 不含 都江堰");
+okPlan(namesOf(planByName("1日精华游")).includes("朝阳洞") && namesOf(planByName("1日精华游")).includes("青城山山门"), "1日精华游 含 朝阳洞/山门（前山并入）");
+okPlan(planByName("2日全景游")?.allow?.length === 11, `2日全景游 = 11 站（前山8+后山3，实际 ${planByName("2日全景游")?.allow?.length}）`);
+const r2Names = namesOf(planByName("2日全景游"));
+okPlan(r2Names.includes("青城后山") && r2Names.includes("五龙沟") && r2Names.includes("白云万佛洞"), "2日全景游 含 青城后山/五龙沟/白云万佛洞（后山第2天）");
+okPlan(!r2Names.includes("都江堰"), "2日全景游 不含 都江堰");
+const r3Names = namesOf(planByName("主题游"));
+okPlan(planByName("主题游")?.allow?.length === 6, `主题游 = 6 站（实际 ${planByName("主题游")?.allow?.length}）`);
+okPlan(r3Names.includes("都江堰") && r3Names.includes("青城后山"), "主题游 含 都江堰 + 青城后山（统一景点）");
+okPlan(!r3Names.includes("五龙沟") && !r3Names.includes("白云万佛洞") && !r3Names.includes("青城山景区"), "主题游 不含 五龙沟/白云万佛洞/青城山景区（子点/重复点收敛）");
+const core4 = r3Names.filter((n) => ["青城山", "天师洞", "上清宫", "建福宫", "老君阁"].includes(n));
+okPlan(core4.length === 4, `主题游 含 4 热核心（实际 ${core4.join("/")}）`);
+okPlan(planByName("文学巡礼线") === undefined, "非小说源 → 无 文学巡礼线");
+
 console.log(anchorPass ? "✅ 全部通过" : "❌ 有失败");
 
-if (!GAODE_KEY) { console.error("\n⚠️ 缺少 GAODE_KEY，跳过实时高德查询。"); process.exit(allPass && anchorPass ? 0 : 1); }
+if (!GAODE_KEY) { console.error("\n⚠️ 缺少 GAODE_KEY，跳过实时高德查询。"); process.exit(allPass && anchorPass && planPass ? 0 : 1); }
 
 // ---- 第二部分：修复后 gaode() 实际解析（需要 GAODE_KEY） ----
 console.log(`\n=== 修复后 gaode() 实际解析 (key 前缀 ${GAODE_KEY.slice(0,4)}…) ===`);
