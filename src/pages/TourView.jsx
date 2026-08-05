@@ -10,12 +10,12 @@ import ContentCard from '../components/ContentCard';
 import DetailModal from '../components/DetailModal';
 import ShareModal from '../components/ShareModal';
 import CommentsModal from '../components/CommentsModal';
-import { Share2, Check, Heart, MessageCircle } from 'lucide-react';
+import { Share2, Check, Heart, MessageCircle, MapPinned } from 'lucide-react';
 import { extractMarkerLoc, findNearestLocation, buildPinIcon } from '../lib/mapUtils';
+import { ROUTE_COLORS, cnOrdinal } from '../lib/routeColors';
 
-const ROUTE_COLORS = ['#e74c3c','#f39c12','#3498db','#2ecc71','#9b59b6'];
-const DEFAULT_PIN_COLOR = '#b3ae9e'; // 未选中标记：暖灰
-const SELECTED_COLOR = '#c96442'; // 选中标记：陶土（亮底高对比）
+const DEFAULT_PIN_COLOR = '#a39d8c'; // 未选中标记：暖灰
+const SELECTED_COLOR = '#c2402a'; // 选中标记：朱砂（亮底高对比）
 
 // 统一给标记套上「普通 / 选中」样式。
 // 未选中：统一灰色小图钉；选中：琥珀金 + 白色描边 + 放大 + 置顶。
@@ -99,7 +99,7 @@ export default function TourView() {
       const map = new window.AMap.Map(mapRef.current, {
         center,
         zoom: 12, resizeEnable: true,
-        mapStyle: 'amap://styles/normal'
+        mapStyle: 'amap://styles/whitesmoke' // 白烟底图：与宣纸色系同源，标记更突出
       });
       mapInstance.current = map;
 
@@ -126,7 +126,7 @@ export default function TourView() {
             const m = ctx.marker;
             const n = ctx.count;
             const d = n >= 100 ? 52 : n >= 10 ? 44 : 36;
-            m.setContent(`<div style="width:${d}px;height:${d}px;border-radius:50%;background:rgba(201,100,66,.9);border:2px solid rgba(255,255,255,.9);color:#fff;font-weight:700;font-size:${d >= 44 ? 15 : 13}px;display:flex;align-items:center;justify-content:center;box-shadow:0 3px 8px rgba(0,0,0,.2);cursor:pointer">${n}</div>`);
+            m.setContent(`<div style="width:${d}px;height:${d}px;border-radius:50%;background:rgba(194,64,42,.9);border:2px solid rgba(253,249,240,.9);color:#fdf9f0;font-weight:700;font-size:${d >= 44 ? 15 : 13}px;display:flex;align-items:center;justify-content:center;box-shadow:0 3px 8px rgba(0,0,0,.2);cursor:pointer">${n}</div>`);
             m.setSize(new window.AMap.Size(d, d));
             m.on('click', () => {
               // 点击聚合气泡 → 选中簇内最近的地点：内容栏立即更新并放大到该点，
@@ -287,32 +287,36 @@ export default function TourView() {
       {/* Map */}
       <div ref={mapRef} className="flex-1" />
 
-      {/* Bottom card zone — 置于正常文档流而非覆盖地图：地图容器止于卡片上缘，
+      {/* Bottom card zone — 手卷式卡片：置于正常文档流而非覆盖地图，地图容器止于卡片上缘，
           高德版权条不再压在卡片底部内容上；卡片折叠时地图随之扩展 */}
-      <div className="z-20 bg-card rounded-t-3xl max-h-[50vh] flex flex-col shadow-2xl">
-        <div className="flex justify-center py-2 cursor-pointer" onClick={() => setShowCard(s => !s)}>
-          <div className="w-8 h-1 rounded-full bg-black/10" />
+      <div className="z-20 bg-card rounded-t-2xl max-h-[50vh] flex flex-col border-t border-x border-border shadow-[0_-10px_32px_-14px_rgba(28,26,22,0.3)]">
+        {/* 卷轴杆拉手：两端轴头 + 杆身 */}
+        <div className="flex justify-center items-center gap-1.5 py-2.5 cursor-pointer" onClick={() => setShowCard(s => !s)}>
+          <span className="w-1.5 h-1.5 rounded-full bg-primary/60" />
+          <div className="w-10 h-1 rounded-full bg-black/15" />
+          <span className="w-1.5 h-1.5 rounded-full bg-primary/60" />
         </div>
 
         {showCard && (
           <>
-            {/* Route narrative: 完整行程描述（入口/交通方式/出口） */}
+            {/* Route narrative · 卷首语：完整行程描述（入口/交通方式/出口） */}
             {activeRoute?.narrative && (
               <div className="px-4 pb-2">
-                <p className="text-xs text-muted-foreground leading-relaxed bg-background rounded-xl p-3 border border-border max-h-24 overflow-y-auto">{activeRoute.narrative}</p>
+                <p className="font-kai text-xs text-muted-foreground leading-relaxed bg-background rounded-lg p-3 border-l-2 border-dai max-h-24 overflow-y-auto">{activeRoute.narrative}</p>
               </div>
             )}
-            {/* Location strip — 右缘渐变提示可横向滚动查看更多 */}
+            {/* Location strip · 壹贰叁编号 — 右缘渐变提示可横向滚动查看更多 */}
             <div className="flex gap-2 px-4 pb-2 overflow-x-auto"
                  style={{ WebkitMaskImage: 'linear-gradient(to right, black calc(100% - 28px), transparent)', maskImage: 'linear-gradient(to right, black calc(100% - 28px), transparent)' }}>
-              {filteredLocations.map(loc => (
+              {filteredLocations.map((loc, i) => (
                 <button
                   key={loc.id}
                   onClick={() => selectLoc(loc)}
                   className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs whitespace-nowrap transition-colors
-                    ${currentLoc?.id === loc.id ? 'bg-primary/20 text-primary border border-primary/30' : 'bg-black/5 text-muted-foreground border border-transparent'}`}
+                    ${currentLoc?.id === loc.id ? 'bg-primary/15 text-primary border border-primary/30' : 'bg-black/[0.04] text-muted-foreground border border-transparent'}`}
                 >
-                  {'⭐'.repeat(loc.importance || 1)} {loc.name}
+                  <span className={`font-serif font-semibold mr-1 ${currentLoc?.id === loc.id ? 'text-primary' : 'text-gamboge'}`}>{cnOrdinal(i)}</span>
+                  {loc.name}
                 </button>
               ))}
             </div>
@@ -328,7 +332,9 @@ export default function TourView() {
             ) : (
               <div className="flex-1 flex items-center justify-center text-center px-4 pb-6">
                 <div>
-                  <div className="text-4xl mb-3">🗺️</div>
+                  <div className="w-14 h-14 mx-auto mb-3 rounded-full border border-border bg-background flex items-center justify-center">
+                    <MapPinned className="h-6 w-6 text-primary/70" />
+                  </div>
                   <p className="text-muted-foreground text-sm">点击地图标记或上方地点<br/>查看此地的小说场景与人文故事</p>
                 </div>
               </div>

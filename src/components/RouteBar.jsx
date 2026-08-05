@@ -1,4 +1,4 @@
-const ROUTE_COLORS = ['#e74c3c', '#f39c12', '#3498db', '#2ecc71', '#9b59b6'];
+import { ROUTE_COLORS } from '../lib/routeColors';
 
 export default function RouteBar({ routes, currentRouteId, onSelectRoute }) {
   if (!routes || routes.length === 0) return null;
@@ -17,18 +17,22 @@ export default function RouteBar({ routes, currentRouteId, onSelectRoute }) {
             key={route.id}
             onClick={() => onSelectRoute(route)}
             className={`pointer-events-auto px-4 py-2 rounded-full text-xs font-semibold whitespace-nowrap backdrop-blur border transition-all flex items-center gap-1.5
-              ${active ? 'text-white border-transparent' : 'bg-card/90 text-muted-foreground border-border'}`}
+              ${active ? 'text-primary-foreground border-transparent shadow-md' : 'bg-card/90 text-muted-foreground border-border hover:border-primary/40'}`}
             style={active ? { background: color } : {}}
           >
-            <span className="w-2 h-2 rounded-full" style={{ background: color }} />
-            {route.day} {route.title}
+            <span
+              className={`w-2 h-2 rounded-full flex-shrink-0 ${active ? 'ring-1 ring-white/60' : ''}`}
+              style={{ background: active ? 'rgba(253,249,240,0.9)' : color }}
+            />
+            <span className="font-serif">{route.day}</span>
+            {route.title}
           </button>
         );
       })}
       {currentRouteId && (
         <button
           onClick={() => onSelectRoute(null)}
-          className="pointer-events-auto px-3 py-2 rounded-full text-xs bg-black/10 text-muted-foreground whitespace-nowrap"
+          className="pointer-events-auto px-3 py-2 rounded-full text-xs bg-black/[0.06] text-muted-foreground whitespace-nowrap"
         >
           ✕ 清除筛选
         </button>

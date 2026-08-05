@@ -11,10 +11,10 @@
 |------|------|------|
 | Phase 0 地基 | index.css token + Noto Serif SC + 纸纹/印章/竖排工具类 | ✅ 完成 |
 | Phase 1 门面 | NavBar（朱印 logo）+ Home（hero + 书页卡）+ Login | ✅ 完成 |
-| Phase 2 核心 | TourView（RouteBar / ContentCard / 底部手卷 / DetailModal）+ 路线国画五色 | ⏳ 待做 |
+| Phase 2 核心 | TourView（RouteBar / ContentCard / 底部手卷 / DetailModal）+ 路线国画五色 | ✅ 完成 |
 | Phase 3 收尾 | TourEdit/Review、其余弹窗、触摸目标走查 | ⏳ 待做 |
 
-> ⚠️ Phase 2 未完成前，TourView 内仍有旧色值硬编码（如 `#c96442`、`#b3ae9e`、彩虹路线五色 `#e74c3c...`、ContentCard 暗色残留 `rgba(255,255,255,0.1)`），属已知待清理项。
+> Phase 2 已落地：路线五色与标记色统一为国画色系（`src/lib/routeColors.js` 共享常量）、底图换 `amap://styles/whitesmoke`、底部卡片手卷化（卷轴杆拉手 + 壹贰叁编号地点条 + 卷首语楷体 narrative）、ContentCard/DetailModal 批注式排版（朱色章节小标 + 藤黄「」楷体引文）、ContentCard 暗色残留修复、DetailModal 补上扁平 layers 兼容（旧 bug）。
 
 ## 1. 视觉定位
 
@@ -95,13 +95,15 @@
 | 标签/徽标 | `bg-black/[0.04] border border-border/60 rounded-full` |
 | 空状态 | 圆形线框图标（lucide）+ 说明文字 + 下一步引导 |
 
-## 6. 地图标记色（`src/pages/TourView.jsx`，Phase 2 更新值）
+## 6. 地图标记色（`src/pages/TourView.jsx` JS 常量）
 
-| 状态 | 新值 | 样式 |
+| 状态 | 值 | 样式 |
 |------|-----|------|
-| 未选中 | `#b3ae9e` → 计划 `#a39d8c`（暖灰） | 26px 图钉 |
-| **选中** | `#c96442` → 计划 `#c2402a`（朱砂） | 36px + 白色描边 + zIndex 500 置顶 |
-| 聚合气泡 | → `rgba(194,64,42,.9)` | 朱色数字气泡 |
+| 未选中 | `#a39d8c`（暖灰） | 26px 图钉 |
+| **选中** | `#c2402a`（朱砂） | 36px + 白色描边 + zIndex 500 置顶 |
+| 聚合气泡 | `rgba(194,64,42,.9)` | 朱色数字气泡 |
+| 底图 | `amap://styles/whitesmoke` | 与宣纸色系同源 |
+| 路线五色 | `src/lib/routeColors.js` | 朱砂/黛青/赭石/苍绿/藤黄，选中 5px/80% 未选中 2px/15% |
 
 **原则不变**：地图上只有"灰 vs 朱砂"两态，绝不引入第三色。
 

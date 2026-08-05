@@ -26,9 +26,9 @@ describe('ContentCard', () => {
       layers: { novel: { scenes: [{ chapter: '第1章', title: '初章', quote: '引文内容', context: '背景说明' }] } },
     };
     renderCard(loc);
-    expect(screen.getByText(/祝融峰/)).toBeInTheDocument(); // 标题带 ⭐ 前缀，用正则
+    expect(screen.getByText(/祝融峰/)).toBeInTheDocument(); // 标题带重要度星标，用正则
     expect(screen.getByText(/第1章/)).toBeInTheDocument();
-    expect(screen.getByText('「引文内容」')).toBeInTheDocument();
+    expect(screen.getByText('引文内容')).toBeInTheDocument(); // 「」改为独立装饰元素，正文文本不再包含引号
     expect(screen.getByText('背景说明')).toBeInTheDocument();
   });
 
@@ -38,10 +38,10 @@ describe('ContentCard', () => {
     expect(screen.getByText('历史正文')).toBeInTheDocument();
   });
 
-  it('层缺失时渲染「暂无此分类的内容」', () => {
+  it('层缺失时渲染空状态引导', () => {
     const loc = { name: '甲峰', layers: {} };
     renderCard(loc, 'novel');
-    expect(screen.getByText('暂无此分类的内容')).toBeInTheDocument();
+    expect(screen.getByText(/暂无该分类的内容/)).toBeInTheDocument();
   });
 
   it('渲染 reflection 反思框 + practical 实用标签 + 按钮', () => {
@@ -52,9 +52,9 @@ describe('ContentCard', () => {
       practical: { access: '步行可达', difficulty: '轻松', tip: '带好水' },
     };
     renderCard(loc, 'novel');
-    expect(screen.getByText('💭 停下来想一想')).toBeInTheDocument();
+    expect(screen.getByText(/驻足一想/)).toBeInTheDocument();
     expect(screen.getByText(/步行可达/)).toBeInTheDocument();
-    expect(screen.getByText('🧭 导航到这里')).toBeInTheDocument();
+    expect(screen.getByText(/导航到这里/)).toBeInTheDocument();
   });
 
   it('渲染 tags 标签', () => {
