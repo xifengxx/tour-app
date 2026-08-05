@@ -7,7 +7,7 @@
 
 ## 一句话当前状态
 
-**「2日全景游覆盖主景区著名子景点」已端到端验证通过（本轮会话）**：真实天门山导览 2日 day-2 确定性覆盖全部 8 个著名子景点（天子山/黄石寨/杨家界/袁家界/金鞭溪/十里画廊/水绕四门/百龙天梯），七星山未混入 1日/2日，29 个地点全部有内容（无空内容卡）。函数已部署 Supabase（version 61 ACTIVE）。**本次还修了三个实测发现的硬 bug：地区格式「湖南张家界」连写导致 0 地点、子景点去重 1000m 误杀百龙天梯、Edge Function 60s 预算被打爆。**
+**「青城山之旅」确定性路线组成 + 4层内容格式修复 已端到端验证（最近两轮）**：路线「组成」改由代码确定性规划（`planRoutes`）—— 1日精华游=前山核心≤8（含朝阳洞/山门）、2日全景游=前山(第1天)+后山(第2天)、主题游=4热核心+每簇统一景点（都江堰/青城后山）；AI 只写 narrative，站点组成 100% 确定。内容层扁平/嵌套结构不一致（部分地点 4 层显示为空）已修：写库前 `normalizeLayers()` 统一嵌套结构 + 前端兼容两种格式。函数已部署 Supabase（version 69 ACTIVE）。**遗留随机性：2日 day-2 抽到哪批后山点是 AI 抽取「抽签」，详见开放项 1。**
 
 ## 本次会话（2026-08-05 第二轮）改动 —— 全部实测驱动
 
@@ -62,14 +62,26 @@
 - 实测（`scripts/test-gaode.mjs` planRoutes 12 断言全过）：1日=8 / 2日=11 / 主题游=6（4热核心+都江堰+青城后山），主题游不含 五龙沟/白云万佛洞。
 - 注意：主题游 top-4 核心并列（建福宫/老君阁 importance4）按原 sort_order 取，可能与人工期望差一个点。
 
+### 8. 4层内容「显示为空」修复（存储格式扁平/嵌套不一致）
+- **症状**：用户检查 青城山之旅，2日 的青城后山/五龙沟/白云万佛洞 + 主题游的 都江堰 四层内容（novel/history/folklore/customs）全空；质问上次跑有没有验证 4 层完整度。
+- **根因**（实测 `jsonb_typeof` 定位）：内容**早已生成**，不是缺失。内容按 ~8 个分批调 DeepSeek，第一批（前山核心）返回嵌套 `{novel:{text:"..."}}`，第二批（地区景点）返回扁平字符串 `{novel:"..."}` —— 前端 `ContentCard` 只读 `.text`，扁平数据整卡显示为空。上一轮验证只查 `layers != '{}'`，扁平数据非空 → 漏检。
+- **修复**：
+  - `process-tour` 写库前新增 `normalizeLayers()`：扁平字符串 → `{text:"..."}`；已嵌套 / `scenes` 结构保持原样。（v69 已部署）
+  - 前端 `ContentCard.jsx` 同时兼容两种格式，存量扁平数据也能正常显示。
+- **验证**：重跑青城山 → 全部 16 地点 4 层文本非空、均为 object 结构；`normalizeLayers` 8 条断言单测通过。
+- **教训**：验证内容完整性不能只查"非空"，还要查**结构**（`jsonb_typeof` object vs string）。
+
 ## Git 状态
 
 最近提交（已落盘，按新→旧）：
 
 | 提交 | 说明 |
 |---|---|
-| `32ec382` | fix: 青城山/四川类导览 2日游混入远点 + 常见名解析错点（地区60km半径 + 主景区排除独立 + 位置偏置 + 裸省名不传city，详见本次会话第6节） |
-| `bb6671a` | fix: 地区格式「湖南张家界」连写致0地点 + 子景点确定性收口(百龙天梯/袁家界) + 并行化防 WORKER_RESOURCE_LIMIT（本轮，详见「本次会话改动」） |
+| `849ebb9` | fix: 内容层扁平/嵌套结构不一致 → 写库前 `normalizeLayers()` 统一 + 前端兼容（详见本次会话第8节） |
+| `a85a0cf` | fix: 2日游真实两日(前山+后山) + 主题游数量约束(4热核心+统一景点)，路线组成确定性 `planRoutes`（详见本次会话第7节） |
+| `1bd2727` | fix: 青城山/四川类导览 2日游混入远点 + 常见名解析错点（地区60km半径 + 主景区排除独立 + 位置偏置 + 裸省名不传city，详见本次会话第6节） |
+| `59ba1b5` | feat: 用户未填副标题时 AI 自动生成 subtitle（详见本次会话第5节） |
+| `6d59092` | fix: 地区格式「湖南张家界」连写致0地点 + 子景点确定性收口(百龙天梯/袁家界) + 并行化防 WORKER_RESOURCE_LIMIT（本轮，详见「本次会话改动」第1-4节） |
 | `a1eba59` | fix: gaode 坐标查询重构 — 名称重叠过滤防错点 + 无匹配才放宽兜底 + 限流重试 + 名称多轮清洗 |
 | `c56b24d` | fix: DeepSeek/高德 fetch 加超时(120s/30s) 防挂死 + 2日主景区覆盖子景点 |
 | `8ded175` | feat: 地区合并 AI提议+高德校验 + 2日主景区覆盖著名子景点 |
@@ -91,12 +103,13 @@
 
 ## 开放项 / 下一步
 
-1. **回归一条非张家界导览**（黄山/泰山/三清山等）确认并行化 + 子景点扫描不破坏单景区目的地的路线与内容（本轮只实测了天门山）。
-2. **Edge Function 时长余量**：实测 58-65s，依赖 DeepSeek/高德延迟。Management API 的 `timeout_seconds` 元数据不生效（已试，被忽略）——如后续偶发 `WORKER_RESOURCE_LIMIT`，需装 supabase CLI（`supabase functions deploy --timeout-seconds 300`）或进一步砍调用量。
-3. **金鞭溪/水绕四门仍依赖 AI/regionScenics**：高德 around 在它们自身坐标也扫不到（实测 8km 46-52 候选均不中），只能靠地区合并（AI 提议 + regionScenics types 查询）覆盖。rr2 prompt 已强化"宁多勿漏"，当前实测通过；若未来再偶发漏，可考虑把 regionScenics 的 types 查询范围放宽（但会引入杂点）。
-4. **武陵源"风景名胜区十里画廊"这类扫描复名**：与"十里画廊"重复出现在 locs（扫描命名源），可由 name 去重进一步收口，当前不影响路线（stops 只引用其一）。
-5. **环境问题**：AuraKit build-verify hook 每次编辑都报缺 `tsc@2.0.3`（`npx canceled due to missing packages`）—— 需要装 tsc 或修 hook，当前是噪音不影响功能。
-6. **supabase CLI 未装**：GitHub 下载被重置，本轮全程用 Management API 部署（`/tmp/deploy-process-tour.sh`，raw index.ts 上传）。CLI 装好后可回归 `--timeout-seconds`。
+1. **路线组成的最后随机性（AI 抽取「抽签」）**：`planRoutes` 只保证「组成确定」，但哪些地点被 AI 抽取出来本身有随机性 —— 青城山 v69 重跑，2日 day-2 = 都江堰/灌县古城，不是用户期望的 青城后山/五龙沟/白云万佛洞（v68 曾抽中正确后山组合）。若用户要求精确后山组合需重跑，且不保证命中。理想兜底：提取阶段对「后山」这类知名子景区名显式补名单（类似 regionScenics types 查询），或把 2日 后山池锚定到确定性来源。
+2. **回归一条非张家界导览**（黄山/泰山/三清山等）确认并行化 + 子景点扫描不破坏单景区目的地的路线与内容（本轮只实测了天门山 + 青城山）。
+3. **Edge Function 时长余量**：实测 58-65s，依赖 DeepSeek/高德延迟。Management API 的 `timeout_seconds` 元数据不生效（已试，被忽略）——如后续偶发 `WORKER_RESOURCE_LIMIT`，需装 supabase CLI（`supabase functions deploy --timeout-seconds 300`）或进一步砍调用量。
+4. **金鞭溪/水绕四门仍依赖 AI/regionScenics**：高德 around 在它们自身坐标也扫不到（实测 8km 46-52 候选均不中），只能靠地区合并（AI 提议 + regionScenics types 查询）覆盖。rr2 prompt 已强化"宁多勿漏"，当前实测通过；若未来再偶发漏，可考虑把 regionScenics 的 types 查询范围放宽（但会引入杂点）。
+5. **武陵源"风景名胜区十里画廊"这类扫描复名**：与"十里画廊"重复出现在 locs（扫描命名源），可由 name 去重进一步收口，当前不影响路线（stops 只引用其一）。
+6. **环境问题**：AuraKit build-verify hook 每次编辑都报缺 `tsc@2.0.3`（`npx canceled due to missing packages`）—— 需要装 tsc 或修 hook，当前是噪音不影响功能。
+7. **supabase CLI 未装**：GitHub 下载被重置，本轮全程用 Management API 部署（`/tmp/deploy-process-tour.sh`，raw index.ts 上传）。CLI 装好后可回归 `--timeout-seconds`。
 
 ## 核心代码位置
 
@@ -113,9 +126,11 @@
 
 ## 验证脚本（`scripts/test-gaode.mjs`）
 
-复刻 `gaode()` 完整逻辑（含本次重构），两段：
+复刻 `gaode()` 完整逻辑（含本次重构）+ 确定性路线规划镜像，四段：
 1. **名称清洗正则单元测试**（无需密钥，17 用例）；
-2. **实时高德解析**（8 个武陵源子景点 + 坐标范围校验，需 GAODE_KEY）。
+2. **实时高德解析**（8 个武陵源子景点 + 坐标范围校验，需 GAODE_KEY）；
+3. **planRoutes 确定性路线单测**（青城山 13 点 mock，无需密钥，12 断言）：1日=8 / 2日=11(前山8+后山3) / 主题游=6(4热核心+都江堰+青城后山)；
+4. **normalizeLayers 内容结构单测**（无需密钥，8 断言）：扁平字符串→嵌套、scenes 保持、非对象→空对象。
 
 运行：`GAODE_KEY=<key> node scripts/test-gaode.mjs`（或把 key 放 `.env`；脚本也会从 `~/session-backup-9d6c4422.jsonl` 自取旧 key，不打印密钥）。
 
