@@ -29,10 +29,10 @@ export default function ShareModal({ tour, tourId, onClose }) {
     });
   };
 
-  const downloadPoster = () => {
+  const downloadPoster = async () => {
     const c = posterRef.current;
     if (!c) return;
-    drawTourPoster(c, tour, qrRef.current); // 重绘确保含二维码
+    await drawTourPoster(c, tour, qrRef.current); // 重绘确保含二维码（async：等字体就绪）
     const fileName = `${title || 'tour'}-海报.png`;
     c.toBlob(async (blob) => {
       if (!blob) return;

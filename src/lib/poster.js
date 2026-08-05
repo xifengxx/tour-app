@@ -1,20 +1,49 @@
 /**
- * 导览分享海报绘制（canvas，Claude 风格，600×1150 竖版）。
- * 设计：品牌 + 大标题 + 点睛副标题 + 红印章 + 数字统计 + 亮点地点 + 行程预览 + 扫码 CTA。
+ * 导览分享海报绘制（canvas，「纸上山河」风格，600×1150 竖版）。
+ * 设计：古籍双线框 + 朱印品牌 + 衬线大标题 + 楷体点睛句 + 竖排侧签
+ *       + 壹贰叁亮点地点（藤黄星）+ 国画五色行程 + 双线框二维码 + 落款。
+ *  async：开始前等待 webfont 就绪，保证衬线/楷体在 canvas 生效。
  * @param {HTMLCanvasElement} canvas 目标画布
  * @param {object} tour 导览对象（meta.title/subtitle, source, locations, routes）
  * @param {HTMLCanvasElement} [qrCanvas] 已渲染的二维码 canvas
  */
-export function drawTourPoster(canvas, tour, qrCanvas) {
+import { ROUTE_COLORS, cnOrdinal } from './routeColors';
+
+const PAPER = '#f7f3ea';
+const IVORY = '#fdfbf5';
+const INK = '#1c1a16';
+const MUTED = '#6b655a';
+const FAINT = '#8f8a7c';
+const VERMILION = '#c2402a';
+const DAI = '#2f4f4a';
+const GAMBOGE = '#c9973f';
+const BORDER = '#d8cfba';
+
+const SERIF = '"Noto Serif SC","Songti SC",STSong,Georgia,serif';
+const KAI = '"Kaiti SC",STKaiti,KaiTi,"Noto Serif SC",serif';
+const SANS = '-apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif';
+
+export async function drawTourPoster(canvas, tour, qrCanvas) {
+  // 等 webfont（Noto Serif SC / 楷体）加载完再画，否则 canvas 落到默认字体
+  if (typeof document !== 'undefined' && document.fonts?.ready) {
+    try {
+      await Promise.race([
+        Promise.all([
+          document.fonts.load(`900 40px "Noto Serif SC"`),
+          document.fonts.load(`600 20px "Noto Serif SC"`),
+        ]),
+        new Promise(r => setTimeout(r, 1500)),
+      ]);
+    } catch { /* 字体就绪失败则用回退字体继续 */ }
+  }
+
   const W = 600;
   const H = 1150;
   canvas.width = W;
   canvas.height = H;
   const ctx = canvas.getContext('2d');
 
-  const SERIF = 'Georgia,"Songti SC","Noto Serif SC",serif';
-  const SANS = '-apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif';
-  const MAX_Y = H - 340; // 内容区下界，CTA(H-300) 与其间距 40px
+  const MAX_Y = H - 400; // 内容区下界，给二维码卡(H-370 起)留间距
 
   const title = tour.meta?.title || tour.title || '文学巡礼';
   const subtitle = tour.meta?.subtitle || tour.subtitle || '';
@@ -50,119 +79,211 @@ export function drawTourPoster(canvas, tour, qrCanvas) {
     ctx.closePath();
   };
 
-  // 底 + 顶部陶土条
-  ctx.fillStyle = '#f7f3ea';
+  const hline = (x1, y, x2, color = BORDER, lw = 1) => {
+    ctx.strokeStyle = color;
+    ctx.lineWidth = lw;
+    ctx.beginPath();
+    ctx.moveTo(x1, y);
+    ctx.lineTo(x2, y);
+    ctx.stroke();
+  };
+
+  // 朱印（实心方印 + 白字 + 内描边）
+  const drawSeal = (cx, cy, size, char) => {
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(-0.035);
+    ctx.fillStyle = VERMILION;
+    roundRect(-size / 2, -size / 2, size, size, 4);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(253,249,240,0.45)';
+    ctx.lineWidth = 1;
+    roundRect(-size / 2 + 3, -size / 2 + 3, size - 6, size - 6, 2);
+    ctx.stroke();
+    ctx.fillStyle = '#fdf9f0';
+    ctx.font = `700 ${Math.round(size * 0.56)}px ${SERIF}`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(char, 0, 1);
+    ctx.restore();
+    ctx.textBaseline = 'alphabetic';
+  };
+
+  // 混排居中行：parts = [{ text, font, fill, gap }]
+  const drawRowCenter = (parts, y) => {
+    let total = 0;
+    parts.forEach(p => { ctx.font = p.font; total += ctx.measureText(p.text).width + (p.gap || 0); });
+    let x = W / 2 - total / 2;
+    const prevAlign = ctx.textAlign;
+    ctx.textAlign = 'left';
+    parts.forEach(p => {
+      ctx.font = p.font;
+      ctx.fillStyle = p.fill;
+      ctx.fillText(p.text, x, y);
+      x += ctx.measureText(p.text).width + (p.gap || 0);
+    });
+    ctx.textAlign = prevAlign;
+  };
+
+  // 章节小标：— 文字 —（两侧饰线）
+  const sectionHeader = (text, y) => {
+    ctx.font = `600 15px ${SERIF}`;
+    ctx.textAlign = 'center';
+    ctx.fillStyle = VERMILION;
+    ctx.fillText(text, W / 2, y);
+    const tw = ctx.measureText(text).width;
+    hline(W / 2 - tw / 2 - 56, y - 5, W / 2 - tw / 2 - 16);
+    hline(W / 2 + tw / 2 + 16, y - 5, W / 2 + tw / 2 + 56, y - 5);
+    // 饰线端点小菱形
+    ctx.fillStyle = BORDER;
+    [[W / 2 - tw / 2 - 60, y - 5], [W / 2 + tw / 2 + 60, y - 5]].forEach(([dx, dy]) => {
+      ctx.save();
+      ctx.translate(dx, dy);
+      ctx.rotate(Math.PI / 4);
+      ctx.fillRect(-2.5, -2.5, 5, 5);
+      ctx.restore();
+    });
+  };
+
+  // ── 宣纸底 + 古籍双线框 ──
+  ctx.fillStyle = PAPER;
   ctx.fillRect(0, 0, W, H);
-  ctx.fillStyle = '#c2402a';
-  ctx.fillRect(0, 0, W, 10);
+  ctx.strokeStyle = BORDER;
+  ctx.lineWidth = 2;
+  ctx.strokeRect(16, 16, W - 32, H - 32);
+  ctx.lineWidth = 1;
+  ctx.strokeRect(24, 24, W - 48, H - 48);
 
-  // 品牌
-  ctx.textAlign = 'left';
-  ctx.font = `600 18px ${SERIF}`;
-  ctx.fillStyle = '#c2402a';
-  ctx.fillText('文 学 巡 礼', 48, 56);
-
-  // 大标题（最多 2 行）
+  // ── 右侧竖排侧签「纸上山河」（极淡） ──
+  ctx.fillStyle = '#ddd5c1';
+  ctx.font = `400 17px ${KAI}`;
   ctx.textAlign = 'center';
-  ctx.fillStyle = '#1c1a16';
-  ctx.font = `600 42px ${SERIF}`;
-  const tLines = wrapText(title, W - 170, 2);
-  let y = 104;
-  tLines.forEach((l, i) => {
-    ctx.fillText(l, W / 2, y);
-    y += 52;
+  '纸上山河'.split('').forEach((ch, i) => {
+    ctx.fillText(ch, W - 46, 210 + i * 30);
   });
 
-  // 印章（标题右侧）——标题过长时跳过，避免盖住标题
-  const titleMaxWidth = Math.max(...tLines.map(l => ctx.measureText(l).width));
-  const sealX = W / 2 + 155;
-  const drawSeal = titleMaxWidth < 2 * (sealX - 10 - W / 2); // 标题右缘(300+w/2)不碰印章左侧(sealX-10)
-  if (drawSeal) {
-    ctx.fillStyle = '#c2402a';
-    roundRect(sealX, 86, 46, 46, 6);
-    ctx.fill();
-    ctx.fillStyle = '#f7f3ea';
-    ctx.font = `700 22px ${SERIF}`;
-    ctx.textAlign = 'center';
-    ctx.fillText('文', sealX + 23, 86 + 31);
-  }
+  // ── 品牌：朱印 + 文学巡礼 ──
+  drawSeal(W / 2, 66, 34, '巡');
+  ctx.fillStyle = VERMILION;
+  ctx.font = `600 15px ${SERIF}`;
+  ctx.textAlign = 'center';
+  ctx.fillText('文 学 巡 礼', W / 2, 108);
 
-  // 副标题（点睛句，陶土色）
-  y += 38;
+  // ── 大标题（最多 2 行） ──
+  ctx.fillStyle = INK;
+  ctx.font = `900 38px ${SERIF}`;
+  const tLines = wrapText(title, W - 150, 2);
+  let y = 162;
+  tLines.forEach(l => {
+    ctx.fillText(l, W / 2, y);
+    y += 50;
+  });
+
+  // ── 副标题（楷体点睛句） ──
+  y += 12;
   if (subtitle) {
-    ctx.fillStyle = '#c2402a';
-    ctx.font = `400 21px ${SANS}`;
-    const sLines = wrapText(subtitle, W - 130, 2);
-    sLines.forEach((l, i) => ctx.fillText(l, W / 2, y + i * 32));
-    y += sLines.length * 32 + 16;
-  } else {
-    y += 16;
+    ctx.fillStyle = MUTED;
+    ctx.font = `400 19px ${KAI}`;
+    const sLines = wrapText(subtitle, W - 140, 2);
+    sLines.forEach(l => {
+      ctx.fillText(l, W / 2, y);
+      y += 30;
+    });
   }
 
-  // 分隔线
-  ctx.strokeStyle = '#ddd4c0';
-  ctx.lineWidth = 1.5;
-  ctx.beginPath();
-  ctx.moveTo(70, y);
-  ctx.lineTo(W - 70, y);
-  ctx.stroke();
-  y += 38;
+  // ── 统计行：朱砂方点 + 数字 ──
+  y += 24;
+  const nLoc = (tour.locations || []).length;
+  drawRowCenter([
+    { text: '■ ', font: `400 10px ${SANS}`, fill: VERMILION },
+    { text: `${nLoc}`, font: `700 18px ${SERIF}`, fill: INK },
+    { text: ' 文学地点', font: `400 15px ${SERIF}`, fill: MUTED, gap: 18 },
+    { text: '■ ', font: `400 10px ${SANS}`, fill: DAI },
+    { text: `${routes.length}`, font: `700 18px ${SERIF}`, fill: INK },
+    { text: ' 游览路线', font: `400 15px ${SERIF}`, fill: MUTED },
+  ], y);
+  y += 44;
 
-  // 统计
-  ctx.fillStyle = '#6b655a';
-  ctx.font = `400 17px ${SANS}`;
-  const statLine = `★ ${(tour.locations || []).length} 个文学地点  ·  🗺 ${routes.length} 条路线`;
-  ctx.fillText(statLine, W / 2, y);
-  y += 42;
-
-  // 亮点地点：星号与名字间用实测宽度留足间隙
-  ctx.textAlign = 'left';
-  ctx.fillStyle = '#c2402a';
-  ctx.font = `600 17px ${SANS}`;
-  ctx.fillText('✨ 亮点地点', 48, y);
-  y += 38;
-  ctx.font = `400 20px ${SANS}`;
-  for (const l of locs) {
+  // ── 亮点地点：壹贰叁 + 名 + 藤黄星 ──
+  sectionHeader('亮 点 地 点', y);
+  y += 40;
+  for (let i = 0; i < locs.length; i++) {
     if (y > MAX_Y) break;
+    const l = locs[i];
     const stars = '★'.repeat(Math.min(l.importance || 1, 5));
-    ctx.fillStyle = '#c2402a';
-    ctx.fillText(stars, 48, y);
-    const starsW = ctx.measureText(stars).width;
-    ctx.fillStyle = '#1c1a16';
-    ctx.fillText(l.name, 48 + starsW + 20, y); // 星号右侧固定留 20px
-    y += 46;
+    drawRowCenter([
+      { text: cnOrdinal(i), font: `600 15px ${SERIF}`, fill: VERMILION, gap: 10 },
+      { text: l.name, font: `600 19px ${SERIF}`, fill: INK, gap: 14 },
+      { text: stars, font: `400 11px ${SANS}`, fill: GAMBOGE },
+    ], y);
+    y += 40;
   }
 
-  // 行程预览
-  y += 22;
-  if (y < MAX_Y) {
-    ctx.fillStyle = '#c2402a';
-    ctx.font = `600 17px ${SANS}`;
-    ctx.fillText('🗺 行程预览', 48, y);
-    y += 36;
-    ctx.font = `400 18px ${SANS}`;
-    for (const r of routes) {
+  // ── 行程预览：国画五色点 + 天数 + 标题 ──
+  y += 16;
+  if (routes.length > 0 && y < MAX_Y) {
+    sectionHeader('行 程 预 览', y);
+    y += 38;
+    for (let i = 0; i < routes.length; i++) {
       if (y > MAX_Y) break;
-      const label = (r.day || r.day_label) ? `${r.day || r.day_label} · ${r.title}` : r.title;
-      ctx.fillStyle = '#1c1a16';
-      ctx.fillText(label, 48, y);
+      const r = routes[i];
+      const day = r.day || r.day_label || '';
+      const color = ROUTE_COLORS[i % ROUTE_COLORS.length];
+      // 色点单独画（圆形），文字混排
+      ctx.font = `400 16px ${SANS}`;
+      const dayText = day ? `${day}` : '';
+      const titleText = r.title || '';
+      const dayW = dayText ? ctx.measureText(dayText).width : 0;
+      const titleW = ctx.measureText(titleText).width;
+      const dotW = 8 + 12; // 圆点 + 间距
+      const midW = dayText ? dayW + 10 : 0; // 天数与标题间距
+      const total = dotW + dayW + midW + titleW;
+      let x = W / 2 - total / 2;
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.arc(x + 4, y - 5, 4, 0, Math.PI * 2);
+      ctx.fill();
+      x += dotW;
+      ctx.textAlign = 'left';
+      if (dayText) {
+        ctx.font = `600 15px ${SERIF}`;
+        ctx.fillStyle = VERMILION;
+        ctx.fillText(dayText, x, y);
+        x += dayW + 10;
+      }
+      ctx.font = `400 16px ${SANS}`;
+      ctx.fillStyle = INK;
+      ctx.fillText(titleText, x, y);
+      ctx.textAlign = 'center';
       y += 34;
     }
   }
 
-  // 底部：CTA + 二维码 + 品牌（固定位置，与内容区间距充裕）
+  // ── 二维码卡（双线框笺纸） ──
+  ctx.fillStyle = MUTED;
+  ctx.font = `400 16px ${KAI}`;
   ctx.textAlign = 'center';
-  ctx.fillStyle = '#6b655a';
-  ctx.font = `400 16px ${SANS}`;
-  ctx.fillText('扫码开启你的文学之旅', W / 2, H - 300);
+  ctx.fillText('扫码开启你的文学之旅', W / 2, H - 356);
+  const qrCard = { x: W / 2 - 106, y: H - 338, s: 212 };
+  ctx.fillStyle = IVORY;
+  ctx.fillRect(qrCard.x, qrCard.y, qrCard.s, qrCard.s);
+  ctx.strokeStyle = BORDER;
+  ctx.lineWidth = 1.5;
+  ctx.strokeRect(qrCard.x, qrCard.y, qrCard.s, qrCard.s);
+  ctx.lineWidth = 1;
+  ctx.strokeRect(qrCard.x + 5, qrCard.y + 5, qrCard.s - 10, qrCard.s - 10);
   if (qrCanvas) {
     try {
-      ctx.drawImage(qrCanvas, W / 2 - 92, H - 286, 184, 184);
+      ctx.drawImage(qrCanvas, qrCard.x + 18, qrCard.y + 18, qrCard.s - 36, qrCard.s - 36);
     } catch (e) {
       /* 二维码未就绪时忽略 */
     }
   }
-  ctx.fillStyle = '#8f8a7c';
-  ctx.font = `400 14px ${SANS}`;
-  ctx.fillText('文学巡礼 · 跟着小说游山水', W / 2, H - 40);
+
+  // ── 落款：小朱印 + 品牌句 ──
+  drawSeal(W / 2 - 108, H - 58, 18, '巡');
+  ctx.fillStyle = FAINT;
+  ctx.font = `400 13px ${SANS}`;
+  ctx.textAlign = 'left';
+  ctx.fillText('文学巡礼 · 跟着小说游山水', W / 2 - 92, H - 53);
 }
