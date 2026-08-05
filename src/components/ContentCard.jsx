@@ -37,7 +37,9 @@ export default function ContentCard({ loc, layer, layers, onLayerChange, onShowD
         )}
 
         {(() => {
-          const ld = (loc.layers || {})[layer];
+          const raw = (loc.layers || {})[layer];
+          // 兼容两种存储格式：嵌套 {text: "..."} 或 扁平字符串 "..."（历史数据/分批生成的差异）
+          const ld = typeof raw === 'string' ? { text: raw } : raw;
           if (!ld) return <p className="text-muted-foreground text-sm">暂无此分类的内容</p>;
           if (ld.scenes && ld.scenes.length > 0) {
             return ld.scenes.map((s, i) => (

@@ -238,6 +238,20 @@ function attachScenicTags(locs: any[], anchors: any[]) {
   return locs;
 }
 
+// 规范化内容层结构：DeepSeek 分批生成时可能对部分点返回扁平结构（novel: "文本"）而非
+// 嵌套结构（novel: {text: "文本"}）——实测青城山第二 chunk（地区景点）就返回了扁平结构，
+// 前端 ContentCard 只读 .text → 显示为空。写库前统一转成嵌套 {text}。
+function normalizeLayers(raw: any): any {
+  if (!raw || typeof raw !== "object") return {};
+  const out: any = {};
+  for (const [k, v] of Object.entries(raw)) {
+    if (typeof v === "string") out[k] = { text: v };
+    else if (v && typeof v === "object" && !Array.isArray(v)) out[k] = v; // 已是 {text}/{scenes}
+    else out[k] = {};
+  }
+  return out;
+}
+
 // ── 确定性路线站点规划（路线组成=代码算，AI 只写 narrative/排序）────────────────
 // 背景：路线站点曾由 DeepSeek 自由选择，AI 屡次不遵守景区分区规则（九寨沟/四姑娘山混入 2日、
 // 七星山混入 2日、2日=1日+2点）。站点组成必须确定性：1日=前山核心、2日=前山+后山、
@@ -783,7 +797,8 @@ Deno.serve(async (req: Request) => {
     // 应用内容到各地点（供写库）
     for (const l of locs) {
       const cd = contentById.get(l.id) || {};
-      l.layers = cd.layers || {}; l.reflection = cd.reflection || ""; l.practical = cd.practical || {};
+      l.layers = normalizeLayers(cd.layers);
+      l.reflection = cd.reflection || ""; l.practical = cd.practical || {};
     }
 
     // 5. Write

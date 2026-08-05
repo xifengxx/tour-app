@@ -197,6 +197,18 @@ function haversineM(a, b) {
   const s = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(a.lat)) * Math.cos(toRad(b.lat)) * Math.sin(dLng / 2) ** 2;
   return 2 * 6371000 * Math.asin(Math.sqrt(s));
 }
+// ── 镜像 index.ts normalizeLayers：扁平 {novel:"文本"} → 嵌套 {novel:{text:"文本"}}（前端只读 .text）──
+function normalizeLayers(raw) {
+  if (!raw || typeof raw !== "object") return {};
+  const out = {};
+  for (const [k, v] of Object.entries(raw)) {
+    if (typeof v === "string") out[k] = { text: v };
+    else if (v && typeof v === "object" && !Array.isArray(v)) out[k] = v;
+    else out[k] = {};
+  }
+  return out;
+}
+
 // ── 镜像 index.ts 确定性路线站点规划（1日=前山 / 2日=前山+后山 / 主题游=4热核心+统一地区景点）──
 const CLUSTER_R = 8000;
 function clusterRegionPts(locs, corePool) {
@@ -412,9 +424,25 @@ const core4 = r3Names.filter((n) => ["青城山", "天师洞", "上清宫", "建
 okPlan(core4.length === 4, `主题游 含 4 热核心（实际 ${core4.join("/")}）`);
 okPlan(planByName("文学巡礼线") === undefined, "非小说源 → 无 文学巡礼线");
 
+// ── normalizeLayers 结构规范化（青城山实际 bug：地区景点 4 层为扁平字符串，前端读 .text 为 undefined）──
+console.log("\n=== normalizeLayers 扁平→嵌套 ===");
+let normPass = true;
+const okNorm = (cond, label) => { if (!cond) normPass = false; console.log(`  ${cond ? "✓" : "✗"} ${label}`); };
+const flatLayers = { novel: "五龙沟，因五条山脊如龙而得名", history: "五龙沟是青城后山主要景点", folklore: "传说五龙沟是五位龙子的化身", customs: "祭龙习俗" };
+const nested = normalizeLayers(flatLayers);
+okNorm(typeof nested.novel === "object" && nested.novel.text === flatLayers.novel, "扁平字符串 novel → {text}");
+okNorm(typeof nested.history === "object" && nested.history.text, "扁平字符串 history → {text}");
+okNorm(typeof nested.folklore === "object" && nested.folklore.text, "扁平字符串 folklore → {text}");
+okNorm(typeof nested.customs === "object" && nested.customs.text, "扁平字符串 customs → {text}");
+const alreadyNested = normalizeLayers({ novel: { text: "已有嵌套" }, history: { scenes: [] } });
+okNorm(alreadyNested.novel.text === "已有嵌套", "已嵌套结构保持不变");
+okNorm(Array.isArray(alreadyNested.history.scenes), "已有 scenes 结构保持不变");
+okNorm(Object.keys(normalizeLayers(null)).length === 0, "null → {}");
+okNorm(Object.keys(normalizeLayers("x")).length === 0, "非对象 → {}");
+
 console.log(anchorPass ? "✅ 全部通过" : "❌ 有失败");
 
-if (!GAODE_KEY) { console.error("\n⚠️ 缺少 GAODE_KEY，跳过实时高德查询。"); process.exit(allPass && anchorPass && planPass ? 0 : 1); }
+if (!GAODE_KEY) { console.error("\n⚠️ 缺少 GAODE_KEY，跳过实时高德查询。"); process.exit(allPass && anchorPass && planPass && normPass ? 0 : 1); }
 
 // ---- 第二部分：修复后 gaode() 实际解析（需要 GAODE_KEY） ----
 console.log(`\n=== 修复后 gaode() 实际解析 (key 前缀 ${GAODE_KEY.slice(0,4)}…) ===`);
