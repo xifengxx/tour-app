@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { Search, Lightbulb } from 'lucide-react';
 
 /**
  * Full-screen map modal for searching and selecting locations.
@@ -36,7 +37,7 @@ export default function MapSearchModal({ show, onClose, onAdd, initialRegion }) 
             imageSize: new window.AMap.Size(28, 36),
             image: 'data:image/svg+xml,' + encodeURIComponent(
               '<svg xmlns="http://www.w3.org/2000/svg" width="28" height="36" viewBox="0 0 28 36">' +
-              '<path d="M14 0C6.3 0 0 6.3 0 14c0 10.5 14 22 14 22s14-11.5 14-22C28 6.3 21.7 0 14 0z" fill="#e74c3c"/>' +
+              '<path d="M14 0C6.3 0 0 6.3 0 14c0 10.5 14 22 14 22s14-11.5 14-22C28 6.3 21.7 0 14 0z" fill="#c2402a"/>' +
               '<circle cx="14" cy="12" r="5" fill="#fff"/>' +
               '</svg>'
             ),
@@ -80,7 +81,7 @@ export default function MapSearchModal({ show, onClose, onAdd, initialRegion }) 
               map: mapInstance.current,
               title: poi.name,
               label: {
-                content: `<div style="background:#c0392b;color:#fff;padding:2px 8px;border-radius:12px;font-size:11px;white-space:nowrap">${poi.name}</div>`,
+                content: `<div style="background:#c2402a;color:#fdf9f0;padding:2px 8px;border-radius:12px;font-size:11px;white-space:nowrap">${poi.name}</div>`,
                 offset: new window.AMap.Pixel(0, -30),
               },
             });
@@ -158,13 +159,13 @@ export default function MapSearchModal({ show, onClose, onAdd, initialRegion }) 
           />
           <button
             onClick={doSearch}
-            className="px-4 py-2.5 bg-primary text-white rounded-xl text-sm font-semibold"
+            className="px-4 py-2.5 bg-primary text-primary-foreground rounded-lg text-sm font-semibold flex items-center gap-1.5"
           >
-            🔍 搜索
+            <Search className="h-3.5 w-3.5" /> 搜索
           </button>
         </div>
         {tempMarkerRef.current && (
-          <button onClick={addTempPin} className="px-3 py-2 bg-green-600 text-white rounded-xl text-xs">
+          <button onClick={addTempPin} className="px-3 py-2 bg-pine text-white rounded-lg text-xs">
             + 添加此点
           </button>
         )}
@@ -175,8 +176,8 @@ export default function MapSearchModal({ show, onClose, onAdd, initialRegion }) 
 
       {/* Hint */}
       <div className="absolute bottom-4 left-4 right-4 pointer-events-none">
-        <div className="bg-card/90 backdrop-blur rounded-xl px-4 py-2 text-muted-foreground text-xs text-center max-w-xs mx-auto">
-          💡 搜索地点点击标记添加，或直接点地图任意位置放置标记
+        <div className="bg-card/90 backdrop-blur rounded-lg px-4 py-2 text-muted-foreground text-xs text-center max-w-xs mx-auto border border-border flex items-center justify-center gap-1.5">
+          <Lightbulb className="h-3.5 w-3.5 text-gamboge flex-shrink-0" /> 搜索地点点击标记添加，或直接点地图任意位置放置标记
         </div>
       </div>
     </div>

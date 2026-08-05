@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../lib/supabase';
+import SealLogo from './SealLogo';
+import { Check, RefreshCw, ArrowLeft, TriangleAlert, ScrollText, Package } from 'lucide-react';
 
 const SB_URL = import.meta.env.VITE_SUPABASE_URL || '';
 const SB_ANON = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
@@ -101,24 +103,26 @@ export default function ProcessingPhase({
   if (error) {
     return (
       <div className="space-y-4">
-        <section className="bg-card rounded-2xl p-6 border border-primary/30 text-center">
-          <div className="text-4xl mb-3">⚠️</div>
+        <section className="bg-card rounded-lg p-6 border border-primary/30 text-center">
+          <div className="w-12 h-12 mx-auto mb-3 rounded-full border border-primary/30 bg-primary/5 flex items-center justify-center">
+            <TriangleAlert className="h-5 w-5 text-primary" />
+          </div>
           <h2 className="text-foreground font-serif font-bold text-lg mb-2">AI 处理失败</h2>
           <p className="text-primary text-sm mb-5">{error}</p>
           <div className="flex gap-2">
             {onRetry && (
               <button
                 onClick={onRetry}
-                className="flex-1 py-3 bg-gradient-to-r from-primary to-[#d97757] text-white rounded-xl text-sm font-bold hover:from-primary hover:to-[#d97757] transition-colors"
+                className="flex-1 py-3 bg-primary text-primary-foreground rounded-lg text-sm font-bold hover:bg-primary/90 transition-colors flex items-center justify-center gap-1.5"
               >
-                🔄 重新处理
+                <RefreshCw className="h-4 w-4" /> 重新处理
               </button>
             )}
             <button
               onClick={onBack}
-              className="flex-1 py-3 bg-black/5 text-muted-foreground rounded-xl text-sm hover:bg-black/10 transition-colors"
+              className="flex-1 py-3 bg-black/[0.05] text-muted-foreground rounded-lg text-sm hover:bg-black/10 transition-colors flex items-center justify-center gap-1.5"
             >
-              ← 返回修改
+              <ArrowLeft className="h-4 w-4" /> 返回修改
             </button>
           </div>
         </section>
@@ -132,17 +136,30 @@ export default function ProcessingPhase({
 
   return (
     <div className="space-y-4">
-      <section className="bg-card rounded-2xl p-6 border border-border text-center">
-        <div className="mb-4">
-          <div className="inline-block w-16 h-16 border-4 border-border border-t-primary rounded-full animate-spin" />
+      <section className="bg-card rounded-lg p-6 border border-border text-center relative overflow-hidden">
+        {/* 竖排装饰 */}
+        <div className="vertical-rl font-kai text-xs text-muted-foreground/50 absolute right-4 top-6 select-none hidden sm:block">
+          研墨展卷，静候佳作
         </div>
 
-        <h2 className="text-foreground font-serif font-bold text-lg mb-2">🤖 AI 正在分析处理</h2>
-        <p className="text-muted-foreground text-sm mb-4">服务器正在自动调用 AI 提取地点、生成内容、规划路线</p>
+        {/* 研墨展卷：朱印呼吸 */}
+        <div className="mb-4 flex justify-center">
+          <div className="anim-seal-pulse">
+            <SealLogo size={56} char="墨" />
+          </div>
+        </div>
+
+        <h2 className="text-foreground font-serif font-black text-lg mb-1.5">研墨展卷中</h2>
+        <p className="font-kai text-muted-foreground text-sm mb-5">AI 正在提取地点、研写内容、规划路线</p>
+
+        {/* 墨线流动 */}
+        <div className="relative h-[3px] bg-border/70 rounded-full overflow-hidden max-w-xs mx-auto mb-5">
+          <div className="absolute inset-y-0 w-1/4 bg-primary rounded-full anim-ink" />
+        </div>
 
         <div className="flex items-center justify-center gap-4 text-xs text-muted-foreground mb-5">
-          <div className="flex items-center gap-1">
-            <span className="w-2 h-2 rounded-full bg-yellow-500 animate-pulse" />
+          <div className="flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-gamboge animate-pulse" />
             处理中
           </div>
           <span>·</span>
@@ -151,8 +168,8 @@ export default function ProcessingPhase({
           <div>已检测 {pollCount} 次</div>
         </div>
 
-        <div className="bg-background rounded-xl px-4 py-3 mb-5 max-w-sm mx-auto">
-          <div className="text-muted-foreground text-xs mb-2">⏱ 预估时间</div>
+        <div className="bg-background rounded-lg px-4 py-3 mb-5 max-w-sm mx-auto border border-border/60">
+          <div className="text-muted-foreground text-xs mb-2 font-serif tracking-wide">预估时间</div>
           <div className="flex justify-between text-xs">
             <div className="text-center px-2">
               <div className="text-foreground font-bold">30–60 秒</div>
@@ -171,8 +188,10 @@ export default function ProcessingPhase({
           </div>
         </div>
 
-        <div className="text-left bg-background rounded-xl p-4 mb-5">
-          <h3 className="text-foreground text-xs font-bold mb-3">📋 AI 自动处理流程</h3>
+        <div className="text-left bg-background rounded-lg p-4 mb-4 border border-border/60">
+          <h3 className="text-foreground text-xs font-serif font-bold mb-3 flex items-center gap-1.5">
+            <ScrollText className="h-3.5 w-3.5 text-primary" /> AI 自动处理流程
+          </h3>
           <div className="space-y-2">
             {[
               '草稿已保存到数据库',
@@ -183,23 +202,25 @@ export default function ProcessingPhase({
               '数据写入数据库，页面自动刷新',
             ].map((text, i) => (
               <div key={i} className="flex items-center gap-2 text-xs">
-                <span className={i < 2 ? 'text-green-700' : 'text-muted-foreground'}>
-                  {i < 2 ? '●' : '○'}
-                </span>
-                <span className={i < 2 ? 'text-green-700/80' : 'text-muted-foreground'}>{text}</span>
+                {i < 2
+                  ? <Check className="h-3.5 w-3.5 text-pine flex-shrink-0" />
+                  : <span className="w-3.5 h-3.5 rounded-full border border-border flex-shrink-0" />}
+                <span className={i < 2 ? 'text-pine' : 'text-muted-foreground'}>{text}</span>
               </div>
             ))}
           </div>
         </div>
 
-        <div className="text-left bg-background rounded-xl p-4 mb-5">
-          <h3 className="text-muted-foreground text-xs mb-2">📦 已提交的材料</h3>
+        <div className="text-left bg-background rounded-lg p-4 border border-border/60">
+          <h3 className="text-muted-foreground text-xs font-serif mb-2 flex items-center gap-1.5">
+            <Package className="h-3.5 w-3.5 text-dai" /> 已提交的材料
+          </h3>
           <div className="space-y-1.5 text-xs">
             {title && <div className="text-foreground"><strong>标题：</strong>{title}</div>}
             {destName && <div className="text-foreground"><strong>目的地：</strong>{destName}{destRegion ? `（${destRegion}）` : ''}</div>}
             {novelTitle && <div className="text-foreground"><strong>作品：</strong>{novelTitle}{novelAuthor ? ` — ${novelAuthor}` : ''}</div>}
             {sourceText && <div className="text-muted-foreground"><strong>文本：</strong>已粘贴 {sourceText.length} 字</div>}
-            {!sourceText && !novelTitle && <div className="text-yellow-400">⚠️ 未提供源材料，AI 只能做基础分析</div>}
+            {!sourceText && !novelTitle && <div className="text-ochre">未提供源材料，AI 只能做基础分析</div>}
           </div>
         </div>
       </section>
@@ -207,20 +228,20 @@ export default function ProcessingPhase({
       <div className="flex gap-2">
         <button
           onClick={onBack}
-          className="flex-1 py-3 bg-black/5 text-muted-foreground rounded-xl text-sm hover:bg-black/10 transition-colors"
+          className="flex-1 py-3 bg-black/[0.05] text-muted-foreground rounded-lg text-sm hover:bg-black/10 transition-colors flex items-center justify-center gap-1.5"
         >
-          ← 返回修改
+          <ArrowLeft className="h-4 w-4" /> 返回修改
         </button>
         <button
           onClick={onSkip}
-          className="flex-1 py-3 bg-black/5 text-muted-foreground rounded-xl text-sm hover:bg-black/10 transition-colors"
+          className="flex-1 py-3 bg-black/[0.05] text-muted-foreground rounded-lg text-sm hover:bg-black/10 transition-colors"
         >
           跳过 → 手动编辑
         </button>
       </div>
 
       <p className="text-muted-foreground text-xs text-center">
-        💡 AI 处理完成后页面将自动刷新。<br />
+        AI 处理完成后页面将自动刷新。<br />
         你也可以关闭此页面，稍后从「我的导览」中查看结果。
       </p>
     </div>

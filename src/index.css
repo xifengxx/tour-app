@@ -126,6 +126,19 @@ body::before {
 }
 .anim-stamp { animation: stamp 0.35s cubic-bezier(0.2, 1.4, 0.4, 1) both; }
 
+/* 研墨展卷（ProcessingPhase 等待动画）：朱印呼吸 + 墨线流动 */
+@keyframes sealPulse {
+  0%, 100% { transform: rotate(-2deg) scale(1); }
+  50%      { transform: rotate(-2deg) scale(1.07); }
+}
+.anim-seal-pulse { animation: sealPulse 1.7s ease-in-out infinite; }
+
+@keyframes inkSweep {
+  0%   { transform: translateX(-120%); }
+  100% { transform: translateX(420%); }
+}
+.anim-ink { animation: inkSweep 1.9s cubic-bezier(0.4, 0.1, 0.5, 0.9) infinite; }
+
 @media (prefers-reduced-motion: reduce) {
-  .anim-rise, .anim-stamp { animation: none; }
+  .anim-rise, .anim-stamp, .anim-seal-pulse, .anim-ink { animation: none; }
 }

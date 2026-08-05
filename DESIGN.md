@@ -12,7 +12,9 @@
 | Phase 0 地基 | index.css token + Noto Serif SC + 纸纹/印章/竖排工具类 | ✅ 完成 |
 | Phase 1 门面 | NavBar（朱印 logo）+ Home（hero + 书页卡）+ Login | ✅ 完成 |
 | Phase 2 核心 | TourView（RouteBar / ContentCard / 底部手卷 / DetailModal）+ 路线国画五色 | ✅ 完成 |
-| Phase 3 收尾 | TourEdit/Review、其余弹窗、触摸目标走查 | ⏳ 待做 |
+| Phase 3 收尾 | TourEdit/Review、其余弹窗、研墨展卷等待动画 | ✅ 完成 |
+
+> Phase 3 已落地：ProcessingPhase「研墨展卷」等待动画（朱印呼吸 + 墨线流动 + 竖排装饰）；步骤指示器改壹贰叁篆刻；saveMsg 类型化（去 ✅❌ emoji 判断）；海报/二维码/地图搜索弹窗色值同步新色板；全站 emoji 图标清零（内容数据中的 layer icon 除外）。触摸目标基线 36-44px 沿旧布局保留。
 
 > Phase 2 已落地：路线五色与标记色统一为国画色系（`src/lib/routeColors.js` 共享常量）、底图换 `amap://styles/whitesmoke`、底部卡片手卷化（卷轴杆拉手 + 壹贰叁编号地点条 + 卷首语楷体 narrative）、ContentCard/DetailModal 批注式排版（朱色章节小标 + 藤黄「」楷体引文）、ContentCard 暗色残留修复、DetailModal 补上扁平 layers 兼容（旧 bug）。
 

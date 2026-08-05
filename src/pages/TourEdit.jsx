@@ -9,6 +9,7 @@ import MapSearchModal from '../components/MapSearchModal';
 import ProcessingPhase from '../components/ProcessingPhase';
 import TourEditInput from '../components/TourEditInput';
 import TourEditReview from '../components/TourEditReview';
+import { MapPinned, CloudOff, RefreshCw } from 'lucide-react';
 
 const DEFAULT_LAYERS = [
   { id: 'novel', name: '小说场景', icon: '📖', color: '#c0392b' },
@@ -60,6 +61,8 @@ export default function TourEdit() {
   // ── UI state ──
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState('');
+  const [saveMsgType, setSaveMsgType] = useState('ok'); // ok | info | err — 驱动横幅配色，替代 emoji 判断
+  const flash = (msg, type = 'err') => { setSaveMsg(msg); setSaveMsgType(type); };
   const [draftTourId, setDraftTourId] = useState(tourId);
   const [processingError, setProcessingError] = useState('');
   // 'ai' = retry reruns AI processing; 'reload' = AI done, just refetch results
@@ -115,8 +118,8 @@ export default function TourEdit() {
 
   // ── Save draft and request AI processing ──
   const handleSaveDraft = async () => {
-    if (!user) { setSaveMsg('请先登录'); return; }
-    if (!title.trim()) { setSaveMsg('请输入标题'); return; }
+    if (!user) { flash('请先登录'); return; }
+    if (!title.trim()) { flash('请输入标题'); return; }
     setSaving(true);
     setSaveMsg('');
 
@@ -154,9 +157,9 @@ export default function TourEdit() {
       }
 
       setPhase('processing');
-      setSaveMsg(`✅ 草稿已保存 (ID: ${uuid})`);
+      flash(`草稿已保存 (ID: ${uuid})`, 'ok');
     } catch (e) {
-      setSaveMsg(`❌ ${e.message}`);
+      flash(e.message);
     } finally {
       setSaving(false);
     }
@@ -164,9 +167,9 @@ export default function TourEdit() {
 
   // ── 保存基本信息（已有导览）：只更新标题/目的地等，不触发 AI 重新处理 ──
   const handleSaveBasic = async () => {
-    if (!user) { setSaveMsg('请先登录'); return; }
-    if (!title.trim()) { setSaveMsg('请输入标题'); return; }
-    if (!draftTourId) { setSaveMsg('❌ 尚未保存草稿'); return; }
+    if (!user) { flash('请先登录'); return; }
+    if (!title.trim()) { flash('请输入标题'); return; }
+    if (!draftTourId) { flash('尚未保存草稿'); return; }
     setSaving(true);
     setSaveMsg('');
     const tourData = {
@@ -187,10 +190,10 @@ export default function TourEdit() {
     try {
       await supabase.from('tours').update(tourData).eq('id', draftTourId);
       await reloadTour();
-      setSaveMsg('✅ 基本信息已保存');
+      flash('基本信息已保存', 'ok');
       setPhase('review');
     } catch (e) {
-      setSaveMsg(`❌ ${e.message}`);
+      flash(e.message);
     } finally {
       setSaving(false);
     }
@@ -198,15 +201,15 @@ export default function TourEdit() {
 
   // ── Re-process: 重置 status=processing，触发 UPDATE 触发器重新调用 Edge Function ──
   const handleReprocess = async () => {
-    if (!user) { setSaveMsg('请先登录'); return; }
-    if (!draftTourId) { setSaveMsg('❌ 尚未保存草稿'); return; }
+    if (!user) { flash('请先登录'); return; }
+    if (!draftTourId) { flash('尚未保存草稿'); return; }
     setProcessingError('');
     try {
       await supabase.from('tours').update({ status: 'processing' }).eq('id', draftTourId);
       setRetryCount(c => c + 1); // 强制重挂载 ProcessingPhase，重置轮询
       setPhase('processing');
     } catch (e) {
-      setSaveMsg(`❌ ${e.message}`);
+      flash(e.message);
     }
   };
 
@@ -264,7 +267,7 @@ export default function TourEdit() {
 
   // ── Save all (final) ──
   const handleSaveAll = async () => {
-    if (!user) { setSaveMsg('请先登录'); return; }
+    if (!user) { flash('请先登录'); return; }
     setSaving(true);
     setSaveMsg('');
 
@@ -312,9 +315,9 @@ export default function TourEdit() {
         );
       }
 
-      setSaveMsg('✅ 保存成功！');
+      flash('保存成功！', 'ok');
     } catch (e) {
-      setSaveMsg(`❌ ${e.message}`);
+      flash(e.message);
     } finally {
       setSaving(false);
     }
@@ -344,7 +347,7 @@ export default function TourEdit() {
         rightContent={
           phase === 'review' ? (
             <Button size="sm" onClick={handleSaveAll} disabled={saving}>
-              {saving ? '保存中...' : '💾 保存'}
+              {saving ? '保存中...' : '保存'}
             </Button>
           ) : false
         }
@@ -352,10 +355,10 @@ export default function TourEdit() {
 
       {saveMsg && (
         <div className={`px-4 py-2.5 text-xs text-center font-medium flex items-center justify-center gap-3 ${
-          saveMsg.includes('✅') ? 'bg-green-600/10 text-green-700' :
-          saveMsg.includes('💡') ? 'bg-blue-600/10 text-blue-700' :
+          saveMsgType === 'ok' ? 'bg-pine/10 text-pine' :
+          saveMsgType === 'info' ? 'bg-dai/10 text-dai' :
           'bg-primary/10 text-primary'
-        }`}>{saveMsg}{saveMsg.includes('✅') && <a href={`/tour/${draftTourId}`} className="underline hover:text-primary transition-colors">查看导览 →</a>}</div>
+        }`}>{saveMsg}{saveMsgType === 'ok' && <a href={`/tour/${draftTourId}`} className="underline hover:text-primary transition-colors">查看导览 →</a>}</div>
       )}
 
       <div className="flex-1 overflow-y-auto p-4 max-w-2xl mx-auto w-full pb-24">
@@ -418,22 +421,30 @@ export default function TourEdit() {
           tour ? (
             // 导览加载成功，但 AI 没有生成任何地点 —— 重试加载没用，给出正确操作
             <div className="text-center py-16 space-y-4">
-              <div className="text-4xl">🗺️</div>
+              <div className="w-14 h-14 mx-auto rounded-full border border-border bg-card flex items-center justify-center">
+                <MapPinned className="h-6 w-6 text-muted-foreground" />
+              </div>
               <p className="text-muted-foreground">AI 没有生成任何地点</p>
               <p className="text-muted-foreground text-xs">可能原因：源文本过少、地点未识别、或坐标校验全被过滤</p>
               <div className="flex gap-2 justify-center">
                 <button onClick={() => setPhase('input')}
-                  className="px-6 py-2 bg-black/5 text-muted-foreground rounded-xl text-sm">← 修改基本信息</button>
+                  className="px-6 py-2 bg-black/[0.05] text-muted-foreground rounded-lg text-sm">← 修改基本信息</button>
                 <button onClick={handleReprocess}
-                  className="px-6 py-2 bg-primary text-white rounded-xl text-sm">🔄 AI 重新分析</button>
+                  className="px-6 py-2 bg-primary text-primary-foreground rounded-lg text-sm flex items-center gap-1.5">
+                  <RefreshCw className="h-3.5 w-3.5" /> AI 重新分析
+                </button>
               </div>
             </div>
           ) : (
             // 导览数据加载失败（网络/权限问题）
             <div className="text-center py-16 space-y-4">
-              <div className="text-4xl">📡</div>
+              <div className="w-14 h-14 mx-auto rounded-full border border-border bg-card flex items-center justify-center">
+                <CloudOff className="h-6 w-6 text-muted-foreground" />
+              </div>
               <p className="text-muted-foreground">数据加载失败，请检查网络后重试</p>
-              <button onClick={() => reloadTour()} className="px-6 py-2 bg-primary text-white rounded-xl text-sm">🔄 重试加载</button>
+              <button onClick={() => reloadTour()} className="px-6 py-2 bg-primary text-primary-foreground rounded-lg text-sm flex items-center gap-1.5 mx-auto">
+                <RefreshCw className="h-3.5 w-3.5" /> 重试加载
+              </button>
             </div>
           )
         )}

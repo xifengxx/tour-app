@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
-import { X, Send, Trash2 } from 'lucide-react';
+import { X, Send, Trash2, MessageCircle } from 'lucide-react';
 
 export default function CommentsModal({ tourId, onClose }) {
   const { user } = useAuth();
@@ -60,7 +60,9 @@ export default function CommentsModal({ tourId, onClose }) {
         onClick={e => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-5 py-3 border-b border-border flex-shrink-0">
-          <h3 className="font-serif font-bold text-foreground">💬 评论</h3>
+          <h3 className="font-serif font-bold text-foreground flex items-center gap-1.5">
+            <MessageCircle className="h-4 w-4 text-primary" /> 评论
+          </h3>
           <button onClick={onClose} className="w-8 h-8 rounded-full bg-black/5 text-foreground flex items-center justify-center hover:bg-black/10" aria-label="关闭">
             <X className="h-4 w-4" />
           </button>

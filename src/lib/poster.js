@@ -51,20 +51,20 @@ export function drawTourPoster(canvas, tour, qrCanvas) {
   };
 
   // 底 + 顶部陶土条
-  ctx.fillStyle = '#f5f4ed';
+  ctx.fillStyle = '#f7f3ea';
   ctx.fillRect(0, 0, W, H);
-  ctx.fillStyle = '#c96442';
+  ctx.fillStyle = '#c2402a';
   ctx.fillRect(0, 0, W, 10);
 
   // 品牌
   ctx.textAlign = 'left';
   ctx.font = `600 18px ${SERIF}`;
-  ctx.fillStyle = '#c96442';
+  ctx.fillStyle = '#c2402a';
   ctx.fillText('文 学 巡 礼', 48, 56);
 
   // 大标题（最多 2 行）
   ctx.textAlign = 'center';
-  ctx.fillStyle = '#141413';
+  ctx.fillStyle = '#1c1a16';
   ctx.font = `600 42px ${SERIF}`;
   const tLines = wrapText(title, W - 170, 2);
   let y = 104;
@@ -78,10 +78,10 @@ export function drawTourPoster(canvas, tour, qrCanvas) {
   const sealX = W / 2 + 155;
   const drawSeal = titleMaxWidth < 2 * (sealX - 10 - W / 2); // 标题右缘(300+w/2)不碰印章左侧(sealX-10)
   if (drawSeal) {
-    ctx.fillStyle = '#c96442';
+    ctx.fillStyle = '#c2402a';
     roundRect(sealX, 86, 46, 46, 6);
     ctx.fill();
-    ctx.fillStyle = '#f5f4ed';
+    ctx.fillStyle = '#f7f3ea';
     ctx.font = `700 22px ${SERIF}`;
     ctx.textAlign = 'center';
     ctx.fillText('文', sealX + 23, 86 + 31);
@@ -90,7 +90,7 @@ export function drawTourPoster(canvas, tour, qrCanvas) {
   // 副标题（点睛句，陶土色）
   y += 38;
   if (subtitle) {
-    ctx.fillStyle = '#c96442';
+    ctx.fillStyle = '#c2402a';
     ctx.font = `400 21px ${SANS}`;
     const sLines = wrapText(subtitle, W - 130, 2);
     sLines.forEach((l, i) => ctx.fillText(l, W / 2, y + i * 32));
@@ -100,7 +100,7 @@ export function drawTourPoster(canvas, tour, qrCanvas) {
   }
 
   // 分隔线
-  ctx.strokeStyle = '#e0ddd2';
+  ctx.strokeStyle = '#ddd4c0';
   ctx.lineWidth = 1.5;
   ctx.beginPath();
   ctx.moveTo(70, y);
@@ -109,7 +109,7 @@ export function drawTourPoster(canvas, tour, qrCanvas) {
   y += 38;
 
   // 统计
-  ctx.fillStyle = '#6f6d63';
+  ctx.fillStyle = '#6b655a';
   ctx.font = `400 17px ${SANS}`;
   const statLine = `★ ${(tour.locations || []).length} 个文学地点  ·  🗺 ${routes.length} 条路线`;
   ctx.fillText(statLine, W / 2, y);
@@ -117,7 +117,7 @@ export function drawTourPoster(canvas, tour, qrCanvas) {
 
   // 亮点地点：星号与名字间用实测宽度留足间隙
   ctx.textAlign = 'left';
-  ctx.fillStyle = '#c96442';
+  ctx.fillStyle = '#c2402a';
   ctx.font = `600 17px ${SANS}`;
   ctx.fillText('✨ 亮点地点', 48, y);
   y += 38;
@@ -125,10 +125,10 @@ export function drawTourPoster(canvas, tour, qrCanvas) {
   for (const l of locs) {
     if (y > MAX_Y) break;
     const stars = '★'.repeat(Math.min(l.importance || 1, 5));
-    ctx.fillStyle = '#c96442';
+    ctx.fillStyle = '#c2402a';
     ctx.fillText(stars, 48, y);
     const starsW = ctx.measureText(stars).width;
-    ctx.fillStyle = '#141413';
+    ctx.fillStyle = '#1c1a16';
     ctx.fillText(l.name, 48 + starsW + 20, y); // 星号右侧固定留 20px
     y += 46;
   }
@@ -136,7 +136,7 @@ export function drawTourPoster(canvas, tour, qrCanvas) {
   // 行程预览
   y += 22;
   if (y < MAX_Y) {
-    ctx.fillStyle = '#c96442';
+    ctx.fillStyle = '#c2402a';
     ctx.font = `600 17px ${SANS}`;
     ctx.fillText('🗺 行程预览', 48, y);
     y += 36;
@@ -144,7 +144,7 @@ export function drawTourPoster(canvas, tour, qrCanvas) {
     for (const r of routes) {
       if (y > MAX_Y) break;
       const label = (r.day || r.day_label) ? `${r.day || r.day_label} · ${r.title}` : r.title;
-      ctx.fillStyle = '#141413';
+      ctx.fillStyle = '#1c1a16';
       ctx.fillText(label, 48, y);
       y += 34;
     }
@@ -152,7 +152,7 @@ export function drawTourPoster(canvas, tour, qrCanvas) {
 
   // 底部：CTA + 二维码 + 品牌（固定位置，与内容区间距充裕）
   ctx.textAlign = 'center';
-  ctx.fillStyle = '#6f6d63';
+  ctx.fillStyle = '#6b655a';
   ctx.font = `400 16px ${SANS}`;
   ctx.fillText('扫码开启你的文学之旅', W / 2, H - 300);
   if (qrCanvas) {
@@ -162,7 +162,7 @@ export function drawTourPoster(canvas, tour, qrCanvas) {
       /* 二维码未就绪时忽略 */
     }
   }
-  ctx.fillStyle = '#a5a29a';
+  ctx.fillStyle = '#8f8a7c';
   ctx.font = `400 14px ${SANS}`;
   ctx.fillText('文学巡礼 · 跟着小说游山水', W / 2, H - 40);
 }

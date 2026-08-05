@@ -1,3 +1,5 @@
+import { ClipboardList, BookOpen, Save, Sparkles, Loader2 } from 'lucide-react';
+
 /**
  * 导览创建/编辑 · 第一阶段：基本信息 + 源材料输入表单。
  * 从 TourEdit.jsx 拆分，纯受控组件（状态由父组件持有）。
@@ -9,21 +11,23 @@ export default function TourEditInput({
   novelSynopsis, setNovelSynopsis, sourceText, setSourceText,
   draftTourId, saving, handleSaveBasic, handleSaveDraft,
 }) {
-  const inputCls = "w-full bg-background text-foreground rounded-xl px-3 py-2.5 text-sm border border-border mt-1 outline-none focus:border-primary";
+  const inputCls = "w-full bg-background text-foreground rounded-lg px-3 py-2.5 text-sm border border-border mt-1 outline-none focus:border-primary";
   return (
     <div className="space-y-4">
-      {/* Step indicator */}
+      {/* Step indicator · 壹贰叁 */}
       <div className="flex items-center gap-2 mb-2">
-        <div className="w-8 h-8 rounded-full bg-primary text-white flex items-center justify-center text-xs font-bold">1</div>
-        <div className="text-foreground font-semibold text-sm">基本信息与源材料</div>
-        <div className="flex-1 h-px bg-black/10" />
-        <div className="w-8 h-8 rounded-full bg-black/5 text-muted-foreground flex items-center justify-center text-xs">2</div>
-        <div className="w-8 h-8 rounded-full bg-black/5 text-muted-foreground flex items-center justify-center text-xs">3</div>
+        <div className="w-8 h-8 rounded-md bg-primary text-primary-foreground flex items-center justify-center text-sm font-serif font-bold">壹</div>
+        <div className="text-foreground font-serif font-semibold text-sm">基本信息与源材料</div>
+        <div className="flex-1 h-px bg-border" />
+        <div className="w-8 h-8 rounded-md bg-black/[0.04] border border-border text-muted-foreground flex items-center justify-center text-sm font-serif">贰</div>
+        <div className="w-8 h-8 rounded-md bg-black/[0.04] border border-border text-muted-foreground flex items-center justify-center text-sm font-serif">叁</div>
       </div>
 
       {/* Basic info */}
-      <section className="bg-card rounded-2xl p-5 border border-border space-y-3">
-        <h2 className="text-foreground font-bold text-sm">📋 导览信息</h2>
+      <section className="bg-card rounded-lg p-5 border border-border space-y-3">
+        <h2 className="text-foreground font-serif font-bold text-sm flex items-center gap-1.5">
+          <ClipboardList className="h-4 w-4 text-primary" /> 导览信息
+        </h2>
         <div>
           <label className="text-muted-foreground text-xs">标题 *</label>
           <input value={title} onChange={e => setTitle(e.target.value)} className={inputCls} placeholder="如：剑出衡山 · 南岳巡礼" />
@@ -55,8 +59,10 @@ export default function TourEditInput({
       </section>
 
       {/* Source materials */}
-      <section className="bg-card rounded-2xl p-5 border border-border space-y-3">
-        <h2 className="text-foreground font-bold text-sm">📚 源材料 — 提供得越多，AI 分析越精准</h2>
+      <section className="bg-card rounded-lg p-5 border border-border space-y-3">
+        <h2 className="text-foreground font-serif font-bold text-sm flex items-center gap-1.5">
+          <BookOpen className="h-4 w-4 text-primary" /> 源材料 <span className="text-muted-foreground font-sans font-normal text-xs">— 提供得越多，AI 分析越精准</span>
+        </h2>
         <div>
           <label className="text-muted-foreground text-xs">小说 / 作品名称</label>
           <input value={novelTitle} onChange={e => setNovelTitle(e.target.value)} className={inputCls} placeholder="如：笑傲江湖" />
@@ -85,12 +91,14 @@ export default function TourEditInput({
 
         <div className="flex gap-2">
           {draftTourId && (
-            <button onClick={handleSaveBasic} disabled={saving} className="flex-1 py-3.5 bg-black/5 text-foreground rounded-xl text-sm font-bold hover:bg-black/10 transition-colors disabled:opacity-50">
-              {saving ? '⏳ 保存中...' : '💾 保存修改'}
+            <button onClick={handleSaveBasic} disabled={saving} className="flex-1 py-3.5 bg-black/[0.05] text-foreground rounded-lg text-sm font-bold hover:bg-black/10 transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5">
+              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+              {saving ? '保存中...' : '保存修改'}
             </button>
           )}
-          <button onClick={handleSaveDraft} disabled={saving} className="flex-1 py-3.5 bg-gradient-to-r from-primary to-[#d97757] text-white rounded-xl text-sm font-bold disabled:opacity-50 hover:from-primary hover:to-[#d97757] transition-colors shadow-lg shadow-primary/20">
-            {saving ? '⏳ 保存中...' : draftTourId ? '🤖 AI 重新分析' : '🤖 AI 分析：生成地点、内容与路线'}
+          <button onClick={handleSaveDraft} disabled={saving} className="flex-1 py-3.5 bg-primary text-primary-foreground rounded-lg text-sm font-bold disabled:opacity-50 hover:bg-primary/90 transition-colors shadow-[0_6px_20px_-8px_rgba(194,64,42,0.5)] flex items-center justify-center gap-1.5">
+            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+            {saving ? '保存中...' : draftTourId ? 'AI 重新分析' : 'AI 分析：生成地点、内容与路线'}
           </button>
         </div>
         <p className="text-muted-foreground text-xs text-center leading-relaxed">

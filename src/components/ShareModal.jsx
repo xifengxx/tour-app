@@ -79,7 +79,7 @@ export default function ShareModal({ tour, tourId, onClose }) {
 
         {/* 二维码 */}
         <div className="flex items-center justify-center py-3 bg-background rounded-xl border border-border mb-4">
-          <QRCodeCanvas ref={qrRef} value={shareUrl} size={160} bgColor="#f5f4ed" fgColor="#141413" />
+          <QRCodeCanvas ref={qrRef} value={shareUrl} size={160} bgColor="#f7f3ea" fgColor="#1c1a16" />
         </div>
 
         <div className="space-y-2">
