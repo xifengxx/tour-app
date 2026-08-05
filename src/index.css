@@ -59,6 +59,38 @@ body::before {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
 }
 
+/* 陈年纸边晕影：四周微微泛黄变深，如旧卷的天头地脚 */
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 9998;
+  pointer-events: none;
+  background: radial-gradient(125% 95% at 50% 38%, transparent 58%, rgba(122, 98, 58, 0.075) 100%);
+}
+
+/* 选中文字：朱砂底白字，品牌化的阅读痕迹 */
+::selection {
+  background: rgba(194, 64, 42, 0.85);
+  color: #fdf9f0;
+}
+
+/* 滚动条：细而暖 */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #cfc5ae transparent;
+}
+*::-webkit-scrollbar { width: 6px; height: 6px; }
+*::-webkit-scrollbar-thumb { background: #cfc5ae; border-radius: 3px; }
+*::-webkit-scrollbar-track { background: transparent; }
+
+/* 键盘焦点：朱砂环 */
+:focus-visible {
+  outline: 2px solid var(--color-ring);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
 /* AMap container fixes */
 .amap-container { background: #f7f3ea !important; }
 
@@ -81,18 +113,56 @@ body::before {
   outline-offset: 3px;
 }
 
-/* 朱印（实心印章，如 logo） */
+/* 导览卡 hover：浮出双线框（书页从函套中取出） */
+.book-card {
+  outline: 1px solid transparent;
+  outline-offset: 3px;
+  transition: transform 0.22s ease, box-shadow 0.22s ease, border-color 0.22s ease, outline-color 0.22s ease;
+}
+.book-card:hover {
+  outline-color: var(--color-border);
+}
+
+/* 金泥饰线：导航栏/区块分隔下的一道细金 */
+.gold-hairline {
+  box-shadow: 0 1px 0 0 rgba(185, 147, 74, 0.28);
+}
+
+/* 菱形饰线分隔：— ◆ —（hero 与区块之间） */
+.rule-ornament {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--color-border);
+}
+.rule-ornament::before,
+.rule-ornament::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--color-border);
+}
+.rule-ornament > span {
+  width: 6px;
+  height: 6px;
+  transform: rotate(45deg);
+  background: var(--color-gamboge);
+  opacity: 0.75;
+  flex-shrink: 0;
+}
+
+/* 朱印（实心印章，如 logo）：朱砂渐变如印泥蘸色，微凹内描边 */
 .seal {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: var(--color-primary);
+  background: radial-gradient(130% 130% at 28% 22%, #cf4c33 0%, #c2402a 45%, #a93521 100%);
   color: var(--color-primary-foreground);
   font-family: var(--font-serif);
   font-weight: 700;
   border-radius: 4px;
   transform: rotate(-2deg);
-  box-shadow: inset 0 0 0 1px rgba(253, 249, 240, 0.4), 0 1px 2px rgba(28, 26, 22, 0.15);
+  box-shadow: inset 0 0 0 1px rgba(253, 249, 240, 0.4), inset 0 -2px 4px rgba(90, 20, 8, 0.25), 0 1px 2px rgba(28, 26, 22, 0.18);
   user-select: none;
   line-height: 1;
 }
@@ -139,6 +209,13 @@ body::before {
 }
 .anim-ink { animation: inkSweep 1.9s cubic-bezier(0.4, 0.1, 0.5, 0.9) infinite; }
 
+/* 内容淡入：切换地点/内容层时，正文如翻页般浮出 */
+@keyframes contentFade {
+  from { opacity: 0; transform: translateY(7px); }
+  to   { opacity: 1; transform: none; }
+}
+.anim-content { animation: contentFade 0.32s cubic-bezier(0.25, 0.8, 0.35, 1) both; }
+
 @media (prefers-reduced-motion: reduce) {
-  .anim-rise, .anim-stamp, .anim-seal-pulse, .anim-ink { animation: none; }
+  .anim-rise, .anim-stamp, .anim-seal-pulse, .anim-ink, .anim-content { animation: none; }
 }

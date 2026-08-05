@@ -37,8 +37,9 @@ export default function ContentCard({ loc, layer, layers, onLayerChange, onShowD
         })}
       </div>
 
-      {/* Scrollable content — pb-12 给高德版权条留出空间，避免遮挡底部实用信息 */}
-      <div className="flex-1 overflow-y-auto px-4 pb-12">
+      {/* Scrollable content — pb-12 给高德版权条留出空间，避免遮挡底部实用信息。
+          key=layer：切换内容层时子树重挂载，触发翻页式淡入 */}
+      <div key={layer} className="anim-content flex-1 overflow-y-auto px-4 pb-12">
         <div className="text-foreground font-serif font-bold text-lg mb-1 flex items-center gap-2">
           <ImportanceStars importance={loc.importance} />
           {loc.name}

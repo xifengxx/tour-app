@@ -323,6 +323,7 @@ export default function TourView() {
 
             {currentLoc ? (
               <ContentCard
+                key={currentLoc.id}
                 loc={currentLoc}
                 layer={currentLayer}
                 layers={tour.contentLayers}

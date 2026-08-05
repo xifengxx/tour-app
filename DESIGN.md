@@ -33,6 +33,9 @@
 | Phase 2 核心 | TourView（RouteBar / ContentCard / 底部手卷 / DetailModal）+ 路线国画五色 | ✅ 完成 |
 | Phase 3 收尾 | TourEdit/Review、其余弹窗、研墨展卷等待动画 | ✅ 完成 |
 | 海报重绘 | ShareModal 海报（`src/lib/poster.js`）按「纸上山河」整体重绘 | ✅ 完成 |
+| v2 精进 | 质感层（纸边晕影/朱印渐变/品牌化选中·滚动条·焦点）+ hero 对联 + 翻页淡入 | ✅ 完成 |
+
+> v2 已落地：① `body::after` 陈年纸边晕影（radial-gradient，四角泛黄如旧卷天头地脚）；② `.seal` 朱印改径向渐变（印泥蘸色感 + 底部内阴影）；③ `::selection` 朱砂底白字、暖色细滚动条、`:focus-visible` 朱砂环；④ 首页 hero 改对联式双竖排（右上联「带着小说去旅行」/ 左下联「于山水间读江湖」，从右往左读）+ `.rule-ornament` 菱形饰线；⑤ 导航栏 `.gold-hairline` 金泥细线；⑥ 导览卡 `.book-card` hover 浮出双线框 + 书脊生长；⑦ 切换地点/内容层 `.anim-content` 翻页式淡入（key 重挂载触发）。
 
 > Phase 3 已落地：ProcessingPhase「研墨展卷」等待动画（朱印呼吸 + 墨线流动 + 竖排装饰）；步骤指示器改壹贰叁篆刻；saveMsg 类型化（去 ✅❌ emoji 判断）；海报/二维码/地图搜索弹窗色值同步新色板；全站 emoji 图标清零（内容数据中的 layer icon 除外）。触摸目标基线 36-44px 沿旧布局保留。
 
@@ -103,8 +106,12 @@
 | `.anim-stamp` | 盖印动效（收藏 ❤ 盖章感） |
 | `.anim-seal-pulse` | 朱印呼吸（ProcessingPhase 研墨展卷） |
 | `.anim-ink` | 墨线流动（ProcessingPhase 进度条） |
+| `.anim-content` | 翻页式淡入（切换地点/内容层，key 重挂载触发） |
+| `.book-card` | 导览卡 hover 浮出双线框（outline 3px offset，如书页出函套） |
+| `.gold-hairline` | 金泥细线（导航栏底部分隔） |
+| `.rule-ornament` | 菱形饰线分隔 — ◆ —（hero 与区块之间） |
 
-另：`body::before` 全局 4.5% 纸纹噪点（SVG feTurbulence data-URI），`pointer-events:none` 不影响交互。尊重 `prefers-reduced-motion`。
+另：`body::before` 全局 4.5% 纸纹噪点（SVG feTurbulence data-URI），`pointer-events:none` 不影响交互；`body::after` 陈年纸边晕影（四角微泛黄）。`::selection` 朱砂底白字；滚动条细暖色；`:focus-visible` 朱砂环。尊重 `prefers-reduced-motion`。
 
 > 方案中曾考虑 LXGW WenKai（霞鹜文楷）webfont，最终**弃用**：系统楷体栈（Kaiti SC/STKaiti）已够用，免外部 CDN 依赖。
 
@@ -115,7 +122,8 @@
 | 按钮（主） | `bg-primary text-primary-foreground rounded-lg`，hover `bg-primary/90` |
 | 导览卡（书页卡） | `bg-card border border-border rounded-lg` + 左侧 3px 朱砂书脊线 + hover 上浮/朱色描边 |
 | 状态徽标 | `.seal-outline` 印戳：已发布=朱色、私密=暖灰 |
-| 导航栏 | `bg-card/90 backdrop-blur border-b`；首页左侧朱印 logo，子页居中衬线标题 |
+| 导航栏 | `bg-card/90 backdrop-blur border-b` + `.gold-hairline` 金线；首页左侧朱印 logo，子页居中衬线标题 |
+| 首页 hero | 居中朱印 + 大字距衬线站名；两侧对联式竖排（右上联/左下联，移动端仅右联）；下接 `.rule-ornament` |
 | Tab | 编辑式下划线 tab（不用胶囊）：active 朱砂字 + 2px 朱砂下划线 |
 | 输入框 | `bg-card border-border rounded-lg focus:border-primary` |
 | 标签/徽标 | `bg-black/[0.04] border border-border/60 rounded-full` |

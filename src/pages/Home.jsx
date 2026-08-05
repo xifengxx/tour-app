@@ -158,10 +158,10 @@ export default function Home() {
     <div key={tour.id} className="relative group anim-rise" style={{ animationDelay: `${Math.min(idx, 8) * 60}ms` }}>
       <Link
         to={`/tour/${tour.id}`}
-        className="relative block bg-card rounded-lg border border-border overflow-hidden transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/50 hover:shadow-[0_10px_28px_-14px_rgba(28,26,22,0.35)]"
+        className="book-card relative block bg-card rounded-lg border border-border overflow-hidden hover:-translate-y-0.5 hover:border-primary/50 hover:shadow-[0_12px_30px_-14px_rgba(28,26,22,0.35)]"
       >
-        {/* 朱砂书脊 */}
-        <div className="absolute left-0 top-0 bottom-0 w-[3px] bg-primary/85" />
+        {/* 朱砂书脊：hover 时生长 */}
+        <div className="absolute left-0 top-0 bottom-0 w-[3px] bg-primary/85 transition-all duration-200 group-hover:w-[5px]" />
         <div className="p-5 pl-6">
           {/* 标题留右侧空间给「已发布 + ⋮」徽标区，避免重叠 */}
           <h2 className={`text-lg font-serif font-bold text-foreground leading-snug mb-1.5 group-hover:text-primary transition-colors ${isMyTour ? 'pr-28' : 'pr-8'}`}>{tour.title}</h2>
@@ -248,20 +248,31 @@ export default function Home() {
     <div className="min-h-screen bg-background">
       <NavBar />
 
-      {/* ── Hero · 门面 ── */}
-      <header className="max-w-4xl mx-auto px-4 pt-8 pb-5 flex items-start justify-between gap-4">
-        <div className="anim-rise">
-          <div className="flex items-center gap-3 mb-2">
-            <SealLogo size={40} />
-            <h1 className="font-serif font-black text-3xl tracking-wide text-foreground">文学巡礼</h1>
+      {/* ── Hero · 门面：对联式双竖排 + 菱形饰线 ── */}
+      <header className="max-w-4xl mx-auto px-4 pt-9 pb-2">
+        <div className="flex items-start justify-between gap-4">
+          {/* 上联（桌面端） */}
+          <div className="vertical-rl font-kai text-sm text-muted-foreground/70 pt-2 select-none hidden sm:block anim-rise" style={{ animationDelay: '80ms' }}>
+            于山水间读江湖
           </div>
-          <p className="text-xs tracking-[0.25em] text-muted-foreground uppercase pl-1">
-            Literary&nbsp;Pilgrimage&nbsp;·&nbsp;纸上山河
-          </p>
+
+          <div className="flex-1 text-center anim-rise">
+            <div className="flex items-center justify-center gap-3.5 mb-2.5">
+              <SealLogo size={44} />
+              <h1 className="font-serif font-black text-4xl sm:text-[2.6rem] tracking-[0.12em] text-foreground">文学巡礼</h1>
+            </div>
+            <p className="text-[11px] tracking-[0.35em] text-muted-foreground uppercase">
+              Literary&nbsp;Pilgrimage&nbsp;·&nbsp;纸上山河
+            </p>
+          </div>
+
+          {/* 下联 */}
+          <div className="vertical-rl font-kai text-sm text-muted-foreground/70 pt-2 select-none anim-rise" style={{ animationDelay: '160ms' }}>
+            带着小说去旅行
+          </div>
         </div>
-        <div className="vertical-rl font-kai text-sm text-muted-foreground pt-1 select-none anim-rise" style={{ animationDelay: '150ms' }}>
-          带着小说去旅行
-        </div>
+
+        <div className="rule-ornament mt-6 max-w-md mx-auto anim-rise" style={{ animationDelay: '220ms' }}><span /></div>
       </header>
 
       {/* Tabs + Create button */}
