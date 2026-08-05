@@ -78,15 +78,7 @@ async function gaode(name: string, destCity: string) {
   if (!matched.length) return null;
   const top = preferScenic(matched)[0];
   const [lng, lat] = top.location.split(",").map(Number);
-  // 名称清洗：剥"武陵源风景名胜区-"等前缀 + "游客基地/上站/售票处/小火车/观景台/景区"等后缀
-  // 多轮清洗直至稳定：袁家界景区-观景台 → 袁家界景区 → 袁家界
-  let clean = top.name.replace(/^.*风景名胜区-|^.*国家森林公园-?/, "").trim();
-  for (let i = 0; i < 3; i++) {
-    const next = clean.replace(/社区|游客基地|游客中心|观光电车|小火车|乘车处|候车处|售票处|上站|下站|集邮点|入口|-?观景台$|风景区$|景区$/, "").trim();
-    if (next === clean) break;
-    clean = next;
-  }
-  return { lng, lat, name: clean || top.name };
+  return { lng, lat, name: cleanName(top.name) };
 }
 
 // 查询目的地区域（城市）的知名风景/旅游景点，用于自动补地区景点 → 组主题游。
@@ -101,25 +93,138 @@ async function gaodeRegionScenics(city: string): Promise<{ lng: number; lat: num
     .map((p: any) => { const [lng, lat] = p.location.split(",").map(Number); return { lng, lat, name: p.name }; });
 }
 
-// 以风景区/名胜区为锚点，查其内部子景点（如武陵源内的百龙天梯/金鞭溪/十里画廊等）
-async function gaodeAroundScenics(lng: number, lat: number): Promise<{ lng: number; lat: number; name: string }[]> {
-  const r = await fetch(`https://restapi.amap.com/v3/place/around?location=${lng},${lat}&key=${GAODE_KEY}&radius=30000&offset=100`, { signal: AbortSignal.timeout(30000) });
-  if (!r.ok) return [];
-  const d = await r.json();
-  // 去掉 types 过滤后杂点多：清洗名称（剥掉"售票处/上站/游客中心/社区"等后缀，露出景点本名，
-  // 如"百龙天梯上站"→"百龙天梯"、"十里画廊观光电车售票处"→"十里画廊"、"袁家界游客基地"→"袁家界"），
-  // 并过滤明显非景点（餐饮/咖啡/酒店/商场等）。
-  const JUNK = /咖啡|餐厅|奶茶|小吃|甜品|麦当劳|瑞幸|宾馆|酒店|超市|银行|加油站|KTV|健身房/;
+// 名称多轮清洗：剥"武陵源风景名胜区-"前缀 + 后缀，直至稳定（袁家界景区-观景台 → 袁家界景区 → 袁家界）。
+// 用于 gaode() 与 gaodeAroundScenics() 的名称解析。
+function cleanName(n: string): string {
+  let c = n.replace(/^.*风景名胜区-|^.*国家森林公园-?/, "").trim();
+  for (let i = 0; i < 3; i++) {
+    const next = c.replace(/社区|游客基地|游客中心|观光电车|小火车|乘车处|候车处|售票处|上站|下站|集邮点|入口|-?观景台$|风景区$|景区$/, "").trim();
+    if (next === c) break;
+    c = next;
+  }
+  return c || n;
+}
+
+// ── 景区锚点 / 子景点确定性补全 ─────────────────────────────
+const SUB_AREA_RADIUS = 12000; // 点归入最近锚点的距离阈值
+const SCAN_RADIUS = 12000;     // around-scan 半径（30km 会跨区扫到七星山/黄龙洞 → 收紧）
+const ANCHOR_CAP = 12;         // 每锚点子景点上限
+const SUB_TOTAL_CAP = 10;      // 全局子景点上限（控制内容生成长度）
+const SUB_DEDUP_M = 300;       // 子景点坐标去重阈值：1000m 会把真子景点误杀（百龙天梯距张家界森林公园仅 700m、
+                               // 袁家界距金鞭溪仅 900m 都被当成同一地点剔除）。300m 只去重真正的同点 POI。
+// 设施排除：只杀无歧义非景点节点，勿杀 台/桥/亭/塔/门（迷魂台/天下第一桥/水绕四门是真景点）
+const FACILITY_RE = /停车场|售票处|售票点|售票大厅|检票口|检票|乘车处|候车(?:处|亭|室)|索道(?:上站|下站|中站|入口|出口|站)?$|缆车$|观光车(?:站|场|停靠点)|游客中心|游客服务(?:点|中心)?|服务区|服务站|服务中心|管理处|管委会|委员会|居委会|村委会|派出所|加油站|银行|超市|商店|小卖部|商业街|饭店|餐厅|宾馆|酒店|客栈|民宿|山庄|农家乐|厕所|卫生间|洗手间|公厕|入口$|出口$|北门|南门|东门|西门|中门|大门|广场$|车站$|码头$|步道$|栈道$|观景台$|平台$|通道|门店|店\)|店$|综合服务|街道|步行街|(?<!故)居$|邮政|快递|营业厅|窗口|咨询台|工会|党员|人社|村委会/;
+
+// 是否为景区锚点：核心景区名匹配，或名称以景区设计词结尾且非"XX-子点"（排除"天门山国家森林公园-天门洞"）
+function isScenicAnchor(loc: any, destName: string): boolean {
+  const n = String(loc.name || "");
+  if (/-/.test(n)) return false; // "XX景区-子点"（如天门山国家森林公园-天门洞）是子点，不是锚点
+  if (destName && (n.includes(destName) || destName.includes(n))) return true;
+  if (/(风景名胜区|国家森林公园|风景名胜|自然保护区)$/.test(n)) return true;
+  if (/(风景区|景区|公园)$/.test(n) && !/-/.test(n)) return true;
+  return false;
+}
+function cleanScenicName(n: string): string {
+  return n.replace(/风景名胜区|国家森林公园|风景名胜|自然保护区|风景区|景区|森林公园|公园/g, "").replace(/[-— ]+$/, "").trim() || n;
+}
+function scenicWeight(n: string, destName: string): number {
+  const coreBonus = destName && (n.includes(destName) || destName.includes(n)) ? 7 : 0; // 核心=7
+  if (/风景名胜区$/.test(n)) return 6 + coreBonus;
+  if (/国家森林公园$/.test(n)) return 5 + coreBonus;
+  if (/风景名胜|自然保护区$/.test(n)) return 4 + coreBonus;
+  if (/风景区$/.test(n)) return 3 + coreBonus;
+  if (/景区$/.test(n)) return 2 + coreBonus;
+  if (/公园$/.test(n)) return 1 + coreBonus;
+  return coreBonus;
+}
+// 构建锚点。合并规则：只有【伞形锚点】（权重最高的非核心 风景名胜区|国家森林公园，如武陵源）吸收
+// 12km 内的子区域（天子山/黄石寨/森林公园 → 武陵源的 subPoints）。
+// 七星山（距天门山仅 4.5km 但距武陵源 30km）、黄龙洞、天门山（核心）是独立景区，不被吸收。
+const UMBRELLA_ABSORB_M = 12000; // 伞形锚点吸收子区域的距离（武陵源子景点都在 ~6km 内）
+function buildAnchors(locs: any[], destName: string): any[] {
+  const cands = locs.filter(l => isScenicAnchor(l, destName))
+    .map(l => ({ ...l, scenicName: cleanScenicName(l.name), weight: scenicWeight(l.name, destName) }));
+  cands.sort((a, b) => b.weight - a.weight || b.name.length - a.name.length);
+  const isCore = (c: any) => destName && (c.name.includes(destName) || destName.includes(c.name));
+  const umbrella = cands.find(c => !isCore(c) && /(风景名胜区|国家森林公园)$/.test(c.name)) || null;
+  const anchors: any[] = [];
+  const ordered = umbrella ? [umbrella, ...cands.filter(c => c !== umbrella)] : cands;
+  for (const c of ordered) {
+    if (umbrella && c === umbrella) { anchors.push({ ...c, mergedNames: [], subPoints: [] }); continue; }
+    const um = anchors.find(a => umbrella && a.name === umbrella.name);
+    if (umbrella && um && c.weight < umbrella.weight && haversineM(umbrella, c) < UMBRELLA_ABSORB_M) {
+      um.mergedNames.push(c.scenicName);
+      um.subPoints.push({ lng: c.lng, lat: c.lat, name: c.scenicName });
+      continue;
+    }
+    anchors.push({ ...c, mergedNames: [], subPoints: [] });
+  }
+  anchors.sort((a, b) => b.weight - a.weight); // 保持权重降序：核心（天门山）在前
+  return anchors;
+}
+
+// 以风景区/名胜区为锚点，查其内部子景点（如武陵源内的百龙天梯/金鞭溪/十里画廊等）。
+// 确定性来源：不依赖 AI 提议，高德周边扫描 + 景点名过滤 + 清洗。
+// 分页：高德 around offset 单页上限 100、按距离排序，武陵源这类大景区 5km+ 的子景点
+// 会被前 100 个挤掉 → 并行拉 3 页（page=1,2,3）覆盖。
+async function gaodeAroundScenics(lng: number, lat: number, radius = SCAN_RADIUS): Promise<{ lng: number; lat: number; name: string; raw: string }[]> {
+  const JUNK = /咖啡|餐厅|奶茶|小吃|甜品|麦当劳|瑞幸|肯德基|烧仙草|汉堡|客栈|民宿|山庄|农家乐|火锅|三下锅|菜馆|私房菜|家常菜|中餐馆|餐馆|乡厨|烧烤|快餐|美食|门店|服务社|宾馆|酒店|超市|银行|加油站|KTV|健身房|旅行社|蜜雪|面包|饮品|烘焙|酸奶|烤面包|速递|快递/;
   // 正向过滤：仅保留名称含景点特征的 POI（去掉无 types 查询混入的餐馆/商店/驿站等）
   const ATTRACTION = /景|峰|峡|桥|梯|画廊|溪|界|寨|洞|寺|观|湖|湾|山|岭|谷|岩|石|门|瀑|泉|亭|阁|殿|庙|祠|塔|墓|园|池|林|松|海|台|田|索道|温泉|漂流|故居|书院/;
-  const strip = (n: string) => n
-    .replace(/^.*风景名胜区-|^.*国家森林公园-?/, "")
-    .replace(/观光电车|世界第一梯/, "")
-    .replace(/售票处|上站|下站|游客中心|游客基地|社区|集邮点|入口|出口$/, "")
-    .trim();
-  return (d.pois || [])
-    .filter((p: any) => p.location && !/省.*市/.test(p.name || "") && !JUNK.test(p.name || "") && ATTRACTION.test(p.name || ""))
-    .map((p: any) => { const [lng2, lat2] = p.location.split(",").map(Number); return { lng: lng2, lat: lat2, name: strip(p.name) || p.name }; });
+  const fetchPage = async (page: number) => {
+    // 高德限流在并行扫描时高频出现，静默返回空会让子景点补全失效 → 退避重试 3 次
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const r = await fetch(`https://restapi.amap.com/v3/place/around?location=${lng},${lat}&key=${GAODE_KEY}&radius=${radius}&offset=100&page=${page}`, { signal: AbortSignal.timeout(30000) });
+      if (!r.ok) return [];
+      const d = await r.json();
+      if (d.info === "CUQPS_HAS_EXCEEDED_THE_LIMIT") { await new Promise(r2 => setTimeout(r2, attempt === 0 ? 300 : 800)); continue; }
+      return (d.pois || [])
+        .filter((p: any) => p.location && !/省.*市/.test(p.name || "") && !JUNK.test(p.name || "") && ATTRACTION.test(p.name || ""))
+        .map((p: any) => { const [lng2, lat2] = p.location.split(",").map(Number); return { lng: lng2, lat: lat2, name: cleanName(p.name), raw: p.name }; });
+    }
+    return [];
+  };
+  const [p1, p2, p3] = await Promise.all([fetchPage(1), fetchPage(2), fetchPage(3)]);
+  const seen = new Set<string>();
+  return [...p1, ...p2, ...p3].filter(c => { const k = `${c.lng},${c.lat}|${c.name}`; if (seen.has(k)) return false; seen.add(k); return true; });
+}
+
+// 扫描单锚点的子景点：设施排除 + 排除锚点自身/已在 locs/跨锚点候选 + AI 知名度排序，取前 ANCHOR_CAP。
+async function scanAnchorSubs(anchor: any, locs: any[], otherAnchors: any[], aiKnown: Set<string>) {
+  const around = await gaodeAroundScenics(anchor.lng, anchor.lat, SCAN_RADIUS);
+  const existingNames = new Set(locs.map(l => String(l.name || "")));
+  const out: any[] = [];
+  for (const c of around) {
+    const n = String(c.name || "");
+    if (!n) continue;
+    if (FACILITY_RE.test(n)) continue;                                          // 设施
+    if (n === anchor.name || n === anchor.scenicName) continue;                 // 锚点自身（精确匹配，勿用 startsWith——会误杀"武陵源风景名胜区十里画廊"）
+    if (existingNames.has(n)) continue;                                         // 已在 locs（核心/地区/AI提议）
+    if (otherAnchors.some(a => a.id !== anchor.id && haversineM(a, c) < 5000)) continue; // 跨锚点（如天门山扫描到七星山）
+    if ([...locs, ...out].some(q => haversineM(q, c) < SUB_DEDUP_M)) continue;  // 距离去重（阈值见 SUB_DEDUP_M）
+    // rank：0=AI 已知知名点（袁家界/百龙天梯等），1=官方景区名；2=杂点（茶百道/足道馆/高山流水）→ 丢弃
+    const rank = aiKnown.has(n) || aiKnown.has(c.raw) ? 0 : /景区|风景|公园|名胜|自然保护区/.test(c.raw || "") ? 1 : 2;
+    if (rank > 1) continue; // 拒绝杂点：否则扫描会把奶茶店/足道馆/小地名当子景点灌进来
+    out.push({ ...c, rank });
+  }
+  out.sort((a, b) => a.rank - b.rank);
+  return out.slice(0, ANCHOR_CAP).map((c, i) => ({
+    name: c.name, lat: c.lat, lng: c.lng,
+    elevation: "", importance: 3, tags: ["子景点", `景区:${anchor.scenicName}`], scenic: anchor.scenicName,
+  }));
+}
+
+// 给所有 loc 标注景区归属：锚点归自身；其余归最近锚点（<12km）；否则"独立"（只进主题游）。
+function attachScenicTags(locs: any[], anchors: any[]) {
+  for (const l of locs) {
+    if (l.scenic) continue; // 子景点已标注
+    const self = anchors.find(a => a.name === l.name || a.scenicName === l.name);
+    if (self) { l.scenic = self.scenicName; continue; }
+    let best: any = null, bestD = Infinity;
+    for (const a of anchors) { const d = haversineM(a, l); if (d < bestD) { bestD = d; best = a; } }
+    l.scenic = (best && bestD <= SUB_AREA_RADIUS) ? best.scenicName : "独立";
+  }
+  return locs;
 }
 
 // 离群点剔除：真实地点聚成簇，编造/过远点是离群点。
@@ -162,11 +267,15 @@ async function regeo(lng: number, lat: number) {
 
 // ── Region helpers ─────────────────────────────────────────────
 // "安徽省黄山市" → {prov:"安徽省", city:"黄山市"}; "黄山市" → {prov:"", city:"黄山市"}
+// "湖南张家界"（省名+市名连写，无"省/市"分隔符）→ {prov:"湖南", city:"张家界"}
+const PROV_PREFIX = /^(北京|天津|上海|重庆|河北|山西|辽宁|吉林|黑龙江|江苏|浙江|安徽|福建|江西|山东|河南|湖北|湖南|广东|海南|四川|贵州|云南|陕西|甘肃|青海|台湾|内蒙古|广西|西藏|宁夏|新疆|香港|澳门)/;
 function splitRegion(t: string) {
   const sheng = t.indexOf("省");
   if (sheng > -1) return { prov: t.slice(0, sheng + 1), city: t.slice(sheng + 1) };
   const zzq = t.indexOf("自治区");
   if (zzq > -1) return { prov: t.slice(0, zzq + 3), city: t.slice(zzq + 3) };
+  const m = t.match(PROV_PREFIX); // "湖南张家界" → 匹配"湖南"前缀，剩余"张家界"是市
+  if (m && m[0].length < t.length) return { prov: m[0], city: t.slice(m[0].length) };
   return { prov: "", city: t };
 }
 const stripSuffix = (s: any) => String(s).replace(/[市]$/g, "");
@@ -202,9 +311,16 @@ function regionMatch(geo: { province: string; city: string | string[] }, targetR
     const tProvCands = [provPart, stripSuffix(provPart)];
     return tProvCands.some(tp => tp && gProv.includes(tp));
   }
-  // 裸名（"江西""黄山""北京"）→ 省或市任一匹配
-  const cands = [norm, stripSuffix(norm)];
-  return cands.some(k => k && (gProv.includes(k) || gCityCand.includes(k)));
+  // 裸名（"江西""黄山""北京"、"湖南张家界"省名+市名连写）→ 先城市后省份匹配
+  const gCityN = gCityCand.replace(/[市]$/g, ""); // "张家界市"→"张家界"
+  if (gCityN && norm.includes(gCityN)) return true; // "湖南张家界"含"张家界" → 城市精确命中
+  // 省份匹配仅限短目标（≤3 字：纯省名/直辖市名，如"湖南""江西""内蒙古"）
+  // —— 否则"湖南张家界"这类连写串会把同省他市（株洲/长沙）的地点误放行
+  if (norm.length <= 3) {
+    const gProvN = gProv.replace(/省$/, ""); // "湖南省"→"湖南"
+    return gProv.includes(norm) || (gProvN && norm.includes(gProvN));
+  }
+  return false;
 }
 
 // 坐标距离（米）— 用于地点去重（DeepSeek 常提取多个近义地名到同一 POI）
@@ -241,6 +357,20 @@ async function deepseek(messages: { role: string; content: string }[], retries =
   throw new Error("DeepSeek 调用失败");
 }
 
+// 有界并发映射：Edge Function 60s 预算内，把互相独立的网络调用并行化（如逐地点 gaode/regeo、内容分块）。
+// 限制并发避免打爆高德限流/DeepSeek 限速。结果按下标归位，保持原顺序。
+async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T, i: number) => Promise<R>): Promise<R[]> {
+  const out = new Array<R>(items.length);
+  let idx = 0;
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (idx < items.length) {
+      const i = idx++;
+      out[i] = await fn(items[i], i);
+    }
+  }));
+  return out;
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: cors() });
   if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
@@ -271,30 +401,42 @@ Deno.serve(async (req: Request) => {
 
     const warnings: string[] = [];
     let hasRegionTour = false; // 仅由下述确定性高德地区合并判定（AI 不稳定，不做依据）
+    let aiAttractions: string[] = []; // AI 提议的著名景点/子景点名单（供子景点扫描 rank0 与去重用）
     const locs: any[] = [];
-    for (const l of (lr.locations || [])) {
+    // 与提取并行的地区准备：AI 提议知名景点 + 高德地区查询（与核心提取互不依赖，提前并发省 ~15s）
+    const regionPrep = destRegion ? (async () => {
+      const regionScenics = await gaodeRegionScenics(destRegion).catch(() => []);
+      let aiFromPrep: string[] = [];
+      try {
+        const rr2 = await deepseek([
+          { role: "system", content: "你是中国旅游专家。只返回JSON。" },
+          { role: "user", content: `目的地：${destName}（${destRegion}）。列出该地区除\"${destName}\"自身外、最值得一游的著名独立景点，以及 ${destName} 所在知名景区的著名子景点。只列真实存在、广为人知的著名景点。**若该知名景区有多个广为人知的著名子景点，必须全部列出、一个都不能漏，不要只挑最出名的几个**（示例：张家界武陵源的著名子景点为 天子山、黄石寨、杨家界、袁家界、金鞭溪、十里画廊、百龙天梯、水绕四门，若涉及武陵源必须全部包含）。独立景点（如宝峰湖、黄龙洞、张家界大峡谷）也一并列出。8-15 个，宁多勿漏。JSON: {\"attractions\":[\"名称1\",\"名称2\"]}` },
+        ]);
+        aiFromPrep = (rr2.attractions || []).map(String).filter(Boolean);
+      } catch (e) { /* AI 提议失败不阻断 */ }
+      return { regionScenics, aiAttractions: aiFromPrep };
+    })() : Promise.resolve({ regionScenics: [], aiAttractions: [] as string[] });
+    // 并行校验（原串行：12 地点 × gaode+regeo 两次往返 ≈ 10-20s，会吃满 60s 预算）
+    const extract = await mapLimit(lr.locations || [], 6, async (l: any) => {
       const c = await gaode(l.name, destRegion);
-      if (!c || !c.lat) {
-        warnings.push(`⚠️ "${l.name}" 未找到坐标，已跳过`);
-        continue;
-      }
+      if (!c || !c.lat) return { warn: `⚠️ "${l.name}" 未找到坐标，已跳过`, loc: null as any };
       // Verify coordinate is in the target region
       const geo = await regeo(c.lng, c.lat);
-      if (geo === undefined) {
-        warnings.push(`⚠️ "${l.name}" 坐标校验失败（高德 API 不可达），已跳过`);
-        continue;
-      }
-      if (geo === null) {
-        warnings.push(`⚠️ "${l.name}" 坐标(${c.lng},${c.lat})无法解析，已跳过`);
-        continue;
-      }
-      if (!regionMatch(geo, destRegion)) {
-        warnings.push(`⚠️ "${l.name}" 坐标(${c.lng},${c.lat})位于 ${geo.province}${geo.city || ''}，不在 ${destRegion}，已跳过`);
-        continue;
-      }
+      if (geo === undefined) return { warn: `⚠️ "${l.name}" 坐标校验失败（高德 API 不可达），已跳过`, loc: null as any };
+      if (geo === null) return { warn: `⚠️ "${l.name}" 坐标(${c.lng},${c.lat})无法解析，已跳过`, loc: null as any };
+      if (!regionMatch(geo, destRegion)) return { warn: `⚠️ "${l.name}" 坐标(${c.lng},${c.lat})位于 ${geo.province}${geo.city || ''}，不在 ${destRegion}，已跳过`, loc: null as any };
       // Use Gaode's official name if available
       const displayName = c.name && c.name !== l.name ? c.name : l.name;
-      locs.push({ id: l.id, name: displayName, lat: c.lat, lng: c.lng, elevation: l.elevation || "", importance: l.importance || 3, tags: l.tags || [], sort_order: locs.length });
+      return { warn: null, loc: { id: l.id, name: displayName, lat: c.lat, lng: c.lng, elevation: l.elevation || "", importance: l.importance || 3, tags: l.tags || [] } };
+    });
+    for (const r of extract) {
+      if (r.warn) warnings.push(r.warn);
+      if (r.loc) { r.loc.sort_order = locs.length; locs.push(r.loc); }
+    }
+
+    if (locs.length === 0) {
+      // 防御：全部地点被坐标校验拒绝时不静默成功，置 status=error 便于用户看到失败原因
+      throw new Error("未识别出任何有效地点：AI 提议名单全部被地区坐标校验拒绝（请检查目的地地区是否为规范省/市名）。");
     }
 
     // 聚类离群点剔除：真实地点聚成簇，编造/过远点（江夏龟山 45km、罗汉寺街皇庙 43km）是离群点。
@@ -328,38 +470,41 @@ Deno.serve(async (req: Request) => {
     deduped.forEach((l, i) => (l.sort_order = i));
     locs.length = 0;
     locs.push(...deduped);
+    const afterExtractDedup = locs.length; // 报告用：地区/子景点并入会在此之后增长，不能拿去算 deduped
     console.log(`${locs.length} locations (${warnings.length} warnings)`);
 
     // 地区景点补充（确定性）：查询目的地区域知名景点，与核心所有点相距 >5km 的独立景点 ≥3 个
     // → 并入并触发主题游（不依赖 AI 随机判断；如张家界市并入国家森林公园/黄龙洞等）
     if (destRegion && locs.length >= 3) {
       try {
-        const regionScenics = await gaodeRegionScenics(destRegion); // 市级知名景点（types过滤，干净）
-        // 网络搜索式：用 AI 知识列出地区著名景点/知名景区著名子景点，再逐个用高德校验坐标。
-        // 比在高德杂音里过滤更可靠——AI 知道袁家界/金鞭溪/十里画廊/百龙天梯等名胜名，高德负责确认真实坐标。
-        let aiAttractions: string[] = [];
-        try {
-          const rr2 = await deepseek([
-            { role: "system", content: "你是中国旅游专家。只返回JSON。" },
-            { role: "user", content: `目的地：${destName}（${destRegion}）。列出该地区除\"${destName}\"自身外、最值得一游的著名独立景点，以及 ${destName} 所在知名景区的著名子景点。只列真实存在、广为人知的著名景点（示例：若在张家界武陵源，则含天子山、黄石寨、杨家界、袁家界、金鞭溪、十里画廊、百龙天梯、水绕四门、宝峰湖、黄龙洞、张家界大峡谷）。8-15 个。JSON: {\"attractions\":[\"名称1\",\"名称2\"]}` },
-          ]);
-          aiAttractions = (rr2.attractions || []).map(String).filter(Boolean);
-        } catch (e) { /* AI 提议失败不阻断 */ }
+        // 地区准备已与核心提取并行启动（regionPrep），此处直接取结果
+        const { regionScenics, aiAttractions: aiPrep } = await regionPrep;
+        aiAttractions = aiPrep;
+        // AI 提议的知名景点优先：著名子景点（袁家界/百龙天梯等）高德 types 查询召回不到，
+        // 若排在 regionScenics 之后会被 20 上限挤掉 → 先收集 AI 点，regionScenics 再补足。
         const nameSeen = new Set<string>();
         const regionFinal: { lng: number; lat: number; name: string }[] = [];
+        const aiPts = await mapLimit(aiAttractions.filter(n => !nameSeen.has(n)), 5, async (name: string) => {
+          const c = await gaode(name, destRegion);
+          if (!c || !c.lat) return null;
+          if (locs.some(l => haversineM(l, c) < 5000)) return null; // 距核心太近 → 非独立地区点
+          return { lng: c.lng, lat: c.lat, name: c.name || name };
+        });
+        for (const p of aiPts) {
+          if (!p) continue;
+          const n = p.name;
+          if (nameSeen.has(n)) continue;
+          if (regionFinal.some(q => haversineM(q, p) < 1000)) continue; // 同坐标去重
+          nameSeen.add(n);
+          regionFinal.push(p);
+        }
+        // regionScenics 补足（名称级去重，防核心点如"天门山国家森林公园"被重复并入）
         for (const p of regionScenics) {
           if (regionFinal.some(q => haversineM(q, p) < 1000)) continue; // 同坐标（如武陵源/张家界国家森林公园）只留一个
-          if (!nameSeen.has(p.name)) { nameSeen.add(p.name); regionFinal.push(p); }
-        }
-        for (const name of aiAttractions) {
-          if (nameSeen.has(name)) continue;
-          const c = await gaode(name, destRegion);
-          if (!c || !c.lat) continue;
-          if (locs.some(l => haversineM(l, c) < 5000)) continue; // 距核心太近 → 非独立地区点
-          const n = c.name || name;
-          if (nameSeen.has(n)) continue;
-          nameSeen.add(n);
-          regionFinal.push({ lng: c.lng, lat: c.lat, name: n });
+          if (nameSeen.has(p.name)) continue;
+          if (locs.some(l => String(l.name) === p.name)) continue; // 与核心地点同名（如"天门山国家森林公园"）→ 不重复并入
+          nameSeen.add(p.name);
+          regionFinal.push(p);
         }
         if (regionFinal.length >= 3) {
           const addN = Math.min(20, regionFinal.length); // 最多并入20个地区景点（用户上限，不超20）
@@ -373,16 +518,48 @@ Deno.serve(async (req: Request) => {
       } catch (e) { /* 区域查询失败不阻断 */ }
     }
 
-    // 3. Content
-    const cr = await deepseek([
-      { role: "system", content: "你是文学旅游内容创作者。只返回JSON。" },
-      { role: "user", content: `四层内容（📖文学意境/🏛历史掌故/🐉民间传说/🎭地域文化）。\n${locs.map(l => `- ${l.id}: ${l.name}`).join("\n")}\n参考: ${src.slice(0, 4000)}\n\n每层150-250字。JSON: {"locations":[{"id":"","layers":{"novel":{"text":""},"history":{"text":""},"folklore":{"text":""},"customs":{"text":""}},"reflection":"","practical":{"access":"","difficulty":"","bestTime":"","tip":""}}]}` },
-    ]);
-    for (const l of locs) {
-      const cd = (cr.locations || []).find((c: any) => c.id === l.id) || {};
-      l.layers = cd.layers || {}; l.reflection = cd.reflection || ""; l.practical = cd.practical || {};
-    }
+    // 2.4 子景点确定性补全 + 景区归属（接线 gaodeAroundScenics，不依赖 AI 提议）
+    // 解决：袁家界/十里画廊/水绕四门/杨家界等被高德 types 查询召回不到 → 靠周边扫描确定性拉取。
+    const anchors = buildAnchors(locs, destName);
+    try {
+      // 只扫描非核心伞形/景区锚点（核心景区子景点已由 AI 提取覆盖；省 API 调用与时间）
+      const scanAnchors = anchors.filter(a => a.weight >= 4 && !(destName && a.scenicName.includes(destName)));
+      const aiKnown = new Set(aiAttractions);
+      const subs: any[] = [];
+      for (const a of scanAnchors.slice(0, 3)) {
+        // 多点扫描：伞形锚点 + 子锚点坐标（武陵源横跨 30km+，单点覆盖不了金鞭溪/水绕四门等远端子景点）
+        const points = [{ lng: a.lng, lat: a.lat, name: a.name }, ...(a.subPoints || [])].slice(0, 4);
+        for (const pt of points) {
+          try {
+            const got = await scanAnchorSubs({ ...pt, scenicName: a.scenicName, id: a.id }, locs, anchors.filter(x => x.id !== a.id), aiKnown);
+            for (const g of got) {
+              if (subs.some(s => s.name === g.name || haversineM(s, g) < SUB_DEDUP_M)) continue; // 跨点去重
+              subs.push(g);
+            }
+          } catch (e) { /* 单点扫描失败不阻断其他点 */ }
+          if (subs.length >= SUB_TOTAL_CAP) break;
+        }
+        if (subs.length >= SUB_TOTAL_CAP) break;
+      }
+      const subsCapped = subs.slice(0, SUB_TOTAL_CAP).map((s, i) => ({ ...s, id: `sub-${locs.length + i}` }));
+      for (const s of subsCapped) locs.push(s);
+      locs.forEach((l, i) => (l.sort_order = i));
+      attachScenicTags(locs, anchors);
+      if (subsCapped.length) warnings.push(`🗺 子景点确定性补全 +${subsCapped.length} 个（景区归属标注）`);
+    } catch (e) { /* 子景点扫描失败不阻断 */ }
 
+    // 计算核心/主景区（供路线 prompt 分区：核心景区=第1天，主景区=第2天，其他独立景区只进主题游）
+    const coreAnchor = anchors.find(a => destName && (a.name.includes(destName) || destName.includes(a.name)))
+      || anchors[0] || null;
+    const coreScenicName = coreAnchor?.scenicName || (destName || "");
+    const countByScenic = new Map<string, number>();
+    for (const l of locs) if (l.scenic && l.scenic !== coreScenicName) countByScenic.set(l.scenic, (countByScenic.get(l.scenic) || 0) + 1);
+    let mainScenicName = "", maxC = -1;
+    for (const [k, v] of countByScenic) if (v > maxC) { maxC = v; mainScenicName = k; }
+    if (!mainScenicName) { const nc = anchors.find(a => a.scenicName !== coreScenicName); mainScenicName = nc?.scenicName || ""; }
+
+    // 3+4. Content 与 Routes 并行生成（互不依赖：路线只用 locs/id，内容独立按 loc 分批）。
+    // 串行 4-6 个 DeepSeek 调用会吃满 Edge Function 60s 预算 → 两者并发，各内部再并行。
     // DeepSeek ids (slugs like "r1", "yujing-feng") are NOT globally unique,
     // but locations.id / routes.id are global primary keys. Scope them per tour
     // or writes collide with other tours (409 duplicate key).
@@ -399,86 +576,87 @@ Deno.serve(async (req: Request) => {
       return hit ? slugToDbId.get(hit.id) : undefined;
     };
 
-    // Build coordinate lookup for proximity-based reordering
-    const locCoords = new Map(locs.map(l => [l.id, { lng: l.lng, lat: l.lat, name: l.name }]));
-    const dist = (a: {lng:number,lat:number}, b: {lng:number,lat:number}) => Math.sqrt((a.lng-b.lng)**2 + (a.lat-b.lat)**2);
-
-    // Reorder stops by nearest-neighbor starting from the most extreme point,
-    // so the route follows a consistent geographic path.
-    const reorderByProximity = (stops: string[]): string[] => {
-      if (stops.length <= 2) return stops;
-      // Find the two most distant points — start from one of them
-      let maxDist = 0, start = stops[0];
-      for (const a of stops) {
-        for (const b of stops) {
-          const ca = locCoords.get(a), cb = locCoords.get(b);
-          if (ca && cb) { const d = dist(ca, cb); if (d > maxDist) { maxDist = d; start = a; } }
-        }
-      }
-      const remaining = new Set(stops);
-      const ordered: string[] = [];
-      let current = start;
-      while (remaining.size > 0) {
-        ordered.push(current);
-        remaining.delete(current);
-        let best: string | null = null;
-        let bestDist = Infinity;
-        const curCoord = locCoords.get(current);
-        if (curCoord) {
-          for (const s of remaining) {
-            const c = locCoords.get(s);
-            if (c) { const d = dist(curCoord, c); if (d < bestDist) { bestDist = d; best = s; } }
-          }
-        }
-        current = best || [...remaining][0] || current;
-      }
-      return ordered;
-    };
-
     // 4. Routes — 新结构：1日精华游(必有) + 2日全景游(地点≥8) + 主题游(地区多景点) + 文学巡礼线(小说源)
     const isNovelBased = !!(tour.source?.title || tour.source?.novelTitle);
     const novelName = String(tour.source?.title || tour.source?.novelTitle || '');
     const routeReqs = [
       { label: "1日精华游", desc: "目的地核心必看景点，1天内完成（≤6 站）" },
-      ...(locs.length >= 8 ? [{ label: "2日全景游", desc: "目的地核心（第1天）+ 主景区（第2天，如武陵源）完整两天行程；第2天应含主景区全部著名子景点（可达 6-8 站）" }] : []),
+      ...(locs.length >= 8 ? [{ label: "2日全景游", desc: `核心景区${coreScenicName ? `（${coreScenicName}）` : ''}第1天 + 主景区${mainScenicName ? `（${mainScenicName}）` : '（子景点最多的非核心景区）'}第2天；第2天只含主景区全部著名子景点（可达 6-8 站）` }] : []),
       ...(hasRegionTour ? [{ label: "主题游", desc: "完整地区行程：目的地核心景点 + 地区其他知名景点（如天门山+武陵源+黄龙洞+大峡谷），narrative 可写 3 天" }] : []),
       ...(isNovelBased ? [{ label: "文学巡礼线", desc: `跟随小说《${novelName}》的情节场景顺序游览相关地点` }] : []),
     ];
     const routeReqText = routeReqs.map((r, i) => `${i + 1}. ${r.label} — ${r.desc}`).join("\n");
-    let routes: any[] = [];
-    for (let attempt = 0; attempt < 2 && routes.length < routeReqs.length; attempt++) {
-      const rr = await deepseek([
-        { role: "system", content: "你是旅游路线规划师。只返回JSON。" },
-        { role: "user", content: `${destName}路线。可选地点（id: 名称）: ${locs.map(l => `${l.id}: ${l.name}`).join(", ")}\n\n按序严格生成 ${routeReqs.length} 条路线：\n${routeReqText}\n\n要求：\n1. 每条路线覆盖其主题对应的地点，形成完整行程（从某入口/索道进 → 逐点游览 → 出口/索道出）。\n2. narrative 各写 150-300 字完整行程描述：从哪个入口/索道进、每段用什么交通（徒步/索道/观光车）、依次经过哪些地点、从哪里出。narrative 中必须写地点的中文名（如"玉京峰"），严禁写 id 代号。\n3. **路线覆盖以"景区/大区域"为容量单位，每个主要景区（如天门山、武陵源、黄龙洞、大峡谷）各需约一整天**：按地点名称归组到所属景区。1日精华游只含目的地核心景区（≤6 站）；2日全景游 = 第1天核心景区（如天门山）+ 第2天主景区（如武陵源），**第2天应尽量覆盖主景区的全部著名子景点（天子山、黄石寨、杨家界、袁家界、金鞭溪、十里画廊、百龙天梯、水绕四门等，可达 6-8 站）**，每天 ≤8 站、总 ≤14，narrative 明确第1天/第2天各去哪；主题游含全部景区（narrative 按景区数安排天数）。**严禁把 3 个以上景区塞进 2 日游**；**若某景区距核心景区 >40km（如张家界大峡谷、黄龙洞与天门山相距甚远），不得放入 1日/2日游，只能放入主题游**。\n4. **主题游必须包含目的地核心景点**；1日精华/2日全景/主题游覆盖范围逐步扩大且互补（精华⊂全景⊂主题游）。\n5. 地点少时压缩天数，严禁编造不存在的多日行程。\n6. stops 数组顺序必须与 narrative 中的实际游览顺序一致（入口/索道在前，依次游览，出口/索道在后）；stops 只能从上面给出的 id 中逐字复制，严禁自创或使用列表外的 id。\n7. 路线条数必须与上述完全一致（${routeReqs.length} 条），缺一不可。\nJSON: {"routes":[{"day_label":"","title":"","stops":["id1","id2"],"narrative":"完整行程描述"}]}` },
-      ]);
-      // Route stop validation: resolve and report mismatches
-      const allRoutes = (rr.routes || []).map((r: any, i: number) => {
-        const rawStops: string[] = (Array.isArray(r.stops) ? r.stops : [])
-          .map((s: any) => s && typeof s === "object" ? (s.poi ?? s.id ?? s.name) : s)
-          .filter(Boolean);
-        const resolved = rawStops.map((s: string) => resolveStop(s)).filter(Boolean);
-        const unresolved = rawStops.filter((_, j) => !resolved[j]);
-        if (unresolved.length > 0) {
-          warnings.push(`⚠️ 路线"${r.title || r.day_label || `路线${i+1}`}"有 ${unresolved.length} 个站点无法匹配：${unresolved.join(', ')}`);
-        }
-        return {
-          id: `${scope}-r${i + 1}`,
-          day_label: String(r.day_label || ""),
-          title: String(r.title || `路线${i + 1}`),
-          stops: resolved, // 信任 AI 的游览顺序（入口/索道在前），不按地理重排
-          narrative: typeof r.narrative === "string" ? r.narrative : "",
-          sort_order: i,
-        };
-      }).filter(r => r.stops.length > 0);
+    // 景区分区规则：核心景区=第1天，主景区=第2天，其他独立景区只进主题游（七星山/黄龙洞/大峡谷不混入 1日/2日）
+    const req3 = mainScenicName
+      ? `3. **以"景区"为容量单位，1日/2日游的两天各自只含一个景区**：
+   - 核心景区 = "${coreScenicName}"：1日精华游、2日全景游第1天**只含景区"${coreScenicName}"的站点**（如天门山），≤6 站。
+   - 主景区 = "${mainScenicName}"：2日全景游第2天**只含景区"${mainScenicName}"的站点**，覆盖该景区全部著名子景点（袁家界、十里画廊、水绕四门、天子山、黄石寨、杨家界、金鞭溪、百龙天梯等，可达 6-8 站）。
+   - **其他独立景区（标注"（景区:XXX）"且 XXX 不是"${coreScenicName}"也不是"${mainScenicName}"的，如七星山、黄龙洞、大峡谷等）只能放入主题游，严禁放入 1日/2日游**；若某独立景区距核心景区 >40km，同样只进主题游。
+   - 每个子景点只能出现在其所属景区的那一天；每天 ≤8 站、总 ≤14，narrative 明确第1天/第2天各去哪。`
+      : `3. **以"景区"为容量单位**：1日精华游、2日全景游第1天只含核心景区"${coreScenicName}"的站点（≤6 站）；2日第2天为主景区（子景点最多的非核心景区），只含主景区站点并覆盖其全部著名子景点（可达 6-8 站）；**其他独立景区（标注"（景区:XXX）"且 XXX 不是核心景区的，如七星山、黄龙洞、大峡谷）只能放入主题游，严禁放入 1日/2日游**。每天 ≤8 站、总 ≤14，narrative 明确第1天/第2天各去哪。`;
 
-      // 去重：stops 集合完全相同才视为重复，保留先出现的（1日精华优先）
-      const seenKeys = new Set<string>();
-      const dedupedRoutes: any[] = [];
-      for (const r of allRoutes) {
-        const key = [...r.stops].sort().join("|");
-        if (!seenKeys.has(key)) { seenKeys.add(key); dedupedRoutes.push(r); }
-      }
-      routes = dedupedRoutes;
+    const [contentById, routes] = await Promise.all([
+      // 3. Content：按 ~8 个分批、并发生成（子景点并入后 locs 可达 25-40；单次输出超 max_tokens=8192 会截断 JSON → 分批）
+      (async () => {
+        const contentById = new Map<string, any>();
+        const CONTENT_CHUNK = 8;
+        const chunks: any[][] = [];
+        for (let ci = 0; ci < locs.length; ci += CONTENT_CHUNK) chunks.push(locs.slice(ci, ci + CONTENT_CHUNK));
+        const chunkResults = await mapLimit(chunks, 4, async (chunk) => {
+          const cr = await deepseek([
+            { role: "system", content: "你是文学旅游内容创作者。只返回JSON。" },
+            { role: "user", content: `四层内容（📖文学意境/🏛历史掌故/🐉民间传说/🎭地域文化）。\n${chunk.map(l => `- ${l.id}: ${l.name}`).join("\n")}\n参考: ${src.slice(0, 4000)}\n\n每层150-250字。JSON: {"locations":[{"id":"","layers":{"novel":{"text":""},"history":{"text":""},"folklore":{"text":""},"customs":{"text":""}},"reflection":"","practical":{"access":"","difficulty":"","bestTime":"","tip":""}}]}` },
+          ]);
+          return cr.locations || [];
+        });
+        for (const cds of chunkResults) for (const cd of cds) if (cd?.id) contentById.set(cd.id, cd);
+        return contentById;
+      })(),
+      // 4. Routes：与内容并行（只用 locs/id，不依赖内容）
+      (async () => {
+        let routes: any[] = [];
+        for (let attempt = 0; attempt < 2 && routes.length < routeReqs.length; attempt++) {
+          const rr = await deepseek([
+            { role: "system", content: "你是旅游路线规划师。只返回JSON。" },
+            { role: "user", content: `${destName}路线。可选地点（id: 名称（景区:X））: ${locs.map(l => `${l.id}: ${l.name}${l.scenic ? `（景区:${l.scenic}）` : ""}`).join(", ")}\n\n按序严格生成 ${routeReqs.length} 条路线：\n${routeReqText}\n\n要求：\n1. 每条路线覆盖其主题对应的地点，形成完整行程（从某入口/索道进 → 逐点游览 → 出口/索道出）。\n2. narrative 各写 150-300 字完整行程描述：从哪个入口/索道进、每段用什么交通（徒步/索道/观光车）、依次经过哪些地点、从哪里出。narrative 中必须写地点的中文名（如"玉京峰"），严禁写 id 代号。\n${req3}\n4. **主题游必须包含目的地核心景点**；1日精华/2日全景/主题游覆盖范围逐步扩大且互补（精华⊂全景⊂主题游）。\n5. 地点少时压缩天数，严禁编造不存在的多日行程。\n6. stops 数组顺序必须与 narrative 中的实际游览顺序一致（入口/索道在前，依次游览，出口/索道在后）；stops 只能从上面给出的 id 中逐字复制，严禁自创或使用列表外的 id。\n7. 路线条数必须与上述完全一致（${routeReqs.length} 条），缺一不可。\nJSON: {"routes":[{"day_label":"","title":"","stops":["id1","id2"],"narrative":"完整行程描述"}]}` },
+          ]);
+          // Route stop validation: resolve and report mismatches
+          const allRoutes = (rr.routes || []).map((r: any, i: number) => {
+            const rawStops: string[] = (Array.isArray(r.stops) ? r.stops : [])
+              .map((s: any) => s && typeof s === "object" ? (s.poi ?? s.id ?? s.name) : s)
+              .filter(Boolean);
+            const resolved = rawStops.map((s: string) => resolveStop(s)).filter(Boolean);
+            const unresolved = rawStops.filter((_, j) => !resolved[j]);
+            if (unresolved.length > 0) {
+              warnings.push(`⚠️ 路线"${r.title || r.day_label || `路线${i+1}`}"有 ${unresolved.length} 个站点无法匹配：${unresolved.join(', ')}`);
+            }
+            return {
+              id: `${scope}-r${i + 1}`,
+              day_label: String(r.day_label || ""),
+              title: String(r.title || `路线${i + 1}`),
+              stops: resolved, // 信任 AI 的游览顺序（入口/索道在前），不按地理重排
+              narrative: typeof r.narrative === "string" ? r.narrative : "",
+              sort_order: i,
+            };
+          }).filter(r => r.stops.length > 0);
+
+          // 去重：stops 集合完全相同才视为重复，保留先出现的（1日精华优先）
+          const seenKeys = new Set<string>();
+          const dedupedRoutes: any[] = [];
+          for (const r of allRoutes) {
+            const key = [...r.stops].sort().join("|");
+            if (!seenKeys.has(key)) { seenKeys.add(key); dedupedRoutes.push(r); }
+          }
+          routes = dedupedRoutes;
+        }
+        return routes;
+      })(),
+    ]);
+
+    // 应用内容到各地点（供写库）
+    for (const l of locs) {
+      const cd = contentById.get(l.id) || {};
+      l.layers = cd.layers || {}; l.reflection = cd.reflection || ""; l.practical = cd.practical || {};
     }
 
     // 5. Write
@@ -501,7 +679,7 @@ Deno.serve(async (req: Request) => {
       routes: routes.length,
       warnings: warnings.length > 0 ? warnings : undefined,
       rejected: (lr.locations || []).length - extractedBeforeDedup, // regeo/坐标校验被拒
-      deduped: extractedBeforeDedup - locs.length, // 坐标去重数
+      deduped: extractedBeforeDedup - afterExtractDedup, // 坐标去重数（在地区/子景点并入前计算）
     };
     console.log(`Done! ${report.locations} locs, ${report.routes} routes, ${warnings.length} warnings`);
     await setStatus(tourId, "done");
