@@ -50,13 +50,43 @@ async function gaode(name: string, destCity: string) {
   const cityParam = encodeURIComponent((splitRegion(destCity).city || destCity).replace(/[市]$/g, ""));
   // 不做 location 偏置：目的地地理编码可能偏到行政中心（如"三清山"被编码到上饶市区，距真景点 50km），
   // 偏置反而排挤真景点。靠城市限定 + 类型过滤 + 后续聚类离群点剔除保证质量。
-  const r = await fetch(`https://restapi.amap.com/v3/place/text?keywords=${kw}&city=${cityParam}&key=${GAODE_KEY}&types=风景名胜|旅游景点&citylimit=true`, { signal: AbortSignal.timeout(30000) });
-  const d = await r.json();
-  // 过滤地址式 POI：名称形如"湖北省武汉市洪山区象鼻山"（整串地址当名称）的多为非景点的幻觉点。
-  // 真实景点名称是短的（"黄鹤楼""晴川阁"），不会带"省…市"。
-  const realPois = (d.pois || []).filter((p: any) => !/省.*市/.test(p.name || ""));
-  if (realPois.length) { const [lng, lat] = realPois[0].location.split(",").map(Number); return { lng, lat, name: realPois[0].name }; }
-  return null;
+  // 名称重叠过滤：高德文本搜索 top 常是同景区相关点（搜"袁家界"→"杨家界乘车处"、"十里画廊"→"索溪峪"），
+  // 必须要求 POI 名称真正包含目标名，否则会把袁家界放到杨家界坐标。
+  const overlaps = (pois: any[]) => pois.filter((p: any) => p.name?.includes(name) || name.includes(p.name || ""));
+  // 名称匹配点中优先"风景名胜|旅游景点"类型（如"袁家界游客基地"是生活服务，应让位"袁家界景区-观景台"）
+  const preferScenic = (pois: any[]) => {
+    const s = pois.filter((p: any) => /风景名胜|旅游景点|名胜|景区|公园/.test(p.type || ""));
+    return s.length ? s : pois;
+  };
+  const query = async (types: string | null) => {
+    const typesParam = types ? `&types=${encodeURIComponent(types)}` : "";
+    // 高德限流(CUQPS_HAS_EXCEEDED_THE_LIMIT)在连续查询时高频出现 → 延迟 300ms 重试一次
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const r = await fetch(`https://restapi.amap.com/v3/place/text?keywords=${kw}&city=${cityParam}&key=${GAODE_KEY}${typesParam}&citylimit=true`, { signal: AbortSignal.timeout(30000) });
+      const d = await r.json();
+      if (d.info === "CUQPS_HAS_EXCEEDED_THE_LIMIT") { await new Promise(r2 => setTimeout(r2, 300)); continue; }
+      return (d.pois || []).filter((p: any) => !/省.*市/.test(p.name || ""));
+    }
+    return [];
+  };
+  // 严格搜索：按 风景名胜|旅游景点 类型
+  let matched = overlaps(await query("风景名胜|旅游景点"));
+  // 放宽兜底：严格类型无名称匹配（含返回一堆无关点但无匹配，如袁家界）→ 无 types 全类型重查
+  if (!matched.length) {
+    matched = overlaps(await query(null));
+  }
+  if (!matched.length) return null;
+  const top = preferScenic(matched)[0];
+  const [lng, lat] = top.location.split(",").map(Number);
+  // 名称清洗：剥"武陵源风景名胜区-"等前缀 + "游客基地/上站/售票处/小火车/观景台/景区"等后缀
+  // 多轮清洗直至稳定：袁家界景区-观景台 → 袁家界景区 → 袁家界
+  let clean = top.name.replace(/^.*风景名胜区-|^.*国家森林公园-?/, "").trim();
+  for (let i = 0; i < 3; i++) {
+    const next = clean.replace(/社区|游客基地|游客中心|观光电车|小火车|乘车处|候车处|售票处|上站|下站|集邮点|入口|-?观景台$|风景区$|景区$/, "").trim();
+    if (next === clean) break;
+    clean = next;
+  }
+  return { lng, lat, name: clean || top.name };
 }
 
 // 查询目的地区域（城市）的知名风景/旅游景点，用于自动补地区景点 → 组主题游。
