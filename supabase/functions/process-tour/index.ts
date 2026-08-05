@@ -393,6 +393,13 @@ Deno.serve(async (req: Request) => {
     const src = tour.source?.rawText || "";
     console.log(`Processing: ${tour.title}, ${src.length} chars`);
 
+    // 副标题：用户创建导览时没填 → AI 生成（短输出、与提取并行，不占关键路径）
+    const subtitlePromise = (tour.subtitle || "").trim() ? Promise.resolve(null)
+      : deepseek([
+          { role: "system", content: "你是旅游文案策划。只返回JSON。" },
+          { role: "user", content: `为「${destName}（${destRegion}）」的导览生成一句简短有文学意境的副标题（15-30字，用于首页卡片展示）。${tour.source?.title ? `源材料来自《${tour.source.title}》${tour.source.author ? `（${tour.source.author}）` : ""}` : ""}\n参考风格：\n- "跟着语文课本，登天都峰看奇石云海"\n- "循秦始皇足迹，登岱顶祭天封禅"\n- "天上白玉京 · 云上三清看奇峰"\n要求：点出目的地最核心的看点或文化记忆点，文学味浓，不要罗列地名，不要加书名号。JSON: {"subtitle":"一句话副标题"}` },
+        ]).then((r: any) => String(r?.subtitle || "").trim()).catch(() => null);
+
     // 2. Extract locations
     const lr = await deepseek([
       { role: "system", content: "你是中国旅游规划专家。只返回JSON。只提取真实存在的地点，不确定的地点不要提取。只列固定旅游景点/地标/古迹/公园/山峰/宫观，不要临时展览、活动、演出、商业店铺等非固定地点。" },
@@ -682,6 +689,13 @@ Deno.serve(async (req: Request) => {
       deduped: extractedBeforeDedup - afterExtractDedup, // 坐标去重数（在地区/子景点并入前计算）
     };
     console.log(`Done! ${report.locations} locs, ${report.routes} routes, ${warnings.length} warnings`);
+    // 副标题回写：用户没填时用 AI 生成的（≤40 字，防模型输出过长破坏卡片）
+    const subtitle = await subtitlePromise;
+    if (subtitle && subtitle.length <= 40) {
+      await fetch(`${SUPABASE_URL}/rest/v1/tours?id=eq.${tourId}`, {
+        method: "PATCH", headers: hdr, body: JSON.stringify({ subtitle }),
+      }).catch(() => {});
+    }
     await setStatus(tourId, "done");
     return json({ success: true, ...report });
   } catch (e: any) {
