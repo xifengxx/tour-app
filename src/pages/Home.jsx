@@ -4,8 +4,12 @@ import { supabase } from '../lib/supabase';
 import { searchTours, filterByCategory } from '../lib/filterTours';
 import { useAuth } from '../contexts/AuthContext';
 import NavBar from '../components/NavBar';
+import SealLogo from '../components/SealLogo';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import { Plus, MoreHorizontal, Heart } from 'lucide-react';
+import {
+  Plus, MoreHorizontal, Heart, MapPin, Route as RouteIcon, Search,
+  Compass, LibraryBig, Bookmark, Pencil, Lock, Globe, Trash2,
+} from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -150,24 +154,34 @@ export default function Home() {
     }
   };
 
-  const renderTourCard = (tour, isMyTour) => (
-    <div key={tour.id} className="relative group">
+  const renderTourCard = (tour, isMyTour, idx = 0) => (
+    <div key={tour.id} className="relative group anim-rise" style={{ animationDelay: `${Math.min(idx, 8) * 60}ms` }}>
       <Link
         to={`/tour/${tour.id}`}
-        className="block bg-card rounded-2xl p-5 hover:bg-secondary transition-colors border border-border"
+        className="relative block bg-card rounded-lg border border-border overflow-hidden transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/50 hover:shadow-[0_10px_28px_-14px_rgba(28,26,22,0.35)]"
       >
-        {/* 标题留右侧空间给「已发布 + ⋮」徽标区，避免重叠 */}
-        <h2 className={`text-base font-serif font-bold text-foreground mb-2 ${isMyTour ? 'pr-28' : ''}`}>{tour.title}</h2>
-        <p className="text-sm text-muted-foreground mb-3 line-clamp-2">{tour.subtitle}</p>
-        <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-          <span>📍 {tour.destination?.name || '—'}{tour.destination?.region ? ` · ${tour.destination.region}` : ''}</span>
-          {(tour.stats?.routes ?? tour.routes?.[0]?.count) != null && (
-            <span>🗺 {tour.stats?.routes ?? tour.routes?.[0]?.count} 路线</span>
-          )}
-          {/* 地点数移至底部信息行，与右上角状态徽标分离 */}
-          <span className="px-2 py-0.5 rounded-full bg-black/5">
-            {tour.stats?.locations ?? tour.locations?.[0]?.count ?? '?'} 地点
-          </span>
+        {/* 朱砂书脊 */}
+        <div className="absolute left-0 top-0 bottom-0 w-[3px] bg-primary/85" />
+        <div className="p-5 pl-6">
+          {/* 标题留右侧空间给「已发布 + ⋮」徽标区，避免重叠 */}
+          <h2 className={`text-lg font-serif font-bold text-foreground leading-snug mb-1.5 group-hover:text-primary transition-colors ${isMyTour ? 'pr-28' : 'pr-8'}`}>{tour.title}</h2>
+          <p className="text-sm text-muted-foreground mb-4 line-clamp-2 leading-relaxed">{tour.subtitle}</p>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs text-muted-foreground">
+            <span className="inline-flex items-center gap-1">
+              <MapPin className="h-3 w-3 text-primary/70" />
+              {tour.destination?.name || '—'}{tour.destination?.region ? ` · ${tour.destination.region}` : ''}
+            </span>
+            {(tour.stats?.routes ?? tour.routes?.[0]?.count) != null && (
+              <span className="inline-flex items-center gap-1">
+                <RouteIcon className="h-3 w-3 text-dai/80" />
+                {tour.stats?.routes ?? tour.routes?.[0]?.count} 路线
+              </span>
+            )}
+            {/* 地点数移至底部信息行，与右上角状态徽标分离 */}
+            <span className="px-2 py-0.5 rounded-full bg-black/[0.04] border border-border/60">
+              {tour.stats?.locations ?? tour.locations?.[0]?.count ?? '?'} 地点
+            </span>
+          </div>
         </div>
       </Link>
 
@@ -175,28 +189,26 @@ export default function Home() {
       {!isMyTour && user && (
         <button
           onClick={() => toggleFav(tour)}
-          className="absolute top-3 right-3 w-7 h-7 rounded-full bg-black/5 flex items-center justify-center hover:bg-black/10 transition-colors"
+          className="absolute top-3 right-3 w-7 h-7 rounded-full bg-card border border-border flex items-center justify-center hover:border-primary/40 transition-colors"
           title={favIds.has(tour.id) ? '取消收藏' : '收藏'}
           aria-label={favIds.has(tour.id) ? '取消收藏' : '收藏'}
         >
-          <Heart className={`h-3.5 w-3.5 ${favIds.has(tour.id) ? 'fill-primary text-primary' : 'text-muted-foreground'}`} />
+          <Heart className={`h-3.5 w-3.5 ${favIds.has(tour.id) ? 'fill-primary text-primary anim-stamp' : 'text-muted-foreground'}`} />
         </button>
       )}
 
-      {/* My tour: status badge + actions menu */}
+      {/* My tour: 状态印戳 + 操作菜单 */}
       {isMyTour && (
         <div className="absolute top-3 right-3 flex items-center gap-1.5">
-          <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${
-            tour.is_public
-              ? 'bg-green-600/20 text-green-700'
-              : 'bg-black/10 text-muted-foreground'
+          <span className={`seal-outline text-[10px] px-1.5 py-1 ${
+            tour.is_public ? 'text-primary bg-primary/5' : 'text-muted-foreground bg-black/[0.03]'
           }`}>
             {tour.is_public ? '已发布' : '私密'}
           </span>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button
-                className="w-6 h-6 rounded-full bg-black/10 text-muted-foreground flex items-center justify-center hover:bg-black/10 transition-colors"
+                className="w-6 h-6 rounded-full bg-black/[0.05] text-muted-foreground flex items-center justify-center hover:bg-black/10 transition-colors"
                 aria-label="导览操作"
               >
                 <MoreHorizontal className="h-3.5 w-3.5" />
@@ -204,14 +216,16 @@ export default function Home() {
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-44">
               <DropdownMenuItem onClick={() => navigate(`/tour/${tour.id}/edit`)}>
-                ✏️ 编辑导览
+                <Pencil className="h-3.5 w-3.5 mr-1" /> 编辑导览
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => togglePublic(tour)}>
-                {tour.is_public ? '🔒 设为私密' : '🌍 设为公开'}
+                {tour.is_public
+                  ? <><Lock className="h-3.5 w-3.5 mr-1" /> 设为私密</>
+                  : <><Globe className="h-3.5 w-3.5 mr-1" /> 设为公开</>}
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={() => deleteTour(tour)} className="text-primary focus:text-primary focus:bg-primary/10">
-                🗑️ 删除导览
+                <Trash2 className="h-3.5 w-3.5 mr-1" /> 删除导览
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -220,32 +234,65 @@ export default function Home() {
     </div>
   );
 
+  const renderEmpty = (icon, text, action) => (
+    <div className="col-span-2 text-center py-16">
+      <div className="w-14 h-14 mx-auto mb-4 rounded-full border border-border bg-card flex items-center justify-center text-muted-foreground">
+        {icon}
+      </div>
+      <p className="text-muted-foreground text-sm mb-4">{text}</p>
+      {action}
+    </div>
+  );
+
   return (
     <div className="min-h-screen bg-background">
       <NavBar />
 
+      {/* ── Hero · 门面 ── */}
+      <header className="max-w-4xl mx-auto px-4 pt-8 pb-5 flex items-start justify-between gap-4">
+        <div className="anim-rise">
+          <div className="flex items-center gap-3 mb-2">
+            <SealLogo size={40} />
+            <h1 className="font-serif font-black text-3xl tracking-wide text-foreground">文学巡礼</h1>
+          </div>
+          <p className="text-xs tracking-[0.25em] text-muted-foreground uppercase pl-1">
+            Literary&nbsp;Pilgrimage&nbsp;·&nbsp;纸上山河
+          </p>
+        </div>
+        <div className="vertical-rl font-kai text-sm text-muted-foreground pt-1 select-none anim-rise" style={{ animationDelay: '150ms' }}>
+          带着小说去旅行
+        </div>
+      </header>
+
       {/* Tabs + Create button */}
-      <div className="flex items-end gap-2 px-4 pt-3 pb-1 max-w-4xl mx-auto">
+      <div className="px-4 max-w-4xl mx-auto">
         <Tabs value={tab} onValueChange={setTab} className="w-full">
-          <div className="flex items-center justify-between">
-            <TabsList className="bg-transparent p-0 h-auto gap-1">
-              <TabsTrigger value="explore" className="data-[state=active]:bg-primary/10 data-[state=active]:text-primary data-[state=active]:border data-[state=active]:border-primary/20 text-muted-foreground">
-                🔍 发现
-              </TabsTrigger>
-              <TabsTrigger value="my" className="data-[state=active]:bg-primary/10 data-[state=active]:text-primary data-[state=active]:border data-[state=active]:border-primary/20 text-muted-foreground">
-                📋 我的导览
-              </TabsTrigger>
-              {user && (
-                <TabsTrigger value="fav" className="data-[state=active]:bg-primary/10 data-[state=active]:text-primary data-[state=active]:border data-[state=active]:border-primary/20 text-muted-foreground">
-                  🔖 我的收藏
+          <div className="flex items-center justify-between border-b border-border">
+            <TabsList className="bg-transparent p-0 h-auto gap-5 rounded-none">
+              {[
+                { v: 'explore', label: '发现', icon: Compass },
+                { v: 'my', label: '我的导览', icon: LibraryBig },
+                ...(user ? [{ v: 'fav', label: '我的收藏', icon: Bookmark }] : []),
+              ].map(({ v, label, icon: Icon }) => (
+                <TabsTrigger
+                  key={v}
+                  value={v}
+                  className="relative rounded-none px-1 pt-1 pb-2.5 text-sm font-serif font-semibold text-muted-foreground shadow-none
+                    data-[state=active]:bg-transparent data-[state=active]:text-primary data-[state=active]:shadow-none
+                    hover:text-foreground transition-colors
+                    after:absolute after:left-0 after:right-0 after:-bottom-px after:h-[2px] after:bg-transparent
+                    data-[state=active]:after:bg-primary"
+                >
+                  <Icon className="h-3.5 w-3.5 mr-1.5 opacity-80" />
+                  {label}
                 </TabsTrigger>
-              )}
+              ))}
             </TabsList>
 
             {user && (
               <button
                 onClick={() => navigate('/create')}
-                className="flex items-center gap-1 px-3 py-2 bg-primary text-primary-foreground rounded-xl text-xs font-semibold hover:bg-primary/90 transition-colors"
+                className="flex items-center gap-1 px-3 py-2 mb-1 bg-primary text-primary-foreground rounded-lg text-xs font-semibold hover:bg-primary/90 transition-colors"
               >
                 <Plus className="h-3 w-3" />
                 创建
@@ -254,8 +301,8 @@ export default function Home() {
           </div>
 
           {/* Subtitle */}
-          <p className="text-muted-foreground text-xs mt-3 mb-2">
-            {tab === 'explore' ? '带着小说去旅行，在每一处山崖找到书中的江湖'
+          <p className="font-kai text-muted-foreground text-xs mt-3 mb-3 tracking-wide">
+            {tab === 'explore' ? '在每一处山崖，找到书中的江湖'
               : tab === 'fav' ? '收藏想去的导览，随时出发'
               : '管理你创建的导览'}
           </p>
@@ -263,13 +310,14 @@ export default function Home() {
           {/* Tour Cards */}
           <TabsContent value="explore" className="mt-0">
             {/* 搜索 + 分类 */}
-            <div className="mb-4 space-y-2">
+            <div className="mb-4 space-y-2.5">
               <div className="relative">
+                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
                 <input
                   value={keyword}
                   onChange={e => setKeyword(e.target.value)}
                   placeholder="搜索导览：目的地 / 作品 / 地区…"
-                  className="w-full bg-card text-foreground rounded-xl px-4 py-2.5 text-sm border border-border outline-none focus:border-primary transition-colors"
+                  className="w-full bg-card text-foreground rounded-lg pl-9 pr-8 py-2.5 text-sm border border-border outline-none focus:border-primary transition-colors"
                 />
                 {keyword && (
                   <button
@@ -284,82 +332,76 @@ export default function Home() {
                   <button
                     key={c}
                     onClick={() => setCategory(c)}
-                    className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs transition-colors ${
+                    className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs border transition-colors ${
                       category === c
-                        ? 'bg-primary text-white'
-                        : 'bg-black/5 text-muted-foreground hover:bg-black/10'
+                        ? 'bg-primary text-primary-foreground border-primary'
+                        : 'bg-transparent text-muted-foreground border-border hover:border-primary/40 hover:text-foreground'
                     }`}
                   >{c}</button>
                 ))}
               </div>
             </div>
 
-            <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid gap-4 sm:grid-cols-2 pb-10">
               {filteredTours.length > 0 ? (
-                filteredTours.map(tour => renderTourCard(tour, false))
+                filteredTours.map((tour, i) => renderTourCard(tour, false, i))
               ) : (
-                <div className="col-span-2 text-center py-16 text-muted-foreground">
-                  <div className="text-4xl mb-3">🔍</div>
-                  <p>没有匹配的导览</p>
-                </div>
+                renderEmpty(<Search className="h-5 w-5" />, '没有匹配的导览')
               )}
             </div>
           </TabsContent>
 
           <TabsContent value="my" className="mt-0">
-            <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid gap-4 sm:grid-cols-2 pb-10">
               {!user ? (
-                <div className="col-span-2 text-center py-16">
-                  <div className="text-4xl mb-3">🔐</div>
-                  <p className="text-muted-foreground mb-4">登录后查看你创建的导览</p>
+                renderEmpty(
+                  <Lock className="h-5 w-5" />,
+                  '登录后查看你创建的导览',
                   <button
                     onClick={() => navigate('/login')}
-                    className="px-6 py-2 bg-primary text-primary-foreground rounded-xl text-sm font-semibold hover:bg-primary/90 transition-colors"
+                    className="px-6 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-semibold hover:bg-primary/90 transition-colors"
                   >
                     去登录
                   </button>
-                </div>
+                )
               ) : myToursLoading ? (
                 <div className="col-span-2 text-center py-16 text-muted-foreground">
                   <p>加载中...</p>
                 </div>
               ) : myTours.length > 0 ? (
-                myTours.map(tour => renderTourCard(tour, true))
+                myTours.map((tour, i) => renderTourCard(tour, true, i))
               ) : (
-                <div className="col-span-2 text-center py-16 text-muted-foreground">
-                  <div className="text-4xl mb-3">📝</div>
-                  <p className="mb-2">还没有创建导览</p>
+                renderEmpty(
+                  <Pencil className="h-5 w-5" />,
+                  '还没有创建导览',
                   <button
                     onClick={() => navigate('/create')}
-                    className="text-primary text-sm hover:text-primary transition-colors"
+                    className="text-primary text-sm hover:text-primary/80 transition-colors font-serif font-semibold"
                   >
                     + 创建第一条导览
                   </button>
-                </div>
+                )
               )}
             </div>
           </TabsContent>
 
           <TabsContent value="fav" className="mt-0">
-            <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid gap-4 sm:grid-cols-2 pb-10">
               {!user ? (
-                <div className="col-span-2 text-center py-16">
-                  <div className="text-4xl mb-3">🔐</div>
-                  <p className="text-muted-foreground mb-4">登录后查看你的收藏</p>
+                renderEmpty(
+                  <Lock className="h-5 w-5" />,
+                  '登录后查看你的收藏',
                   <button
                     onClick={() => navigate('/login')}
-                    className="px-6 py-2 bg-primary text-primary-foreground rounded-xl text-sm font-semibold hover:bg-primary/90 transition-colors"
+                    className="px-6 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-semibold hover:bg-primary/90 transition-colors"
                   >
                     去登录
                   </button>
-                </div>
+                )
               ) : favTours.length > 0 ? (
-                favTours.map(tour => renderTourCard(tour, false))
+                favTours.map((tour, i) => renderTourCard(tour, false, i))
               ) : (
-                <div className="col-span-2 text-center py-16 text-muted-foreground">
-                  <div className="text-4xl mb-3">🤍</div>
-                  <p>还没有收藏的导览，去发现页点 ♥ 收藏吧</p>
-                </div>
+                renderEmpty(<Bookmark className="h-5 w-5" />, '还没有收藏的导览，去发现页点 ♥ 收藏吧')
               )}
             </div>
           </TabsContent>

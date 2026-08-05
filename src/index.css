@@ -1,27 +1,43 @@
+/* 思源宋体（本地打包，按 unicode-range 分片，浏览器只下载用到的切片） */
+@import '@fontsource/noto-serif-sc/500.css';
+@import '@fontsource/noto-serif-sc/600.css';
+@import '@fontsource/noto-serif-sc/700.css';
+@import '@fontsource/noto-serif-sc/900.css';
 @import "tailwindcss";
 
-/* shadcn/ui theming — Tailwind CSS v4 · Claude/Anthropic 风格（羊皮纸 + 陶土） */
+/* ─────────────────────────────────────────────
+   文学巡礼 · 「纸上山河」设计系统
+   古籍装帧 × 编辑排版：宣纸底、墨色字、朱砂印、黛青辅
+   ───────────────────────────────────────────── */
 @theme {
-  --color-background: #f5f4ed;        /* 羊皮纸页面底 */
-  --color-foreground: #141413;        /* 暖近黑正文 */
-  --color-card: #faf9f5;              /* 象牙卡片 */
-  --color-card-foreground: #141413;
-  --color-primary: #c96442;           /* 陶土（主按钮/强调/选中） */
-  --color-primary-foreground: #ffffff;
-  --color-secondary: #e8e6dc;         /* 暖沙次级底 */
-  --color-secondary-foreground: #141413;
-  --color-muted: #eeece3;             /* 弱底 */
-  --color-muted-foreground: #6f6d63;  /* 暖灰次要文字 */
-  --color-accent: #e8e6dc;
-  --color-accent-foreground: #141413;
-  --color-destructive: #b53333;       /* 错误 */
-  --color-destructive-foreground: #ffffff;
-  --color-border: #e0ddd2;            /* 暖边框 */
-  --color-input: #e0ddd2;
-  --color-ring: #c96442;              /* 焦点环 */
+  --color-background: #f7f3ea;        /* 宣纸 · 页面底 */
+  --color-foreground: #1c1a16;        /* 墨色 · 正文 */
+  --color-card: #fbf8f0;              /* 笺纸 · 卡片 */
+  --color-card-foreground: #1c1a16;
+  --color-primary: #c2402a;           /* 朱砂 · 印章/主按钮/选中 */
+  --color-primary-foreground: #fdf9f0;
+  --color-secondary: #ede7d7;         /* 暖沙 · 次级底 */
+  --color-secondary-foreground: #1c1a16;
+  --color-muted: #f0ebdd;             /* 弱底 */
+  --color-muted-foreground: #6b655a;  /* 暖灰 · 次要文字 */
+  --color-accent: #ede7d7;
+  --color-accent-foreground: #1c1a16;
+  --color-destructive: #a83226;
+  --color-destructive-foreground: #fdf9f0;
+  --color-border: #ddd4c0;            /* 暖边框 */
+  --color-input: #d5cbb4;
+  --color-ring: #c2402a;
+
+  /* 国画辅色（路线 / 信息 / 点缀） */
+  --color-dai: #2f4f4a;               /* 黛青 · 链接/信息/第二强调 */
+  --color-ochre: #9c6b3c;             /* 赭石 */
+  --color-pine: #5b7a5e;              /* 苍绿 */
+  --color-gamboge: #c9973f;           /* 藤黄 */
+
   --radius: 0.5rem;
   --font-sans: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", "Noto Sans SC", sans-serif;
-  --font-serif: Georgia, "Songti SC", STSong, "Noto Serif SC", serif;
+  --font-serif: "Noto Serif SC", "Songti SC", STSong, Georgia, serif;
+  --font-kai: "Kaiti SC", STKaiti, KaiTi, "Noto Serif SC", serif;
 }
 
 body {
@@ -32,9 +48,84 @@ body {
 }
 #root { min-height: 100vh; }
 
+/* 纸纹：全局极轻噪点，浮于所有内容之上但不拦截交互（地图上也有淡淡的纸感） */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  pointer-events: none;
+  opacity: 0.045;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
 /* AMap container fixes */
-.amap-container { background: #f5f4ed !important; }
+.amap-container { background: #f7f3ea !important; }
 
 /* 高德版权/Logo 条 z-index 默认极高(~1100)，会盖在 z-50 的弹窗上（手机端尤甚）。
    压到 1，使其始终在弹窗(≥z-30)之下、地图容器内正常显示 */
 .amap-copyright, .amap-logo { z-index: 1 !important; }
+
+/* ── 装饰语言 ── */
+
+/* 竖排文字：首页副标、卡片侧签等（中文排版独有） */
+.vertical-rl {
+  writing-mode: vertical-rl;
+  letter-spacing: 0.35em;
+}
+
+/* 古籍双线框 */
+.double-frame {
+  border: 1px solid var(--color-border);
+  outline: 1px solid var(--color-border);
+  outline-offset: 3px;
+}
+
+/* 朱印（实心印章，如 logo） */
+.seal {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-primary);
+  color: var(--color-primary-foreground);
+  font-family: var(--font-serif);
+  font-weight: 700;
+  border-radius: 4px;
+  transform: rotate(-2deg);
+  box-shadow: inset 0 0 0 1px rgba(253, 249, 240, 0.4), 0 1px 2px rgba(28, 26, 22, 0.15);
+  user-select: none;
+  line-height: 1;
+}
+
+/* 朱印（线框印章，如「已发布」状态戳） */
+.seal-outline {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1.5px solid currentColor;
+  border-radius: 4px;
+  font-family: var(--font-serif);
+  font-weight: 600;
+  transform: rotate(-3deg);
+  letter-spacing: 0.08em;
+  user-select: none;
+  line-height: 1;
+}
+
+/* ── 动效 ── */
+@keyframes rise {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: none; }
+}
+.anim-rise { animation: rise 0.55s cubic-bezier(0.22, 0.9, 0.3, 1) both; }
+
+@keyframes stamp {
+  0%   { opacity: 0; transform: scale(1.7) rotate(-10deg); }
+  55%  { opacity: 1; transform: scale(0.94) rotate(-3deg); }
+  100% { opacity: 1; transform: scale(1) rotate(-3deg); }
+}
+.anim-stamp { animation: stamp 0.35s cubic-bezier(0.2, 1.4, 0.4, 1) both; }
+
+@media (prefers-reduced-motion: reduce) {
+  .anim-rise, .anim-stamp { animation: none; }
+}

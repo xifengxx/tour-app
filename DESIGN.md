@@ -1,93 +1,118 @@
 # 文学巡礼 · 设计规范（DESIGN.md）
 
-> 全站视觉风格：**Claude/Anthropic 风格**（羊皮纸 + 陶土色 + 衬线标题，书卷气 / 新中式文艺）。
-> 参考 `/Users/mac/Claude_projects/design/claude/DESIGN.md`，2026-08 全站由暗紫红主题重构而来。
+> 全站视觉风格：**「纸上山河」**（古籍装帧 × 编辑排版：宣纸底、墨色字、朱砂印、黛青辅）。
+> 2026-08 由「Claude/Anthropic 羊皮纸 + 陶土」重构而来。品牌签名元素：**朱砂印章**（logo / 状态戳 / 收藏盖印）。
 
 ---
 
+## 改版进度
+
+| 阶段 | 范围 | 状态 |
+|------|------|------|
+| Phase 0 地基 | index.css token + Noto Serif SC + 纸纹/印章/竖排工具类 | ✅ 完成 |
+| Phase 1 门面 | NavBar（朱印 logo）+ Home（hero + 书页卡）+ Login | ✅ 完成 |
+| Phase 2 核心 | TourView（RouteBar / ContentCard / 底部手卷 / DetailModal）+ 路线国画五色 | ⏳ 待做 |
+| Phase 3 收尾 | TourEdit/Review、其余弹窗、触摸目标走查 | ⏳ 待做 |
+
+> ⚠️ Phase 2 未完成前，TourView 内仍有旧色值硬编码（如 `#c96442`、`#b3ae9e`、彩虹路线五色 `#e74c3c...`、ContentCard 暗色残留 `rgba(255,255,255,0.1)`），属已知待清理项。
+
 ## 1. 视觉定位
 
-亮色为主、暖调、编辑式排版。像一本旧书 / 一张羊皮纸地图，克制留白，低饱和大地色系。
+亮色、暖调、编辑式排版。像一册正在展开的游记手卷：宣纸纹理、克制留白、低饱和国画色系。
 - **不**做暗色模式（地图页也用亮色，与高德 normal 亮底图一致）
-- 强调色只有陶土，避免多色冲突（尤其地图标记）
+- 强调色以朱砂为主、黛青为辅，避免多色冲突（尤其地图标记）
+- UI 图标一律 lucide SVG，**不用 emoji**
 
 ## 2. 色板（`src/index.css` @theme 实际值）
 
 | Token | 值 | 用途 |
 |-------|-----|------|
-| `--color-background` | `#f5f4ed` | 页面底 · 羊皮纸 |
-| `--color-foreground` | `#141413` | 正文 · 暖近黑 |
-| `--color-card` | `#faf9f5` | 卡片 · 象牙 |
-| `--color-card-foreground` | `#141413` | 卡片文字 |
-| `--color-primary` | `#c96442` | 主按钮 / 选中 / 强调 · 陶土 |
-| `--color-primary-foreground` | `#ffffff` | 主按钮文字 |
-| `--color-secondary` | `#e8e6dc` | 次级底 · 暖沙 |
-| `--color-secondary-foreground` | `#141413` | |
-| `--color-muted` | `#eeece3` | 弱底 |
-| `--color-muted-foreground` | `#6f6d63` | 次要文字 · 暖灰 |
-| `--color-accent` | `#e8e6dc` | |
-| `--color-accent-foreground` | `#141413` | |
-| `--color-destructive` | `#b53333` | 错误 |
-| `--color-border` | `#e0ddd2` | 边框 · 暖 |
-| `--color-input` | `#e0ddd2` | 输入框 |
-| `--color-ring` | `#c96442` | 焦点环 |
+| `--color-background` | `#f7f3ea` | 页面底 · 宣纸 |
+| `--color-foreground` | `#1c1a16` | 正文 · 墨色 |
+| `--color-card` | `#fbf8f0` | 卡片 · 笺纸 |
+| `--color-card-foreground` | `#1c1a16` | 卡片文字 |
+| `--color-primary` | `#c2402a` | 朱砂 · 主按钮 / 选中 / 印章 |
+| `--color-primary-foreground` | `#fdf9f0` | 主按钮文字 |
+| `--color-secondary` | `#ede7d7` | 次级底 · 暖沙 |
+| `--color-secondary-foreground` | `#1c1a16` | |
+| `--color-muted` | `#f0ebdd` | 弱底 |
+| `--color-muted-foreground` | `#6b655a` | 次要文字 · 暖灰 |
+| `--color-accent` | `#ede7d7` | |
+| `--color-accent-foreground` | `#1c1a16` | |
+| `--color-destructive` | `#a83226` | 错误 |
+| `--color-border` | `#ddd4c0` | 边框 · 暖 |
+| `--color-input` | `#d5cbb4` | 输入框 |
+| `--color-ring` | `#c2402a` | 焦点环 |
 | `--radius` | `0.5rem` | 圆角（收敛，编辑感） |
 
-**语义色**（非 token，Tailwind 命名）：
-- 成功 / 已发布：`green-600` 系（文字在亮底用 `text-green-700`）
-- 引文 / 反思块：`yellow-600` 左描边 + `bg-yellow-600/5`；引文文字 `text-[#7a6a4f]`（暖墨）
-- 信息提示：`blue-700`（亮底）
+**国画辅色**（Tailwind 类 `*-dai` / `*-ochre` / `*-pine` / `*-gamboge`）：
+
+| Token | 值 | 用途 |
+|-------|-----|------|
+| `--color-dai` | `#2f4f4a` | 黛青 · 链接/信息/第二强调 |
+| `--color-ochre` | `#9c6b3c` | 赭石 · 路线色 |
+| `--color-pine` | `#5b7a5e` | 苍绿 · 路线色/成功态 |
+| `--color-gamboge` | `#c9973f` | 藤黄 · 路线色 |
+
+**路线五色**（Phase 2 替换 TourView/RouteBar 的 `ROUTE_COLORS`）：朱砂 `#c2402a` / 黛青 `#2f4f4a` / 赭石 `#9c6b3c` / 苍绿 `#5b7a5e` / 藤黄 `#c9973f`——与全站同源，替代旧彩虹五色。
+
+**语义色**：成功/已发布优先 `pine` 系；引文/反思块沿用 `gamboge` 系左描边 + 暖墨文字 `#7a6a4f`。
 
 ## 3. 字体（`src/index.css` @theme）
 
 | Token | 值 | 用途 |
 |-------|-----|------|
-| `--font-sans` | `-apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", "Noto Sans SC", sans-serif` | 正文 |
-| `--font-serif` | `Georgia, "Songti SC", STSong, "Noto Serif SC", serif` | **标题（衬线）** |
+| `--font-sans` | 系统栈（PingFang SC 等） | 正文 |
+| `--font-serif` | `"Noto Serif SC", "Songti SC", STSong, Georgia, serif` | **标题/地点名/引文** |
+| `--font-kai` | `"Kaiti SC", STKaiti, KaiTi, "Noto Serif SC", serif` | 批注/副标语（手账感） |
 
-**规则**：衬线只用于标题——首页导览卡标题、地点名（ContentCard）、导航栏标题、页面主标题；正文一律 sans。加 `font-serif` 类到标题即可。
+- Noto Serif SC 通过 `@fontsource/noto-serif-sc` 本地打包（500/600/700/900），unicode-range 分片，浏览器只下载用到的切片；**不走 Google Fonts CDN**（国内不稳定）。
+- 规则不变：衬线只用于标题与引文，正文一律 sans。
 
-## 4. 组件约定
+## 4. 装饰语言（`src/index.css` 全局类）
+
+| 类 | 效果 |
+|----|------|
+| `.seal` | 实心朱印（logo）：朱砂方印 + 白字 + 微旋转 -2° + 内描边 |
+| `.seal-outline` | 线框印戳（如「已发布」）：1.5px 朱色描边 + 旋转 -3° |
+| `.vertical-rl` | 竖排文字（`writing-mode` + 字距 0.35em）：首页副标、侧签 |
+| `.double-frame` | 古籍双线框（border + outline offset 3px） |
+| `.anim-rise` | 交错浮现（配合 `animationDelay` 做 stagger） |
+| `.anim-stamp` | 盖印动效（收藏 ❤ 盖章感） |
+
+另：`body::before` 全局 4.5% 纸纹噪点（SVG feTurbulence data-URI），`pointer-events:none` 不影响交互。尊重 `prefers-reduced-motion`。
+
+## 5. 组件约定（Phase 1 后）
 
 | 组件 | 样式 |
 |------|------|
-| 按钮（主） | `bg-primary text-white`，圆角 `rounded-xl`，hover `bg-primary/90` |
-| 卡片 | `bg-card border border-border rounded-2xl`，无重阴影（`shadow-xl` 封顶） |
-| 导航栏 | `bg-card/95 backdrop-blur border-b border-border`（象牙玻璃）；标题衬线 |
-| 输入框 | `bg-background text-foreground border border-border focus:border-primary` |
-| 标签/徽标 | `bg-black/5 text-muted-foreground rounded-full`（亮底上不要用 `bg-white/5`，看不见） |
-| 底部信息行 | 目的地 · 省市 · 🗺路线 · **X 地点**（`gap-2`，地名与省市用 `·` 分隔） |
+| 按钮（主） | `bg-primary text-primary-foreground rounded-lg`，hover `bg-primary/90` |
+| 导览卡（书页卡） | `bg-card border border-border rounded-lg` + 左侧 3px 朱砂书脊线 + hover 上浮/朱色描边 |
+| 状态徽标 | `.seal-outline` 印戳：已发布=朱色、私密=暖灰 |
+| 导航栏 | `bg-card/90 backdrop-blur border-b`；首页左侧朱印 logo，子页居中衬线标题 |
+| Tab | 编辑式下划线 tab（不用胶囊）：active 朱砂字 + 2px 朱砂下划线 |
+| 输入框 | `bg-card border-border rounded-lg focus:border-primary` |
+| 标签/徽标 | `bg-black/[0.04] border border-border/60 rounded-full` |
+| 空状态 | 圆形线框图标（lucide）+ 说明文字 + 下一步引导 |
 
-## 5. 地图标记色（`src/pages/TourView.jsx` JS 常量）
+## 6. 地图标记色（`src/pages/TourView.jsx`，Phase 2 更新值）
 
-| 状态 | 值 | 样式 |
+| 状态 | 新值 | 样式 |
 |------|-----|------|
-| 未选中 | `#b3ae9e`（暖灰） | 26px 图钉 |
-| **选中** | `#c96442`（陶土） | 36px + 白色描边 + zIndex 500 置顶 |
-| 聚合气泡 | `rgba(201,100,66,.9)` | 红色数字气泡 |
+| 未选中 | `#b3ae9e` → 计划 `#a39d8c`（暖灰） | 26px 图钉 |
+| **选中** | `#c96442` → 计划 `#c2402a`（朱砂） | 36px + 白色描边 + zIndex 500 置顶 |
+| 聚合气泡 | → `rgba(194,64,42,.9)` | 朱色数字气泡 |
 
-**原则**：地图上只有"灰 vs 陶土"两态，绝不引入第三色——之前按重要性配色导致橙色与选中琥珀金冲突、用户分不清选中态（踩过坑）。
-
-## 6. 旧暗色 → 新 token 映射（重构时用过，维护参考）
-
-| 旧值 | 新值 |
-|------|------|
-| `bg-[#0f0f1a]` | `bg-background` |
-| `bg-[#1c1c32]` | `bg-card` |
-| `bg-[#242444]` | `bg-secondary` |
-| `bg-red-600` / `text-red-400` | `bg-primary` / `text-primary` |
-| `text-gray-400/500/300` | `text-muted-foreground` |
-| `bg-white/5` / `border-white/5` | `bg-black/5` / `border-border` |
-| `text-green-400` / `text-blue-400` | `text-green-700` / `text-blue-700` |
-| 亮底 `text-white` | `text-foreground`（按钮上保留） |
+**原则不变**：地图上只有"灰 vs 朱砂"两态，绝不引入第三色。
 
 ## 7. 卡片布局规则（我的导览）
 
-右上角「已发布/私密」状态徽标 + `⋮` 操作菜单为**绝对定位集群**（`top-3 right-3`）。
+右上角「已发布/私密」印戳 + `⋮` 操作菜单为**绝对定位集群**（`top-3 right-3`）。
 - 标题行必须留 `pr-28` 右侧空间，避免长标题钻进徽标区
-- **X 地点计数放底部信息行**，不与右上角徽标区重叠（曾踩过重叠坑）
+- **X 地点计数放底部信息行**，不与右上角徽标区重叠
 
 ## 8. Do's / Don'ts
 
-**Do**：标题用衬线、正文用 sans；强调色只用陶土；亮底次要文字用暖灰 token；地图标记只两态；留白充足。
-**Don't**：不要引入暗色块（全站亮色）；不要加多余强调色；亮底上不要用 `bg-white/*` / `text-white`（看不见）；不要给卡片加多重阴影。
+**Do**：标题用衬线、正文用 sans、批注用楷体；强调色朱砂为主黛青为辅；图标用 lucide SVG；地图标记只两态；装饰用印章/竖排/双线框；留白充足；动效用 rise/stamp 并尊重 reduced-motion。
+
+**Don't**：不要引入暗色块（全站亮色）；不要用 emoji 当 UI 图标；亮底上不要用 `bg-white/*` / `text-white`（看不见）；不要给卡片加多重阴影；不要引入彩虹色（路线用国画五色）。

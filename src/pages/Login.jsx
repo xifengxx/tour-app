@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import SealLogo from '../components/SealLogo';
 
 export default function Login() {
   const [email, setEmail] = useState('');
@@ -25,7 +26,7 @@ export default function Login() {
       return;
     }
 
-    const { data, error: err } = isRegister
+    const { error: err } = isRegister
       ? await signUp(email, password)
       : await signIn(email, password);
 
@@ -40,45 +41,50 @@ export default function Login() {
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
-      <div className="w-full max-w-sm">
+      <div className="w-full max-w-sm anim-rise">
         <div className="text-center mb-8">
-          <h1 className="text-2xl font-serif font-bold text-foreground mb-2">文学巡礼</h1>
-          <p className="text-muted-foreground text-sm">{isRegister ? '创建账号，开始你的文学之旅' : '登录你的账号'}</p>
+          <div className="flex justify-center mb-4">
+            <SealLogo size={52} />
+          </div>
+          <h1 className="text-3xl font-serif font-black tracking-wide text-foreground mb-2">文学巡礼</h1>
+          <p className="font-kai text-muted-foreground text-sm">
+            {isRegister ? '创建账号，开始你的文学之旅' : '展卷之前，先落款'}
+          </p>
         </div>
 
-        <form onSubmit={handleSubmit} className="bg-card rounded-2xl p-6 border border-border">
+        <form onSubmit={handleSubmit} className="bg-card rounded-lg p-6 border border-border">
           <div className="mb-4">
-            <label className="block text-muted-foreground text-xs mb-1.5">邮箱</label>
+            <label className="block text-muted-foreground text-xs mb-1.5 tracking-wide">邮箱</label>
             <input
               type="email"
               value={email}
               onChange={e => setEmail(e.target.value)}
               placeholder="your@email.com"
-              className="w-full bg-background text-foreground rounded-xl px-4 py-3 text-sm border border-border focus:border-primary outline-none transition-colors"
+              className="w-full bg-background text-foreground rounded-lg px-4 py-3 text-sm border border-border focus:border-primary outline-none transition-colors"
             />
           </div>
 
           <div className="mb-6">
-            <label className="block text-muted-foreground text-xs mb-1.5">密码</label>
+            <label className="block text-muted-foreground text-xs mb-1.5 tracking-wide">密码</label>
             <input
               type="password"
               value={password}
               onChange={e => setPassword(e.target.value)}
               placeholder="至少 6 位"
-              className="w-full bg-background text-foreground rounded-xl px-4 py-3 text-sm border border-border focus:border-primary outline-none transition-colors"
+              className="w-full bg-background text-foreground rounded-lg px-4 py-3 text-sm border border-border focus:border-primary outline-none transition-colors"
             />
           </div>
 
           {error && (
-            <div className="bg-primary/10 border border-primary/20 rounded-xl p-3 mb-4 text-primary text-xs">{error}</div>
+            <div className="bg-primary/10 border border-primary/20 rounded-lg p-3 mb-4 text-primary text-xs">{error}</div>
           )}
           {msg && (
-            <div className="bg-green-600/10 border border-green-600/20 rounded-xl p-3 mb-4 text-green-700 text-xs">{msg}</div>
+            <div className="bg-pine/10 border border-pine/25 rounded-lg p-3 mb-4 text-pine text-xs">{msg}</div>
           )}
 
           <button
             type="submit"
-            className="w-full py-3 bg-primary text-white rounded-xl text-sm font-semibold hover:bg-primary/90 transition-colors"
+            className="w-full py-3 bg-primary text-primary-foreground rounded-lg text-sm font-semibold hover:bg-primary/90 transition-colors"
           >
             {isRegister ? '注册' : '登录'}
           </button>
@@ -86,7 +92,7 @@ export default function Login() {
           <button
             type="button"
             onClick={() => { setIsRegister(!isRegister); setError(''); setMsg(''); }}
-            className="w-full mt-3 py-2 text-muted-foreground text-xs hover:text-muted-foreground transition-colors"
+            className="w-full mt-3 py-2 text-muted-foreground text-xs hover:text-dai transition-colors"
           >
             {isRegister ? '已有账号？去登录' : '没有账号？去注册'}
           </button>
