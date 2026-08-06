@@ -47,7 +47,7 @@ const DS_RETRIES = 2;
 const CONTENT_CONC = MODE === "v70" ? 3 : 4;                  // P0-2: 降并发防 429
 const EXTRACT_TEMP = MODE === "v70" ? 0.2 : 0.7;              // P2: 提取/路线求稳定
 
-const FACILITY_RE = /停车场|售票处|售票点|售票大厅|检票口|检票|门票站|乘车处|候车(?:处|亭|室)|索道(?:上站|下站|中站|入口|出口|站)?$|缆车$|观光车(?:站|场|停靠点)|游客中心|游客服务(?:点|中心)?|服务区|服务站|服务中心|管理处|管委会|委员会|居委会|村委会|派出所|加油站|银行|超市|商店|小卖部|商业街|饭店|餐厅|宾馆|酒店|客栈|民宿|山庄|农家乐|厕所|卫生间|洗手间|公厕|入口$|出口$|北门|南门|东门|西门|中门|大门|广场$|车站$|码头$|步道$|栈道$|观景台$|平台$|通道|门店|店\)|店$|综合服务|街道|步行街|(?<!故)居$|邮政|快递|营业厅|窗口|咨询台|咨询|摄影|团队|办事处|工会|党员|人社|村委会/;
+const FACILITY_RE = /停车场|售票处|售票点|售票大厅|检票口|检票|门票站|乘车处|候车(?:处|亭|室)|索道(?:上站|下站|中站|入口|出口|站)?$|缆车$|观光车(?:站|场|停靠点)|游客中心|游客服务(?:点|中心)?|服务区|服务站|服务中心|管理处|管委会|委员会|居委会|村委会|派出所|加油站|银行|超市|商店|小卖部|商业街|饭店|餐厅|宾馆|酒店|客栈|民宿|山庄|农家乐|厕所|卫生间|洗手间|公厕|入口$|出口$|北门|南门|东门|西门|中门|大门|广场$|车站$|码头$|步道$|栈道$|观景台$|平台$|通道|门店|店\)|店$|综合服务|街道|步行街|(?<!故)居$|邮政|快递|营业厅|窗口|咨询|摄影|团队|散客|办事处|招商中心|营销中心|售楼处|工会|党员|人社|村委会/;
 const JUNK_RE = /咖啡|餐厅|奶茶|小吃|甜品|麦当劳|瑞幸|肯德基|烧仙草|汉堡|客栈|民宿|山庄|农家乐|火锅|三下锅|菜馆|私房菜|家常菜|中餐馆|餐馆|乡厨|烧烤|快餐|美食|门店|服务社|宾馆|酒店|超市|银行|加油站|KTV|健身房|旅行社|蜜雪|面包|饮品|烘焙|酸奶|烤面包|速递|快递/;
 // 现代商业游乐设施（地区合并专用负向过滤：二七广场/方特/动物王国/海洋馆类）
 const AMUSE_RE = /动物王国|游乐园|欢乐谷|主题乐园|海洋馆|海洋公园|海昌|电影小镇|戏剧幻城|水上乐园|欢乐世界|方特|万达城|融创|游乐场|马戏|欢乐田园|迪士尼|欢乐海岸|梦幻王国|魔幻|乐园/;
@@ -255,6 +255,7 @@ function isScenicAnchor(loc, destName) {
     if (MODE === "v70") {
       if (n === destName || destName.includes(n)) return true;
       if (n.includes(destName) && hasSuffix) return true;
+      if (n.startsWith(destName.slice(0, 2)) && /(后山|前山|西线|东线|南线|北线|北坡|南坡|西坡|东坡)(景区|风景区)?$/.test(n)) return true; // v70.2 卫星景区锚点
     } else {
       if (n.includes(destName) || destName.includes(n)) return true;
     }
@@ -695,15 +696,20 @@ try {
           const allowSet = new Set(allowDb);
           const keep = resolved.filter(s => allowSet.has(s));
           const missing = allowDb.filter(id => !keep.includes(id));
-          stops = [...keep, ...missing];
+          stops = [...keep, ...missing].filter((s, j, arr) => arr.indexOf(s) === j); // v70.2 stops 去重
         } else {
           stops = resolved;
+          if (!stops.length) { // v70.3 文学巡礼线回退核心4站
+            const fb = locs.filter(l => !(l.tags || []).includes("地区景点")).slice().sort((a, b) => (b.importance || 3) - (a.importance || 3)).slice(0, 4);
+            stops = fb.map(l => slugToDbId.get(l.id)).filter(Boolean);
+          }
         }
-        return { id: `r${i + 1}`, day_label: plan.label, title: plan.title, stops, narrative: typeof ai.narrative === "string" ? ai.narrative : "", sort_order: i };
+        return { id: `r${i + 1}`, day_label: plan.label, title: plan.title, stops, narrative: typeof ai.narrative === "string" ? ai.narrative : "", sort_order: i, _free: !plan.allow };
       }).filter(r => r.stops.length > 0);
       const seenKeys = new Set();
       const dedupedRoutes = [];
       for (const r of allRoutes) {
+        if (r._free) { dedupedRoutes.push(r); continue; } // v70.4
         const key = [...r.stops].sort().join("|");
         if (!seenKeys.has(key)) { seenKeys.add(key); dedupedRoutes.push(r); }
       }

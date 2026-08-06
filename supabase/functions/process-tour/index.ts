@@ -124,6 +124,8 @@ function cleanName(n: string): string {
   let c = n.replace(/^.*风景名胜区-|^.*国家森林公园-?/, "").trim();
   // v70：剥交通后缀（"普光禅寺(公交站)"解析结果被当景点名）
   c = c.replace(/[（(](公交站|地铁站|汽车站|火车站)[）)]/g, "").trim();
+  // v70.3：剥运营状态后缀（"黄山-莲花峰(暂停开放)"）
+  c = c.replace(/[（(](暂停开放|暂停营业|临时关闭|装修中|升级改造|暂未开放)[）)]/g, "").trim();
   for (let i = 0; i < 3; i++) {
     const next = c.replace(/社区|游客基地|游客中心|观光电车|小火车|乘车处|候车处|售票处|上站|下站|集邮点|入口|-?观景台$|风景区$|景区$/, "").trim();
     if (next === c) break;
@@ -142,7 +144,7 @@ const SUB_DEDUP_M = 300;       // 子景点坐标去重阈值：1000m 会把真�
 const REGION_RADIUS = 60000;   // 地区合并只收核心周边 60km 内：防目的地地区是裸省名（如"四川"）时
                                // 把九寨沟/四姑娘山/峨眉山/泸沽湖（150-500km）整个省的名胜拉进主题游/2日游
 // 设施排除：只杀无歧义非景点节点，勿杀 台/桥/亭/塔/门（迷魂台/天下第一桥/水绕四门是真景点）
-const FACILITY_RE = /停车场|售票处|售票点|售票大厅|检票口|检票|门票站|乘车处|候车(?:处|亭|室)|索道(?:上站|下站|中站|入口|出口|站)?$|缆车$|观光车(?:站|场|停靠点)|游客中心|游客服务(?:点|中心)?|服务区|服务站|服务中心|管理处|管委会|委员会|居委会|村委会|派出所|加油站|银行|超市|商店|小卖部|商业街|饭店|餐厅|宾馆|酒店|客栈|民宿|山庄|农家乐|厕所|卫生间|洗手间|公厕|入口$|出口$|北门|南门|东门|西门|中门|大门|广场$|车站$|码头$|步道$|栈道$|观景台$|平台$|通道|门店|店\)|店$|综合服务|街道|步行街|(?<!故)居$|邮政|快递|营业厅|窗口|咨询|摄影|团队|散客|办事处|工会|党员|人社|村委会/;
+const FACILITY_RE = /停车场|售票处|售票点|售票大厅|检票口|检票|门票站|乘车处|候车(?:处|亭|室)|索道(?:上站|下站|中站|入口|出口|站)?$|缆车$|观光车(?:站|场|停靠点)|游客中心|游客服务(?:点|中心)?|服务区|服务站|服务中心|管理处|管委会|委员会|居委会|村委会|派出所|加油站|银行|超市|商店|小卖部|商业街|饭店|餐厅|宾馆|酒店|客栈|民宿|山庄|农家乐|厕所|卫生间|洗手间|公厕|入口$|出口$|北门|南门|东门|西门|中门|大门|广场$|车站$|码头$|步道$|栈道$|观景台$|平台$|通道|门店|店\)|店$|综合服务|街道|步行街|(?<!故)居$|邮政|快递|营业厅|窗口|咨询|摄影|团队|散客|办事处|招商中心|营销中心|售楼处|工会|党员|人社|村委会/;
 // v70 现代商业游乐设施（地区合并/AI提议负向过滤：二七广场/方特/动物王国/海洋馆类）
 const AMUSE_RE = /动物王国|游乐园|欢乐谷|主题乐园|海洋馆|海洋公园|海昌|电影小镇|戏剧幻城|水上乐园|欢乐世界|方特|万达城|融创|游乐场|马戏|欢乐田园|迪士尼|欢乐海岸|梦幻王国|魔幻|乐园/;
 
@@ -157,6 +159,10 @@ function isScenicAnchor(loc: any, destName: string): boolean {
   if (destName) {
     if (n === destName || destName.includes(n)) return true;
     if (n.includes(destName) && hasSuffix) return true;
+    // v70.2：卫星景区确定性锚点（"青城后山/华山东线/黄山后山"）——无设计词后缀但名称=目的地前缀+方位，
+    // 是真实子景区。成为锚点后周边扫描可确定性拉取其子景点（五龙沟/白云万佛洞），
+    // 2日 day-2 后山池不再依赖 AI 提议的随机构成（青城山 day-2 偏都江堰簇的残留修复）。
+    if (n.startsWith(destName.slice(0, 2)) && /(后山|前山|西线|东线|南线|北线|北坡|南坡|西坡|东坡)(景区|风景区)?$/.test(n)) return true;
   }
   if (/(风景名胜区|国家森林公园|风景名胜|自然保护区)$/.test(n)) return true;
   if (/(风景区|景区|公园)$/.test(n) && !/-/.test(n)) return true;
@@ -787,6 +793,7 @@ Deno.serve(async (req: Request) => {
     // 路线「组成」由 planRoutes 代码决定（AI 屡次不遵守景区分区规则）；DeepSeek 只写 narrative + 站内排序。
     const isNovelBased = !!(tour.source?.title || tour.source?.novelTitle);
     const novelName = String(tour.source?.title || tour.source?.novelTitle || '');
+    const corePoolSize = locs.filter(l => !(l.tags || []).includes("地区景点") && l.scenic === coreScenicName).length;
     const plans = planRoutes(locs, { coreScenicName, mainScenicName, destName, isNovelBased, novelName, hasRegionTour });
     // 每条路线的指定站点清单（文学巡礼线无 allow，AI 自由选）
     const planText = plans.map((p, i) => {
@@ -894,8 +901,21 @@ Deno.serve(async (req: Request) => {
                 if (extra.length) warnings.push(`⚠️ 路线"${plan.label}"剔除多出站点 ${extra.length} 个`);
               }
               stops = [...keep, ...missing]; // 按 AI 相对顺序保留 allow 内站点 + 末尾补齐缺失
+              // v70.2：stops 去重（保序）——AI 把入口/出口都写成景区大门时同一 id 会出现两次
+              // （天门山 1日 首末站都是"天门山国家森林公园"实测）
+              stops = stops.filter((s, j) => stops.indexOf(s) === j);
             } else {
               stops = resolved; // 文学巡礼线：AI 自由选点
+              // v70.3 诊断：文学巡礼线选点结果总是记进报告（线上 3/4 路线问题定位用）
+              warnings.push(`📖 路线"${plan.label}"AI 自由选点 resolve ${resolved.length} 站（raw ${rawStops.length} 站）`);
+              // v70.3：自由选点全部无法 resolve 时不静默丢路线（黄山实测 routes 3/4）——
+              // 回退到核心高重要性 4 站，保证小说源导览必有文学巡礼线
+              if (!stops.length) {
+                const fallback = locs.filter(l => !(l.tags || []).includes("地区景点"))
+                  .slice().sort((a, b) => (b.importance || 3) - (a.importance || 3)).slice(0, 4);
+                stops = fallback.map(l => slugToDbId.get(l.id)).filter(Boolean);
+                if (stops.length) warnings.push(`♻️ 路线"${plan.label}"AI 选点无法匹配，回退核心 ${stops.length} 站`);
+              }
             }
             return {
               id: `${scope}-r${i + 1}`,
@@ -904,13 +924,17 @@ Deno.serve(async (req: Request) => {
               stops,
               narrative: typeof ai.narrative === "string" ? ai.narrative : "",
               sort_order: i,
+              _free: !plan.allow, // v70.4：自由选点路线（文学巡礼线）标记，去重时跳过
             };
           }).filter(r => r.stops.length > 0);
 
           // 去重：stops 集合完全相同才视为重复，保留先出现的（1日精华优先）
+          // v70.4：文学巡礼线（自由选点）不参与去重——它是主题叙事路线，价值在 narrative，
+          // 站点与 1日精华重叠是预期行为（黄山实测：AI 自由选的 8 站与 1日 top8 同集合被误杀）
           const seenKeys = new Set<string>();
           const dedupedRoutes: any[] = [];
           for (const r of allRoutes) {
+            if (r._free) { dedupedRoutes.push(r); continue; }
             const key = [...r.stops].sort().join("|");
             if (!seenKeys.has(key)) { seenKeys.add(key); dedupedRoutes.push(r); }
           }
@@ -945,6 +969,8 @@ Deno.serve(async (req: Request) => {
     const report = {
       locations: locs.length,
       routes: routes.length,
+      plans: plans.length, // v70.3 诊断：计划路线数 vs 实际路线数
+      corePool: corePoolSize, mainScenic: mainScenicName, coreScenic: coreScenicName,
       warnings: warnings.length > 0 ? warnings : undefined,
       rejected: (lr.locations || []).length - extractedBeforeDedup, // regeo/坐标校验被拒
       deduped: extractedBeforeDedup - afterExtractDedup, // 坐标去重数（在地区/子景点并入前计算）

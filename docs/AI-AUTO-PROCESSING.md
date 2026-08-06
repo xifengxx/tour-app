@@ -125,6 +125,10 @@ npx supabase functions deploy process-tour --project-ref qxunedraoviaonjdanag --
 | v68 | 路线按 day_label 匹配防 AI 顺序错位；统一地区景点 ≤30km |
 | v69 | `normalizeLayers()` 写库前统一内容层结构（扁平字符串→`{text:...}`，scenes 保持）；前端 `ContentCard` 兼容两种格式 → 修「部分地点 4 层内容显示为空」 |
 | v70 | 系统性大修（详见 `docs/AI-PIPELINE-REVIEW.md`，含 dry-run A/B 实测）：**P0** `regionMatch` 支持 district 县级市/区县（"河南登封"全拒→status=error 实锤修复）；DeepSeek 全类型错误退避重试（429/5xx/超时不再一次崩全链路）+ 单路超时 120s→60s；内容 chunk 8→5 + 截断自动拆半 + 单点补生成（不再一个 chunk 炸全链路）；失败原因/质量报告落库 `tours.process_error`/`process_report`（前端失败页显示真实原因）；**P1** 早退路径置 error + 前端 4 分钟总超时（防无限死等）；内容 id 按名兜底 + 完整性补生成；锚点收严（"青城山索道/中国嵩山卢崖瀑布"不再当锚点，修 1日只剩 1 站）；地区合并剔目的地别名 + 负向过滤商业游乐（方特/海洋馆，不误杀都江堰/古镇）；AI 提议点设施过滤（饭庄/公交站）；离群剔除簇感知恢复（天门山不再被误杀）；高德限流退避 2→4 次 + 县级 city 无结果去 city 兜底（中岳庙/法王寺/天子山召回）；提取下限 ≥3；**P2** mainPool 逐点距离过滤；提取/路线 temperature 0.7→0.2；源文本上限 6000→12000 字 |
+| v70.1 | `planRoutes` 距离阈值放宽：后山池 25→35km、主题游统一景点 30→40km —— 修天门山↔武陵源 32km 双景区被挤出路线（主题游整条消失） |
+| v70.2 | 卫星景区锚点规则：`isScenicAnchor` 识别"目的地+方位后缀"命名（青城后山/黄山北坡直接成锚点）→ 修青城山 2 日 day-2 偏都江堰簇；路线 `stops` 保序去重 → 修天门山 1 日首末站重复 |
+| v70.3 | 文学巡礼线 resolve 为空时回退核心池 top4（防小说源静默丢线）；`FACILITY_RE` 增补 招商中心/营销中心/售楼处；`cleanName` 剥"（暂停开放）"类状态后缀 |
+| v70.4 | 文学巡礼线 dedup 豁免：route 标记 `_free`（自由选点），stops-set 去重跳过 → 修黄山文学巡礼线与 1 日线同站点集合被误删（routes 3→4）；`process_report` 埋点 `plans`/`corePool`/`📖 resolve N 站` warning 辅助诊断 |
 
 ## 测试记录
 
