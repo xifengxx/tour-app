@@ -377,8 +377,8 @@ function planRoutes(locs, ctx) {
   const nearCore = (l, maxM) => haversineM(cc, l) <= maxM;
   // P2: v69 全有或全无（一个远点团灭整个后山池）；v70 逐点过滤
   if (MODE === "v69") { if (mainPool.length && !mainPool.every((l) => nearCore(l, 25000))) mainPool = []; }
-  else { mainPool = mainPool.filter((l) => nearCore(l, 25000)); }
-  const unifiedRegion30 = clusterRegionPts(locs, corePool).map((c) => pickRep(c, ctx.destName)).filter((l) => nearCore(l, 30000));
+  else { mainPool = mainPool.filter((l) => nearCore(l, 35000)); } // v70.1: 25→35km 覆盖天门山↔武陵源32km
+  const unifiedRegion30 = clusterRegionPts(locs, corePool).map((c) => pickRep(c, ctx.destName)).filter((l) => nearCore(l, 40000)); // v70.1: 30→40km
   const plans = [];
   if (corePool.length) plans.push({ label: "1日精华游", title: `${ctx.destName}一日精华游`, allow: corePool.slice(0, 8).map((l) => l.id) });
   if (mainPool.length) {

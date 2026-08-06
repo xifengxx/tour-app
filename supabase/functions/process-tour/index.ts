@@ -330,11 +330,11 @@ function planRoutes(locs: any[], ctx: { coreScenicName: string; mainScenicName: 
   const coreN = corePool.length || 1;
   const cc = { lng: coreCenter.lng / coreN, lat: coreCenter.lat / coreN };
   const nearCore = (l: any, maxM: number) => haversineM(cc, l) <= maxM;
-  // 后山池必须距核心 ≤25km（青城后山 8-10km；西岭雪山 45km 是另一座山，排除）
-  // v70：逐点过滤替代全有或全无——一个远点不再团灭整个后山池
-  if (mainPool.length) mainPool = mainPool.filter(l => nearCore(l, 25000));
-  // 统一地区景点（主题游）只收核心周边 30km 内 —— 西岭/安仁等远点只当背景，不逐站罗列
-  const unifiedRegion30 = clusterRegionPts(locs, corePool).map((c) => pickRep(c, ctx.destName)).filter((l: any) => nearCore(l, 30000));
+  // 后山池必须距核心 ≤35km（青城后山 8-10km；天门山↔武陵源 32km 是同一目的地双景区，v70.1 放宽；
+  // 西岭雪山 45km 仍排除）。v70：逐点过滤替代全有或全无——一个远点不再团灭整个后山池
+  if (mainPool.length) mainPool = mainPool.filter(l => nearCore(l, 35000));
+  // 统一地区景点（主题游）只收核心周边 40km 内（覆盖天门山↔武陵源 32km，v70.1 放宽）—— 西岭45km/安仁44km 仍排除
+  const unifiedRegion30 = clusterRegionPts(locs, corePool).map((c) => pickRep(c, ctx.destName)).filter((l: any) => nearCore(l, 40000));
 
   const plans: { label: string; title: string; allow: string[] | null }[] = [];
   // 1日精华游 = 前山核心 ≤8

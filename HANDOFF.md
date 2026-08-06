@@ -173,3 +173,5 @@ Edge Function 本地调试：`supabase/functions/process-tour/index.ts`（需 Su
 
 **部署待办（需用户批准）**：① SQL Editor 跑 ai-triggers.sql（加列）② 部署 process-tour ③ 备份后重新处理嵩山/青城山/张家界做线上 A/B diff。
 **已知残留**：金鞭溪/水绕四门 around 扫不到（靠 AI 提议+regionScenics 兜底）；青城山"祖师殿"偶发解析到远点被剔除（同名歧义）；文学巡礼线 stops 全无法 resolve 时静默丢路线（仅告警）。
+
+**2026-08-06 部署完成**：v70 已上线（Edge version 72 = v70.1）。嵩山失败导览已修复（done，19 点四层全齐）；青城山/张家界天门山已重处理，数据备份在 `scripts/out/backup/`。v70.1：路线距离阈值 25→35km / 30→40km（天门山↔武陵源 32km 被挤出路线的线上回归修复）。残留问题见 AI-PIPELINE-REVIEW §八。

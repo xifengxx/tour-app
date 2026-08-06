@@ -196,3 +196,23 @@ ALTER TABLE tours ADD COLUMN IF NOT EXISTS process_report JSONB;
 - `supabase/ai-triggers.sql`：新增 `process_error TEXT` / `process_report JSONB` 列（**部署前需先在 SQL Editor 执行**）
 - `scripts/test-gaode.mjs` / `scripts/dry-run-pipeline.mjs` / `scripts/debug-songshan.mjs`：镜像与测试工具
 - 部署后验证路径：备份嵩山/青城山/张家界当前数据 → 重新处理 → diff 新旧 locations/routes
+
+---
+
+## 八、线上部署与 A/B 终验（2026-08-06，已上线）
+
+**部署**：commit `c2415e7` push → DB 加列（Management API）→ Edge Function 部署（version 70→72，v70.1 阈值放宽）。
+**线上验证路径**：备份旧数据 → 直接调用函数重新处理 → diff。
+
+| 导览 | 结果 |
+|------|------|
+| **嵩山**（原 status=error 失败导览） | ✅ `success: 19 地点 / 4 路线`，DB 核验 status=done、process_error=null、**四层完整 19/19** |
+| **青城山** | ✅ 18 地点（+2：月城湖/掷笔槽等，剔除"赵公山西线休息会所"杂质）/ 3 路线 / 四层 18/18；1日不再出现重复的"青城山"占位站 |
+| **张家界天门山** | 首轮 v70 暴露：后山池 25km/主题游 30km 阈值把 32km 外的武陵源全部挤出路线（主题游消失）→ **v70.1 放宽 35/40km** 重处理后 ✅ 22 地点 / 3 路线 / 四层 22/22，2日=天门山+武陵源 16 站全线（黄石寨/杨家界/袁家界/金鞭溪/十里画廊/水绕四门/宝峰湖），主题游含天子山/黄龙洞 |
+
+**v70.1 追加改动**：`planRoutes` 后山池 25→35km、主题游统一景点 30→40km（覆盖天门山↔武陵源 32km 双景区目的地；西岭雪山 45km/安仁 44km 仍排除）。
+
+**线上残留小问题（不阻断，下版处理）**：
+- 青城山 2日 day-2 仍抽到都江堰簇而非青城后山（mainPool 取最大簇，依赖 AI 提议构成，非确定性残留）
+- 天门山 1日首末站重复"天门山国家森林公园"（伞形锚点自身作为站点 + 回环）；天门洞解析为"天门洞前广场"
+- 金鞭溪/水绕四门 around 扫不到的问题仍存在（靠 AI 提议+regionScenics 兜底，本轮均兜住）
