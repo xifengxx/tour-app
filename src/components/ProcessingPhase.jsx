@@ -43,15 +43,26 @@ export default function ProcessingPhase({
   const tokenRef = useRef(null);
   useEffect(() => { supabase.auth.getSession().then(s => { tokenRef.current = s.data.session?.access_token; }); }, []);
 
+  // 总超时：Edge Function 正常 1-2 分钟；>4 分钟大概率是 worker 被平台硬杀（status 永远 processing）
+  // → 停止死等，给出可操作出口（此前会无限转圈）
+  const TIMEOUT_SEC = 240;
+
   useEffect(() => {
     const check = async () => {
       if (!draftTourId) return;
+      // 总超时检测（即使轮询请求本身正常，也要跳出死等）
+      if (Math.floor((Date.now() - startTimeRef.current) / 1000) > TIMEOUT_SEC) {
+        if (intervalRef.current) clearInterval(intervalRef.current);
+        if (timerRef.current) clearInterval(timerRef.current);
+        setError('AI 处理超时：服务器处理超过 4 分钟未返回，可能已被中断。请直接「重新处理」，或检查目的地/地区格式后重试。');
+        return;
+      }
       try {
         // AbortController prevents hung connections when DevTools Network panel is open
         const ac = new AbortController();
         const t = setTimeout(() => ac.abort(), 10000);
         const res = await fetch(
-          `${SB_URL}/rest/v1/tours?id=eq.${draftTourId}&select=status&limit=1`,
+          `${SB_URL}/rest/v1/tours?id=eq.${draftTourId}&select=status,process_error&limit=1`,
           {
             signal: ac.signal,
             headers: {
@@ -62,14 +73,26 @@ export default function ProcessingPhase({
         );
         clearTimeout(t);
         setPollCount(prev => prev + 1);
-        if (!res.ok) return;
-        const data = await res.json();
-        const status = Array.isArray(data) ? data[0]?.status : undefined;
+        let data;
+        if (res.ok) {
+          data = await res.json();
+        } else {
+          // process_error 列尚未添加时 PostgREST 返回 400 → 退回只查 status，轮询不中断
+          const res2 = await fetch(
+            `${SB_URL}/rest/v1/tours?id=eq.${draftTourId}&select=status&limit=1`,
+            { headers: { apikey: SB_ANON, Authorization: `Bearer ${tokenRef.current || SB_ANON}` } }
+          );
+          if (!res2.ok) return;
+          data = await res2.json();
+        }
+        const row = Array.isArray(data) ? data[0] : undefined;
+        const status = row?.status;
         if (status === 'error') {
-          // Edge Function 处理失败，停止轮询并显示错误
+          // Edge Function 处理失败，停止轮询并显示错误（v70 起展示服务端真实原因）
           if (intervalRef.current) clearInterval(intervalRef.current);
           if (timerRef.current) clearInterval(timerRef.current);
-          setError('AI 处理失败：服务器端出错，请重新处理');
+          const reason = String(row?.process_error || '').trim();
+          setError(reason ? `AI 处理失败：${reason}` : 'AI 处理失败：服务器端出错，请重新处理');
           return;
         }
         if (status === 'done') {

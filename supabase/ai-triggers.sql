@@ -40,3 +40,7 @@ CREATE TRIGGER ai_process_trigger_update
 
 -- 注意：若库里已存在旧版 INSERT 触发器 ai_process_trigger，建议删除，避免 INSERT 触发两次：
 -- DROP TRIGGER IF EXISTS ai_process_trigger ON tours;
+
+-- v70：失败原因与质量报告落库（Edge Function 写入，前端失败页/审核页展示）
+ALTER TABLE tours ADD COLUMN IF NOT EXISTS process_error TEXT;
+ALTER TABLE tours ADD COLUMN IF NOT EXISTS process_report JSONB;

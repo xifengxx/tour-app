@@ -42,6 +42,7 @@ function regionMatch(geo, targetRegion) {
   const gProv = String(geo.province || "");
   const gCity = Array.isArray(geo.city) ? (geo.city[0] || "") : String(geo.city || "");
   const gCityCand = gCity || gProv; // 直辖市：city 空 → 用 province 兜底
+  const gDistrict = String(geo.district || ""); // v70：县级市/区县候选
   const stripSuffix = (s) => String(s).replace(/[市]$/g, "");
   const sheng = norm.indexOf("省");
   const zzq = norm.indexOf("自治区");
@@ -50,7 +51,10 @@ function regionMatch(geo, targetRegion) {
   else if (zzq > -1) { provPart = norm.slice(0, zzq); cityPart = norm.slice(zzq + 3); }
   if (cityPart) {
     const tCityCands = [cityPart, stripSuffix(cityPart)];
-    return tCityCands.some(tc => tc && (gCityCand.includes(tc) || tc.includes(stripSuffix(gCityCand))));
+    return tCityCands.some(tc => tc && (
+      gCityCand.includes(tc) || tc.includes(stripSuffix(gCityCand)) ||
+      (gDistrict && (gDistrict.includes(tc) || tc.includes(stripSuffix(gDistrict))))
+    ));
   }
   if (provPart) {
     const tProvCands = [provPart, stripSuffix(provPart)];
@@ -59,6 +63,8 @@ function regionMatch(geo, targetRegion) {
   // 裸名（"江西""黄山""北京"、"湖南张家界"省名+市名连写）→ 先城市后省份匹配
   const gCityN = gCityCand.replace(/[市]$/g, "");
   if (gCityN && norm.includes(gCityN)) return true; // "湖南张家界"含"张家界" → 城市精确命中
+  const gDistN = gDistrict.replace(/[市区县]$/g, ""); // v70："登封市"→"登封"，覆盖裸县级市写法
+  if (gDistN && norm.includes(gDistN)) return true;
   if (norm.length <= 3) { // 省份匹配仅限短目标，防"湖南张家界"放行同省他市
     const gProvN = gProv.replace(/省$/, "");
     return gProv.includes(norm) || (gProvN && norm.includes(gProvN));
@@ -97,7 +103,7 @@ async function gaode(name, destCity, bias) {
   if (!matched.length) return null;
   const top = preferScenic(matched)[0];
   const [lng, lat] = top.location.split(",").map(Number);
-  let clean = top.name.replace(/^.*风景名胜区-|^.*国家森林公园-?/, "").trim();
+  let clean = top.name.replace(/^.*风景名胜区-|^.*国家森林公园-?/, "").replace(/[（(](公交站|地铁站|汽车站|火车站)[）)]/g, "").trim();
   for (let i = 0; i < 3; i++) {
     const next = clean.replace(/社区|游客基地|游客中心|观光电车|小火车|乘车处|候车处|售票处|上站|下站|集邮点|入口|-?观景台$|风景区$|景区$/, "").trim();
     if (next === clean) break;
@@ -112,11 +118,15 @@ const SCAN_RADIUS = 12000;
 const ANCHOR_CAP = 12;
 const SUB_TOTAL_CAP = 10;
 const SUB_DEDUP_M = 300; // 与 index.ts 一致：1000m 会误杀百龙天梯(距张家界700m)/袁家界(距金鞭溪900m)
-const FACILITY_RE = /停车场|售票处|售票点|售票大厅|检票口|检票|乘车处|候车(?:处|亭|室)|索道(?:上站|下站|中站|入口|出口|站)?$|缆车$|观光车(?:站|场|停靠点)|游客中心|游客服务(?:点|中心)?|服务区|服务站|服务中心|管理处|管委会|委员会|居委会|村委会|派出所|加油站|银行|超市|商店|小卖部|商业街|饭店|餐厅|宾馆|酒店|客栈|民宿|山庄|农家乐|厕所|卫生间|洗手间|公厕|入口$|出口$|北门|南门|东门|西门|中门|大门|广场$|车站$|码头$|步道$|栈道$|观景台$|平台$|通道|门店|店\)|店$|综合服务|街道|步行街|(?<!故)居$|邮政|快递|营业厅|窗口|咨询台|工会|党员|人社|村委会/;
+const FACILITY_RE = /停车场|售票处|售票点|售票大厅|检票口|检票|门票站|乘车处|候车(?:处|亭|室)|索道(?:上站|下站|中站|入口|出口|站)?$|缆车$|观光车(?:站|场|停靠点)|游客中心|游客服务(?:点|中心)?|服务区|服务站|服务中心|管理处|管委会|委员会|居委会|村委会|派出所|加油站|银行|超市|商店|小卖部|商业街|饭店|餐厅|宾馆|酒店|客栈|民宿|山庄|农家乐|厕所|卫生间|洗手间|公厕|入口$|出口$|北门|南门|东门|西门|中门|大门|广场$|车站$|码头$|步道$|栈道$|观景台$|平台$|通道|门店|店\)|店$|综合服务|街道|步行街|(?<!故)居$|邮政|快递|营业厅|窗口|咨询|摄影|团队|散客|办事处|工会|党员|人社|村委会/;
 function isScenicAnchor(loc, destName) {
   const n = String(loc.name || "");
   if (/-/.test(n)) return false;
-  if (destName && (n.includes(destName) || destName.includes(n))) return true;
+  const hasSuffix = /(风景名胜区|国家森林公园|风景名胜|自然保护区|风景区|景区|公园)$/.test(n);
+  if (destName) { // v70：子串匹配须带设计词后缀，防"中国嵩山卢崖瀑布/青城山索道"成锚点
+    if (n === destName || destName.includes(n)) return true;
+    if (n.includes(destName) && hasSuffix) return true;
+  }
   if (/(风景名胜区|国家森林公园|风景名胜|自然保护区)$/.test(n)) return true;
   if (/(风景区|景区|公园)$/.test(n) && !/-/.test(n)) return true;
   return false;
@@ -244,7 +254,7 @@ function planRoutes(locs, ctx) {
   const coreCenter = corePool.reduce((acc, l) => ({ lng: acc.lng + l.lng, lat: acc.lat + l.lat }), { lng: 0, lat: 0 });
   const cc = { lng: coreCenter.lng / (corePool.length || 1), lat: coreCenter.lat / (corePool.length || 1) };
   const nearCore = (l, maxM) => haversineM(cc, l) <= maxM;
-  if (mainPool.length && !mainPool.every((l) => nearCore(l, 25000))) mainPool = [];
+  if (mainPool.length) mainPool = mainPool.filter((l) => nearCore(l, 25000)); // v70：逐点过滤，一个远点不团灭
   const unifiedRegion = clusterRegionPts(locs, corePool).map((c) => pickRep(c, ctx.destName)).filter((l) => nearCore(l, 30000));
   const plans = [];
   plans.push({ label: "1日精华游", title: `${ctx.destName}一日精华游`, allow: corePool.slice(0, 8).map((l) => l.id) });
@@ -385,6 +395,23 @@ okLog(regionMatch(beijingGeo, "北京"), "regionMatch 北京 ↔ 北京市 → �
 okLog(!regionMatch(zjjGeo, "湖北武汉"), "regionMatch 湖北武汉 ↔ 张家界 → 拒绝");
 okLog(!regionMatch({ province: "湖南省", city: "株洲市" }, "湖南张家界"), "regionMatch 湖南张家界 ↔ 株洲市 → 拒绝(同省他市)");
 okLog(!regionMatch(beijingGeo, "湖南张家界"), "regionMatch 湖南张家界 ↔ 北京 → 拒绝");
+
+// ── v70 district（县级市/区县）匹配：嵩山失败根因回归 ──
+const dengfengGeo = { province: "河南省", city: "郑州市", district: "登封市" };
+okLog(regionMatch(dengfengGeo, "河南登封"), "v70 河南登封 ↔ 郑州市登封市 → 匹配(district)");
+okLog(regionMatch(dengfengGeo, "河南省登封市"), "v70 河南省登封市 ↔ 郑州市登封市 → 匹配(district)");
+okLog(regionMatch(dengfengGeo, "登封市"), "v70 登封市 ↔ 郑州市登封市 → 匹配(district)");
+okLog(regionMatch(dengfengGeo, "河南省郑州市"), "河南省郑州市 ↔ 郑州市登封市 → 匹配(city)");
+okLog(!regionMatch(dengfengGeo, "河南省洛阳市"), "河南省洛阳市 ↔ 郑州市登封市 → 拒绝");
+okLog(!regionMatch({ province: "河南省", city: "洛阳市", district: "偃师区" }, "河南登封"), "洛阳偃师 ↔ 河南登封 → 拒绝(达摩洞错点防护)");
+
+// ── v70 锚点收严：含目的地名的普通 POI 不再当锚点 ──
+okLog(!isScenicAnchor({ name: "中国嵩山卢崖瀑布" }, "嵩山"), "v70 中国嵩山卢崖瀑布 → 非锚点");
+okLog(!isScenicAnchor({ name: "嵩山世界地质公园科普广场" }, "嵩山"), "v70 嵩山世界地质公园科普广场 → 非锚点");
+okLog(!isScenicAnchor({ name: "青城山索道" }, "青城山"), "v70 青城山索道 → 非锚点");
+okLog(isScenicAnchor({ name: "嵩山" }, "嵩山"), "嵩山 → 锚点(等于目的地)");
+okLog(isScenicAnchor({ name: "嵩山国家重点风景名胜区" }, "嵩山"), "嵩山国家重点风景名胜区 → 锚点(设计词后缀)");
+okLog(isScenicAnchor({ name: "青城山景区" }, "青城山"), "青城山景区 → 锚点(设计词后缀)");
 
 // ── planRoutes 确定性路线站点规划（青城山 13 点 mock，无需密钥）──
 console.log("\n=== planRoutes 路线组成（青城山 mock） ===");

@@ -152,3 +152,24 @@ Edge Function 本地调试：`supabase/functions/process-tour/index.ts`（需 Su
 ## 会话丢失说明
 
 原会话（9d6c4422）上下文超限，`/compact` 因数学上必败（DeepSeek 模型 completion 配额 131072 + 92万+ 消息 > 104.8万上限）无法恢复，已放弃该会话。代码、数据、git 历史全部完好；完整对话备份在 `~/session-backup-9d6c4422.jsonl`。本文件 + 记忆文件（`wenxue-xunli-app-route-generation.md`）为当前进度权威来源。
+
+---
+
+## 2026-08-06 v70：AI 管线系统性大修（已完成本地开发与测试，待部署）
+
+**背景**：嵩山导览（4cdd951e）AI 处理失败 + 用户报告新建导览经常失败、四层内容缺失、路线规则差错。全量审查 847 行 Edge Function 后产出 `docs/AI-PIPELINE-REVIEW.md`（问题清单 + 根因 + 修复 + A/B 实测）。
+
+**嵩山失败根因（已实锤）**：`regionMatch` 不比对 regeo 的 district——地区填"河南登封/河南省登封市"时，regeo 返回 city=郑州市/district=登封市 → 全部地点被拒 → locs=0 → status=error。dry-run 100% 复现。
+
+**测试工具链（重要，后续迭代直接用）**：
+- `scripts/dry-run-pipeline.mjs`：完整管线 dry-run（真实 DeepSeek+高德，不写库），`--dest/--region/--mode v69|v70` 双模式 A/B
+- `scripts/debug-songshan.mjs`：高德侧 regionMatch 矩阵诊断
+- `scripts/test-gaode.mjs`：60+ 单测断言（含 v70 district/锚点用例），全过
+- `.env` 现有 `DEEPSEEK_API_KEY`（用户 2026-08-06 提供，可用于本地 dry-run）
+
+**v70 已改（未部署）**：`supabase/functions/process-tour/index.ts`（P0×4+P1×10+P2 全部，见 REVIEW §七）、`ProcessingPhase.jsx`（真实错误原因+4min 超时）、`ai-triggers.sql`（新增 process_error/process_report 列，**部署前先在 SQL Editor 执行**）。esbuild 语法校验 + 前端 build + 单测全过。
+
+**dry-run A/B 结论**：嵩山 v69（河南登封）必败 → v70 同输入 22 点/3 路线/内容 22/22；青城山 v69 day-2 灌县古城 → v70 真后山五龙沟；张家界天门山被离群误杀 → v70 簇感知恢复、武陵源子景点齐。
+
+**部署待办（需用户批准）**：① SQL Editor 跑 ai-triggers.sql（加列）② 部署 process-tour ③ 备份后重新处理嵩山/青城山/张家界做线上 A/B diff。
+**已知残留**：金鞭溪/水绕四门 around 扫不到（靠 AI 提议+regionScenics 兜底）；青城山"祖师殿"偶发解析到远点被剔除（同名歧义）；文学巡礼线 stops 全无法 resolve 时静默丢路线（仅告警）。

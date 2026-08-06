@@ -124,6 +124,7 @@ npx supabase functions deploy process-tour --project-ref qxunedraoviaonjdanag --
 | v67 | 核心锚点优先精确匹配 destName（防「青城山景区前山」污染 coreScenicName）；后山池 ≤25km（西岭雪山 45km 排除） |
 | v68 | 路线按 day_label 匹配防 AI 顺序错位；统一地区景点 ≤30km |
 | v69 | `normalizeLayers()` 写库前统一内容层结构（扁平字符串→`{text:...}`，scenes 保持）；前端 `ContentCard` 兼容两种格式 → 修「部分地点 4 层内容显示为空」 |
+| v70 | 系统性大修（详见 `docs/AI-PIPELINE-REVIEW.md`，含 dry-run A/B 实测）：**P0** `regionMatch` 支持 district 县级市/区县（"河南登封"全拒→status=error 实锤修复）；DeepSeek 全类型错误退避重试（429/5xx/超时不再一次崩全链路）+ 单路超时 120s→60s；内容 chunk 8→5 + 截断自动拆半 + 单点补生成（不再一个 chunk 炸全链路）；失败原因/质量报告落库 `tours.process_error`/`process_report`（前端失败页显示真实原因）；**P1** 早退路径置 error + 前端 4 分钟总超时（防无限死等）；内容 id 按名兜底 + 完整性补生成；锚点收严（"青城山索道/中国嵩山卢崖瀑布"不再当锚点，修 1日只剩 1 站）；地区合并剔目的地别名 + 负向过滤商业游乐（方特/海洋馆，不误杀都江堰/古镇）；AI 提议点设施过滤（饭庄/公交站）；离群剔除簇感知恢复（天门山不再被误杀）；高德限流退避 2→4 次 + 县级 city 无结果去 city 兜底（中岳庙/法王寺/天子山召回）；提取下限 ≥3；**P2** mainPool 逐点距离过滤；提取/路线 temperature 0.7→0.2；源文本上限 6000→12000 字 |
 
 ## 测试记录
 
