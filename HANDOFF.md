@@ -9,6 +9,8 @@
 
 **AI 处理管线已到 v76（v70 系列 = Kimi K3 系统性容错大修，覆盖我 v69 的失败路径盲区）**：我的确定性路线组成（`planRoutes`）+ 外部校验层被完整继承；Kimi 补上了全类型错误重试、内容点级补生成、失败原因落库、卫星景区锚点确定性、文学线 dedup 豁免等。嵩山/青城山/天门山/泰山/黄山五场景验证通过（详见 `docs/AI-PIPELINE-REVIEW.md`）。**08-06 已把 Kimi 对比经验沉淀为第 9 节 —— 今后改这套管线必须遵守的原则。**
 
+**生产部署已迁移到 EdgeOne Pages（2026-08-06）**：主地址 **`https://tour.xifengxx.vip`**（自定义域名，免备案，国内免 VPN 直连）；旧 Vercel 部署 `tour-app-pro.vercel.app` 保留备用（国内需 VPN）。域名 `xifengxx.vip`（Dynadot 注册）预留作个人作品集网站，尚未建。详见 README「部署」节。
+
 ## 会话改动 —— 全部实测驱动（2026-08-05 第二轮；08-06 补 Kimi K3 对比沉淀第 9 节）
 
 ### 1. 地区格式「省名+市名连写」（修「AI没有生成任何地点」）
@@ -112,6 +114,9 @@
 
 | 提交 | 说明 |
 |---|---|
+| `4cf764e` | deploy: 新增 edgeone.json SPA 路由配置 — EdgeOne Pages 国内免备案托管准备（生产主地址 `tour.xifengxx.vip`） |
+| `8230729` | fix(ios): 路线条 iOS Safari 无法横向滑动 — 移除容器 pointer-events-none |
+| `4e14941` | fix(mobile): 刘海屏安全区适配 + 触摸目标热区扩大 |
 | `6fae04b` | fix(v70.2-v70.4): 卫星景区锚点(青城后山确定性) + stops 保序去重 + 文学巡礼线 dedup 豁免/空回退 — 青城山天门山泰山黄山四场景验证通过 |
 | `012523e` | fix(v70.1): planRoutes 距离阈值放宽 25→35 / 30→40km — 修天门山↔武陵源 32km 双景区被挤出路线 |
 | `c2415e7` | fix: AI 管线 v70 系统性大修 — 嵩山 district 失败根因 + 全链路容错（详见 `docs/AI-PIPELINE-REVIEW.md` 与第9节） |
@@ -153,6 +158,7 @@
 5. **武陵源"风景名胜区十里画廊"这类扫描复名**：与"十里画廊"重复出现在 locs（扫描命名源），可由 name 去重进一步收口，当前不影响路线（stops 只引用其一）。
 6. **环境问题**：AuraKit build-verify hook 每次编辑都报缺 `tsc@2.0.3`（`npx canceled due to missing packages`）—— 需要装 tsc 或修 hook，当前是噪音不影响功能。
 7. **supabase CLI 未装**：GitHub 下载被重置，本轮全程用 Management API 部署（`/tmp/deploy-process-tour.sh`，raw index.ts 上传）。CLI 装好后可回归 `--timeout-seconds`。
+8. **个人作品集网站未建**：`xifengxx.vip` 根域名已预留但无 DNS 记录，直接访问会失败。建时需在 EdgeOne 新建 Pages 项目绑定根域名（或选其他托管）+ Dynadot 加 DNS 记录。tour-app 部署在子域名 `tour.xifengxx.vip`。Dynadot 里 EdgeOne 所有权验证用的 TXT 记录 `edgeonereclaim.tour` 已可删（留着无害）。
 
 ## 核心代码位置
 

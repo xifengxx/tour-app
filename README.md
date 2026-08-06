@@ -22,6 +22,15 @@ npm run dev        # http://localhost:5173
 | 后端 | Supabase (PostgreSQL + Auth) |
 | AI | DeepSeek API + Supabase Edge Function（自动处理） |
 
+## 部署
+
+| 环境 | 地址 | 说明 |
+|------|------|------|
+| **生产（主）** | **https://tour.xifengxx.vip** | EdgeOne Pages 国际站，自定义域名，免备案，国内免 VPN 直连 |
+| 旧部署（备用） | https://tour-app-pro.vercel.app | Vercel 托管，国内需 VPN（`*.vercel.app` 被 GFW 阻断） |
+
+EdgeOne Pages 接入 GitHub 仓库自动部署（push 即构建）。构建设置：命令 `npm run build`、输出目录 **`dist`**；SPA 路由兜底由根目录 [`edgeone.json`](./edgeone.json) 配置（`/.*` → `/index.html`）。EdgeOne 构建环境需配置 `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` 两个环境变量。
+
 ## 项目结构
 
 ```
