@@ -191,7 +191,7 @@ export default function Home() {
       {!isMyTour && user && (
         <button
           onClick={() => toggleFav(tour)}
-          className="absolute top-3 right-3 w-7 h-7 rounded-full bg-card border border-border flex items-center justify-center hover:border-primary/40 transition-colors"
+          className="absolute top-3 right-3 w-7 h-7 rounded-full bg-card border border-border flex items-center justify-center hover:border-primary/40 transition-colors before:absolute before:-inset-2 before:content-['']"
           title={favIds.has(tour.id) ? '取消收藏' : '收藏'}
           aria-label={favIds.has(tour.id) ? '取消收藏' : '收藏'}
         >
@@ -210,7 +210,7 @@ export default function Home() {
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button
-                className="w-6 h-6 rounded-full bg-black/[0.05] text-muted-foreground flex items-center justify-center hover:bg-black/10 transition-colors"
+                className="relative w-6 h-6 rounded-full bg-black/[0.05] text-muted-foreground flex items-center justify-center hover:bg-black/10 transition-colors before:absolute before:-inset-2.5 before:content-['']"
                 aria-label="导览操作"
               >
                 <MoreHorizontal className="h-3.5 w-3.5" />

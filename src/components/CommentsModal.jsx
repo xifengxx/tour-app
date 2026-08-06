@@ -63,7 +63,7 @@ export default function CommentsModal({ tourId, onClose }) {
           <h3 className="font-serif font-bold text-foreground flex items-center gap-1.5">
             <MessageCircle className="h-4 w-4 text-primary" /> 评论
           </h3>
-          <button onClick={onClose} className="w-8 h-8 rounded-full bg-black/5 text-foreground flex items-center justify-center hover:bg-black/10" aria-label="关闭">
+          <button onClick={onClose} className="relative w-8 h-8 rounded-full bg-black/5 text-foreground flex items-center justify-center hover:bg-black/10 before:absolute before:-inset-1.5 before:content-['']" aria-label="关闭">
             <X className="h-4 w-4" />
           </button>
         </div>

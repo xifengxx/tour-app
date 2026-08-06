@@ -128,6 +128,11 @@ body::after {
   box-shadow: 0 1px 0 0 rgba(185, 147, 74, 0.28);
 }
 
+/* 刘海屏/圆角屏安全区（配合 index.html 的 viewport-fit=cover）：
+   背景延伸进非安全区，内容被 padding 推回可视安全区 */
+.safe-top { padding-top: env(safe-area-inset-top); }
+.safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
+
 /* 菱形饰线分隔：— ◆ —（hero 与区块之间） */
 .rule-ornament {
   display: flex;

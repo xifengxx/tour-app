@@ -321,7 +321,7 @@ export default function TourView() {
 
       {/* Bottom card zone — 手卷式卡片：置于正常文档流而非覆盖地图，地图容器止于卡片上缘，
           高德版权条不再压在卡片底部内容上；卡片折叠时地图随之扩展 */}
-      <div className="z-20 bg-card rounded-t-2xl max-h-[50vh] flex flex-col border-t border-x border-border shadow-[0_-10px_32px_-14px_rgba(28,26,22,0.3)]">
+      <div className="z-20 bg-card rounded-t-2xl max-h-[50vh] flex flex-col border-t border-x border-border shadow-[0_-10px_32px_-14px_rgba(28,26,22,0.3)] safe-bottom">
         {/* 卷轴杆拉手：两端轴头 + 杆身 */}
         <div className="flex justify-center items-center gap-1.5 py-2.5 cursor-pointer" onClick={() => setShowCard(s => !s)}>
           <span className="w-1.5 h-1.5 rounded-full bg-primary/60" />
