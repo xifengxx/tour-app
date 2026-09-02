@@ -123,7 +123,14 @@ AI 仍然负责路线文案和站内排序，但不能随意增加或删除代�
 - 路线站点映射处 3 处 `filter(Boolean)` 改为类型谓词过滤，消除 `string | undefined` 泄漏。
 - 移除 `plans.map((plan: any, ...)` 的多余 `any` 标注，恢复路线类型推断。
 
-本地 production preview 已确认 `/` 和 `/tour/demo` 均返回 200，SPA 深链接兜底正常。Supabase CLI 命令入口存在，但其 macOS 二进制文件缺失，无法完成线上函数清单读取；本轮没有执行生产部署。
+本地 production preview 已确认 `/` 和 `/tour/demo` 均返回 200，SPA 深链接兜底正常。
+
+### 生产部署（已完成）
+
+本机 Supabase CLI 的 npm 安装损坏（平台二进制缺失），改用 Homebrew 安装 CLI 2.116.0 后完成部署：
+
+- 前端：推送 GitHub 后 EdgeOne Pages 自动构建，线上已确认加载新构建产物，`/tour/demo` 返回 200。
+- Edge Function：`supabase functions deploy process-tour` 部署成功（版本 77，9 个模块全部上传），线上冒烟测试返回预期的 `{"error":"Missing tourId"}` 400 响应。
 
 ## 仍需处理的事项
 
@@ -131,7 +138,7 @@ AI 仍然负责路线文案和站内排序，但不能随意增加或删除代�
 2. ~~为高德限流、DeepSeek 非法 JSON、地图加载失败和创建失败补充更完整的集成测试。~~（单元级异常路径测试已完成；涉及真实外部服务的端到端集成测试仍待线上环境验证）
 3. ~~对 `NavBar` 等公共 chunk 继续分析，确认是否存在可延迟加载的图标或地图依赖。~~（已拆分 UserMenu；图标与地图依赖已确认不在公共 chunk 中）
 4. 用黄山、泰山、三清山等非张家界样例做一次线上前后结果对比。
-5. 完成部署前的 Supabase Edge Function 和生产站点验证。
+5. ~~完成部署前的 Supabase Edge Function 和生产站点验证。~~（已完成部署并通过线上冒烟测试）
 
 ## 相关文件
 
