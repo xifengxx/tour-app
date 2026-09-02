@@ -17,6 +17,24 @@ describe("planRoutes", () => {
     const plans = planRoutes(locs, { coreScenicName: "核心", mainScenicName: "", destName: "目的地", isNovelBased: true, novelName: "山行", hasRegionTour: false });
     expect(plans.at(-1)).toEqual({ label: "文学巡礼线", title: "《山行》文学巡礼", allow: null });
   });
+
+  it("主题游覆盖 60km 内的地区景点，避免地点入库但无路线引用", () => {
+    // 北岳恒山实测：应县木塔约 48km，华严寺约 60km；二者都应能进入主题游。
+    const locs = [
+      point("核心", "核心", [], 5, 113.72779, 39.66954),
+      point("核心子点", "核心", [], 4, 113.73281, 39.67279),
+      point("核心子点2", "核心", [], 3, 113.73212, 39.67032),
+      point("核心子点3", "核心", [], 3, 113.73262, 39.66771),
+      point("应县木塔", "独立", ["地区景点"], 3, 113.188831, 39.566465),
+      point("华严寺", "独立", ["地区景点"], 3, 113.296824, 40.093211),
+    ];
+    const theme = planRoutes(locs, {
+      coreScenicName: "核心", mainScenicName: "", destName: "北岳恒山",
+      isNovelBased: false, novelName: "", hasRegionTour: true,
+    }).find(plan => plan.label === "主题游");
+    expect(theme?.allow).toContain("应县木塔");
+    expect(theme?.allow).toContain("华严寺");
+  });
 });
 
 describe("orderStopsGeographic", () => {

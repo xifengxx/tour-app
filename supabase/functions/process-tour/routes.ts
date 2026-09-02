@@ -1,4 +1,5 @@
 import { haversineM } from "./geo.ts";
+import { REGION_RADIUS } from "./anchors.ts";
 
 const CLUSTER_R = 8000;
 const SUB_DEDUP_M = 300;
@@ -39,7 +40,9 @@ export function planRoutes(locs: any[], ctx: { coreScenicName: string; mainSceni
   const cc = { lng: coreCenter.lng / coreN, lat: coreCenter.lat / coreN };
   const nearCore = (l: any, maxM: number) => haversineM(cc, l) <= maxM;
   if (mainPool.length) mainPool = mainPool.filter(l => nearCore(l, 35000));
-  const unifiedRegion30 = clusterRegionPts(locs, corePool).map((c) => pickRep(c, ctx.destName)).filter((l: any) => nearCore(l, 40000));
+  // 主题游的覆盖半径应与地区景点合并半径一致（60km）。此前只取 40km，
+  // 会出现地点已入库（如应县木塔 47km、华严寺 60km）但没有任何路线引用的“孤岛地点”。
+  const unifiedRegion60 = clusterRegionPts(locs, corePool).map((c) => pickRep(c, ctx.destName)).filter((l: any) => nearCore(l, REGION_RADIUS));
   const plans: { label: string; title: string; allow: string[] | null }[] = [];
   plans.push({ label: "1日精华游", title: `${ctx.destName}一日精华游`, allow: corePool.slice(0, 8).map((l) => l.id) });
   if (mainPool.length) {
@@ -47,8 +50,8 @@ export function planRoutes(locs: any[], ctx: { coreScenicName: string; mainSceni
   } else if (corePool.length >= 8) {
     plans.push({ label: "2日全景游", title: `${ctx.destName}两日全景游`, allow: corePool.slice(0, 14).map((l) => l.id) });
   }
-  if (ctx.hasRegionTour && unifiedRegion30.length) {
-    plans.push({ label: "主题游", title: `${ctx.destName}深度主题游`, allow: [...corePool.slice(0, 4).map((l) => l.id), ...unifiedRegion30.map((l) => l.id)] });
+  if (ctx.hasRegionTour && unifiedRegion60.length) {
+    plans.push({ label: "主题游", title: `${ctx.destName}深度主题游`, allow: [...corePool.slice(0, 4).map((l) => l.id), ...unifiedRegion60.map((l) => l.id)] });
   }
   if (ctx.isNovelBased) plans.push({ label: "文学巡礼线", title: `《${ctx.novelName}》文学巡礼`, allow: null });
   return plans;

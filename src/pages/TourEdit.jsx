@@ -80,6 +80,7 @@ export default function TourEdit() {
     setNovelAuthor(tour.source?.author || '');
     setNovelEra(tour.source?.era || '');
     setNovelSynopsis(tour.source?.synopsis || '');
+    setSourceText(tour.source?.rawText || '');
     setLocations(tour.locations || []);
     setRoutes(tour.routes || []);
     setContentLayers(tour.contentLayers?.length ? tour.contentLayers : DEFAULT_LAYERS);
@@ -179,7 +180,6 @@ export default function TourEdit() {
   const handleReprocess = async () => {
     if (!user) { flash('请先登录'); return; }
     if (!draftTourId) { flash('尚未保存草稿'); return; }
-    setProcessingError('');
     try {
       const { error } = await supabase.from('tours').update({ status: 'processing' }).eq('id', draftTourId);
       if (error) throw error;
@@ -251,7 +251,14 @@ export default function TourEdit() {
     const tourData = {
       title: title.trim(), subtitle: subtitle.trim(),
       theme: { primaryColor },
-      source: { type: 'novel', title: novelTitle, author: novelAuthor, era: novelEra, synopsis: novelSynopsis },
+      source: {
+        type: 'novel',
+        title: novelTitle,
+        author: novelAuthor,
+        era: novelEra,
+        synopsis: novelSynopsis,
+        rawText: sourceText,
+      },
       destination: { name: destName, region: destRegion, type: 'mountain' },
       is_public: isPublic,
     };
