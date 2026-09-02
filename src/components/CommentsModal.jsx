@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
+import { getErrorMessage } from '../lib/errorMessage';
 import { useAuth } from '../contexts/AuthContext';
 import { X, Send, Trash2, MessageCircle } from 'lucide-react';
 
@@ -11,18 +12,19 @@ export default function CommentsModal({ tourId, onClose }) {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
 
-  const load = async () => {
+  const load = useCallback(async () => {
     setLoading(true);
-    const { data } = await supabase
+    const { data, error: loadError } = await supabase
       .from('comments')
       .select('*')
       .eq('tour_id', tourId)
       .order('created_at', { ascending: false });
     if (data) setComments(data);
+    if (loadError) setError(getErrorMessage(loadError, '评论加载失败'));
     setLoading(false);
-  };
+  }, [tourId]);
 
-  useEffect(() => { load(); }, [tourId]);
+  useEffect(() => { load(); }, [load]);
 
   const submit = async () => {
     if (!user) { setError('请先登录'); return; }
@@ -44,7 +46,8 @@ export default function CommentsModal({ tourId, onClose }) {
   };
 
   const remove = async (c) => {
-    await supabase.from('comments').delete().eq('id', c.id);
+    const { error: removeError } = await supabase.from('comments').delete().eq('id', c.id);
+    if (removeError) { setError(getErrorMessage(removeError, '删除评论失败')); return; }
     setComments(prev => prev.filter(x => x.id !== c.id));
   };
 
@@ -56,11 +59,14 @@ export default function CommentsModal({ tourId, onClose }) {
   return (
     <div className="fixed inset-0 z-50 bg-black/40 flex items-end sm:items-center justify-center" onClick={onClose}>
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="comments-modal-title"
         className="bg-card rounded-t-2xl sm:rounded-2xl w-full max-w-lg max-h-[80vh] flex flex-col"
         onClick={e => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-5 py-3 border-b border-border flex-shrink-0">
-          <h3 className="font-serif font-bold text-foreground flex items-center gap-1.5">
+          <h3 id="comments-modal-title" className="font-serif font-bold text-foreground flex items-center gap-1.5">
             <MessageCircle className="h-4 w-4 text-primary" /> 评论
           </h3>
           <button onClick={onClose} className="relative w-8 h-8 rounded-full bg-black/5 text-foreground flex items-center justify-center hover:bg-black/10 before:absolute before:-inset-1.5 before:content-['']" aria-label="关闭">
@@ -102,6 +108,7 @@ export default function CommentsModal({ tourId, onClose }) {
             <>
               <div className="flex gap-2">
                 <input
+                  aria-label="评论内容"
                   value={content}
                   onChange={e => setContent(e.target.value)}
                   onKeyDown={e => e.key === 'Enter' && submit()}

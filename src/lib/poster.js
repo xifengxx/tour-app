@@ -275,7 +275,7 @@ export async function drawTourPoster(canvas, tour, qrCanvas) {
   if (qrCanvas) {
     try {
       ctx.drawImage(qrCanvas, qrCard.x + 18, qrCard.y + 18, qrCard.s - 36, qrCard.s - 36);
-    } catch (e) {
+    } catch {
       /* 二维码未就绪时忽略 */
     }
   }

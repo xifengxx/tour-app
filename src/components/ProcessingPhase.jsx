@@ -30,6 +30,12 @@ export default function ProcessingPhase({
   const startTimeRef = useRef(Date.now());
   const intervalRef = useRef(null);
   const timerRef = useRef(null);
+  const doneTimeoutRef = useRef(null);
+  const onCheckDoneRef = useRef(onCheckDone);
+
+  useEffect(() => {
+    onCheckDoneRef.current = onCheckDone;
+  }, [onCheckDone]);
 
   // Timer: read from startTimeRef instead of useState to avoid stale closures
   useEffect(() => {
@@ -98,7 +104,7 @@ export default function ProcessingPhase({
         if (status === 'done') {
           if (intervalRef.current) clearInterval(intervalRef.current);
           if (timerRef.current) clearInterval(timerRef.current);
-          setTimeout(() => onCheckDone(), 800);
+          doneTimeoutRef.current = setTimeout(() => onCheckDoneRef.current(), 800);
         }
         // 'processing'（或暂未变更）→ 继续轮询
       } catch {
@@ -112,6 +118,7 @@ export default function ProcessingPhase({
     return () => {
       clearTimeout(initial);
       if (intervalRef.current) clearInterval(intervalRef.current);
+      if (doneTimeoutRef.current) clearTimeout(doneTimeoutRef.current);
     };
   }, [draftTourId]); // removed onCheckDone — its reference changes every render, killing the timer
 

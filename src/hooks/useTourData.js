@@ -1,10 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../lib/supabase';
-
-const STATIC_DATA = {
-  'nanyue-hengshan': '/data/henshan.json',
-  'huashan-xiaoao': '/data/huashan.json',
-};
+import { STATIC_DATA } from '../lib/staticTours';
 
 /**
  * Loads tour data — tries Supabase first, falls back to static JSON.

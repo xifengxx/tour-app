@@ -577,7 +577,7 @@ try {
             if (subs.some(s => s.name === g.name || haversineM(s, g) < SUB_DEDUP_M)) continue;
             subs.push(g);
           }
-        } catch (e) { /* 单点失败不阻断 */ }
+        } catch { /* 单点失败不阻断 */ }
         if (subs.length >= SUB_TOTAL_CAP) break;
       }
       if (subs.length >= SUB_TOTAL_CAP) break;
@@ -587,7 +587,7 @@ try {
     locs.forEach((l, i) => (l.sort_order = i));
     attachScenicTags(locs, anchors);
     if (subsCapped.length) { warnings.push(`🗺 子景点确定性补全 +${subsCapped.length} 个`); console.log(`子景点补全 +${subsCapped.length}: ${subsCapped.map(s => s.name).join("、")}`); }
-  } catch (e) { /* 不阻断 */ }
+  } catch { /* 不阻断 */ }
 
   // 核心/主景区
   const coreAnchor = anchors.find(a => DEST && (a.name === DEST || a.scenicName === DEST))

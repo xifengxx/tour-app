@@ -2,6 +2,8 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useTourData } from '../hooks/useTourData';
 import { supabase } from '../lib/supabase';
+import { getErrorMessage } from '../lib/errorMessage';
+import { loadAmap } from '../lib/amap';
 import { useAuth } from '../contexts/AuthContext';
 import NavBar from '../components/NavBar';
 import { Button } from '@/components/ui/button';
@@ -74,6 +76,7 @@ export default function TourView() {
   const [showComments, setShowComments] = useState(false);
   const [isFav, setIsFav] = useState(false);
   const [toast, setToast] = useState(null);
+  const [mapError, setMapError] = useState('');
 
   const { tour, loading } = useTourData(tourId);
 
@@ -93,16 +96,33 @@ export default function TourView() {
       .eq('user_id', user.id)
       .eq('tour_id', tourId)
       .maybeSingle()
-      .then(({ data }) => setIsFav(!!data));
+      .then(({ data, error }) => {
+        if (error) setToast(getErrorMessage(error, '收藏状态加载失败'));
+        else setIsFav(!!data);
+      });
   }, [user, tourId]);
+
+  const selectLoc = useCallback((loc) => {
+    setCurrentLoc(loc);
+    setCurrentLayer(firstLayerIdRef.current);
+    setShowCard(true);
+    const map = mapInstance.current;
+    if (map) {
+      if (map.panTo) map.panTo([loc.lng, loc.lat]);
+      else map.setCenter([loc.lng, loc.lat]);
+      map.setZoom(16);
+    }
+  }, []);
 
   const toggleFav = async () => {
     if (!user) { navigate('/login'); return; }
     if (isFav) {
-      await supabase.from('favorites').delete().eq('user_id', user.id).eq('tour_id', tourId);
+      const { error } = await supabase.from('favorites').delete().eq('user_id', user.id).eq('tour_id', tourId);
+      if (error) { setToast(getErrorMessage(error, '取消收藏失败')); return; }
       setIsFav(false);
     } else {
-      await supabase.from('favorites').insert({ user_id: user.id, tour_id: tourId });
+      const { error } = await supabase.from('favorites').insert({ user_id: user.id, tour_id: tourId });
+      if (error) { setToast(getErrorMessage(error, '收藏失败')); return; }
       setIsFav(true);
     }
   };
@@ -110,8 +130,9 @@ export default function TourView() {
   // Init map
   useEffect(() => {
     if (!tour || mapInstance.current) return;
+    let cancelled = false;
     const init = () => {
-      if (typeof window.AMap === 'undefined') { setTimeout(init, 200); return; }
+      if (cancelled) return;
       const bounds = tour.destination?.bounds;
       const center = bounds
         ? [(bounds[0][1] + bounds[1][1]) / 2, (bounds[0][0] + bounds[1][0]) / 2]
@@ -122,6 +143,8 @@ export default function TourView() {
         mapStyle: 'amap://styles/whitesmoke' // 白烟底图：与宣纸色系同源，标记更突出
       });
       mapInstance.current = map;
+      setMapError('');
+      requestAnimationFrame(() => map.resize());
 
       // 地点标记 + 聚合：AMap 2.0 用 AMap.MarkerCluster（注意不是旧版 MarkerClusterer）。
       // 缩小地图时邻近点聚合成带数字气泡，放大才拆分为单个标记。
@@ -192,8 +215,19 @@ export default function TourView() {
       }
       setTimeout(() => setShowCard(true), 500);
     };
-    init();
-  }, [tour]);
+    loadAmap().then(init).catch(error => {
+      if (!cancelled) setMapError(getErrorMessage(error, '地图加载失败，请检查网络或稍后重试。'));
+    });
+    return () => {
+      cancelled = true;
+      if (mapInstance.current) {
+        mapInstance.current.destroy();
+        mapInstance.current = null;
+      }
+      markersRef.current = [];
+      routePolylinesRef.current = {};
+    };
+  }, [tour, selectLoc]);
 
   // 选中态变化 → 刷新所有标记的「选中 / 普通」样式（选中地点琥珀金高亮）
   useEffect(() => {
@@ -206,18 +240,6 @@ export default function TourView() {
   }, [currentLoc]);
 
   // ── Actions ──
-
-  const selectLoc = useCallback((loc) => {
-    setCurrentLoc(loc);
-    setCurrentLayer(firstLayerIdRef.current); // 用导览第一个内容层，而非硬编码 novel
-    setShowCard(true);
-    const map = mapInstance.current;
-    if (map) {
-      if (map.panTo) map.panTo([loc.lng, loc.lat]); // 平滑移动，比 setCenter 瞬移更有翻卷感
-      else map.setCenter([loc.lng, loc.lat]);
-      map.setZoom(16);
-    }
-  }, []);
 
   const selectRoute = useCallback((route) => {
     if (!route || !route.stops || route.stops.length === 0) {
@@ -317,7 +339,14 @@ export default function TourView() {
       <RouteBar routes={tour.routes} currentRouteId={currentRouteId} onSelectRoute={selectRoute} />
 
       {/* Map */}
-      <div ref={mapRef} className="flex-1" />
+      <div className="relative flex-1 min-h-0">
+        <div ref={mapRef} className="absolute inset-0 h-full w-full" />
+        {mapError && (
+          <div role="alert" className="absolute inset-0 flex items-center justify-center bg-background/85 px-6 text-center text-sm text-primary">
+            {mapError}
+          </div>
+        )}
+      </div>
 
       {/* Bottom card zone — 手卷式卡片：置于正常文档流而非覆盖地图，地图容器止于卡片上缘，
           高德版权条不再压在卡片底部内容上；卡片折叠时地图随之扩展 */}

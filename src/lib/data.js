@@ -1,13 +1,13 @@
-// Static tour data (pre-loaded from tour.json files)
-// In Phase 2, this will be replaced by Supabase queries
+import { STATIC_TOURS } from './staticTours';
 
 const tours = [];
 
 async function loadTours() {
   if (tours.length > 0) return tours;
-  const modules = import.meta.glob('/public/data/*.json', { eager: true });
-  for (const path of Object.keys(modules)) {
-    tours.push(modules[path].default || modules[path]);
+  for (const tour of STATIC_TOURS) {
+    const response = await fetch(tour.file);
+    if (!response.ok) throw new Error(`加载静态导览失败：${tour.id}`);
+    tours.push(await response.json());
   }
   return tours;
 }

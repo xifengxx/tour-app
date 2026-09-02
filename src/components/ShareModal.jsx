@@ -41,7 +41,7 @@ export default function ShareModal({ tour, tourId, onClose }) {
         try {
           await navigator.share({ files: [new File([blob], fileName, { type: 'image/png' })], title });
           return;
-        } catch (e) { /* 用户取消 → 回退下载 */ }
+        } catch { /* 用户取消 → 回退下载 */ }
       }
       // 2) 常规下载（blob URL，安卓/桌面生效）
       const url = URL.createObjectURL(blob);
@@ -64,9 +64,9 @@ export default function ShareModal({ tour, tourId, onClose }) {
 
   return (
     <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-card rounded-2xl p-6 max-w-sm w-full max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+      <div role="dialog" aria-modal="true" aria-labelledby="share-modal-title" className="bg-card rounded-2xl p-6 max-w-sm w-full max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-base font-serif font-bold text-foreground">分享「{title}」</h3>
+          <h3 id="share-modal-title" className="text-base font-serif font-bold text-foreground">分享「{title}」</h3>
           <button onClick={onClose} className="relative w-8 h-8 rounded-full bg-black/5 text-foreground flex items-center justify-center hover:bg-black/10 before:absolute before:-inset-1.5 before:content-['']" aria-label="关闭">
             <X className="h-4 w-4" />
           </button>

@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Search, Lightbulb } from 'lucide-react';
+import { loadAmap } from '../lib/amap';
+import { getErrorMessage } from '../lib/errorMessage';
 
 /**
  * Full-screen map modal for searching and selecting locations.
@@ -11,20 +13,21 @@ export default function MapSearchModal({ show, onClose, onAdd, initialRegion }) 
   const mapInstance = useRef(null);
   const searchMarkersRef = useRef([]);
   const tempMarkerRef = useRef(null);
+  const [mapError, setMapError] = useState('');
 
   useEffect(() => {
     if (!show) return;
+    let cancelled = false;
     const init = () => {
-      if (typeof window.AMap === 'undefined' || !mapRef.current) {
-        setTimeout(init, 200);
-        return;
-      }
+      if (cancelled || !mapRef.current) return;
       const map = new window.AMap.Map(mapRef.current, {
         center: [113.0, 30.5],
         zoom: 5,
         resizeEnable: true,
       });
       mapInstance.current = map;
+      setMapError('');
+      requestAnimationFrame(() => map.resize());
 
       // Click anywhere to drop a temporary pin
       map.on('click', (e) => {
@@ -47,8 +50,11 @@ export default function MapSearchModal({ show, onClose, onAdd, initialRegion }) 
         tempMarkerRef.current = m;
       });
     };
-    init();
+    loadAmap().then(init).catch(error => {
+      if (!cancelled) setMapError(getErrorMessage(error, '地图加载失败，请稍后重试。'));
+    });
     return () => {
+      cancelled = true;
       // Cleanup markers when modal closes
       searchMarkersRef.current.forEach(m => mapInstance.current?.remove(m));
       if (tempMarkerRef.current) mapInstance.current?.remove(tempMarkerRef.current);
@@ -144,12 +150,14 @@ export default function MapSearchModal({ show, onClose, onAdd, initialRegion }) 
   if (!show) return null;
 
   return (
-    <div className="fixed inset-0 z-50 bg-background flex flex-col">
+    <div role="dialog" aria-modal="true" aria-labelledby="map-search-title" className="fixed inset-0 z-50 bg-background flex flex-col">
       {/* Header */}
       <div className="flex items-center gap-2 p-3 bg-card border-b border-border">
-        <button onClick={onClose} className="text-muted-foreground px-3 py-2 rounded-xl bg-black/5 text-sm">✕ 关闭</button>
+        <button onClick={onClose} className="text-muted-foreground px-3 py-2 rounded-xl bg-black/5 text-sm" aria-label="关闭地图搜索">✕ 关闭</button>
+        <h2 id="map-search-title" className="sr-only">搜索地点</h2>
         <div className="flex-1 flex items-center gap-2">
           <input
+            aria-label="搜索地点"
             value={query}
             onChange={e => setQuery(e.target.value)}
             onKeyDown={handleKeyDown}
@@ -172,7 +180,10 @@ export default function MapSearchModal({ show, onClose, onAdd, initialRegion }) 
       </div>
 
       {/* Map */}
-      <div ref={mapRef} className="flex-1" />
+      <div className="relative flex-1 min-h-0">
+        <div ref={mapRef} className="absolute inset-0 h-full w-full" />
+        {mapError && <div role="alert" className="absolute inset-0 flex items-center justify-center bg-background/85 px-6 text-center text-sm text-primary">{mapError}</div>}
+      </div>
 
       {/* Hint */}
       <div className="absolute bottom-4 left-4 right-4 pointer-events-none">

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
@@ -20,7 +20,7 @@ const DEFAULT_LAYERS = [
 
 export default function TourEdit() {
   const { tourId } = useParams();
-  const { tour, loading, source: dataSource, reload: reloadTour } = useTourData(tourId);
+  const { tour, loading, reload: reloadTour } = useTourData(tourId);
   const { user } = useAuth();
   const navigate = useNavigate();
 
@@ -64,34 +64,8 @@ export default function TourEdit() {
   const [saveMsgType, setSaveMsgType] = useState('ok'); // ok | info | err — 驱动横幅配色，替代 emoji 判断
   const flash = (msg, type = 'err') => { setSaveMsg(msg); setSaveMsgType(type); };
   const [draftTourId, setDraftTourId] = useState(tourId);
-  const [processingError, setProcessingError] = useState('');
-  // 'ai' = retry reruns AI processing; 'reload' = AI done, just refetch results
-  const [retryMode, setRetryMode] = useState('ai');
-  // Token to invalidate a stale AI run (user went back / skipped / retried)
-  const aiRunRef = useRef(0);
   // 重新处理计数：递增以强制重挂载 ProcessingPhase，重置轮询
   const [retryCount, setRetryCount] = useState(0);
-
-  // Refetch results after AI completes — retry up to 5 times with
-  // increasing delays, because the long POST can exhaust Chrome's
-  // connection pool and cause transient ERR_INTERNET_DISCONNECTED.
-  const loadResults = async (runId) => {
-    for (let i = 0; i < 5; i++) {
-      if (aiRunRef.current !== runId) return true;
-      const fresh = await reloadTour();
-      if (aiRunRef.current !== runId) return true;
-      if (fresh && fresh.locations && fresh.locations.length > 0) {
-        setProcessingError('');
-        setPhase('review');
-        return true;
-      }
-      // Wait before retry: 2s, 4s, 8s, 16s
-      if (i < 4) await new Promise(r => setTimeout(r, (2 ** (i + 1)) * 1000));
-    }
-    setRetryMode('reload');
-    setProcessingError('AI 处理已完成，但网络异常导致结果加载失败。点「重试」重新加载（不会重复调用 AI）。');
-    return false;
-  };
 
   // Populate from loaded tour
   useEffect(() => {
@@ -153,7 +127,8 @@ export default function TourEdit() {
         setDraftTourId(uuid);
         navigate(`/tour/${uuid}/edit`, { replace: true });
       } else {
-        await supabase.from('tours').update(tourData).eq('id', uuid);
+        const { error } = await supabase.from('tours').update(tourData).eq('id', uuid);
+        if (error) throw error;
       }
 
       setPhase('processing');
@@ -188,7 +163,8 @@ export default function TourEdit() {
       is_public: isPublic,
     };
     try {
-      await supabase.from('tours').update(tourData).eq('id', draftTourId);
+      const { error: tourError } = await supabase.from('tours').update(tourData).eq('id', draftTourId);
+      if (tourError) throw tourError;
       await reloadTour();
       flash('基本信息已保存', 'ok');
       setPhase('review');
@@ -205,7 +181,8 @@ export default function TourEdit() {
     if (!draftTourId) { flash('尚未保存草稿'); return; }
     setProcessingError('');
     try {
-      await supabase.from('tours').update({ status: 'processing' }).eq('id', draftTourId);
+      const { error } = await supabase.from('tours').update({ status: 'processing' }).eq('id', draftTourId);
+      if (error) throw error;
       setRetryCount(c => c + 1); // 强制重挂载 ProcessingPhase，重置轮询
       setPhase('processing');
     } catch (e) {
@@ -281,20 +258,24 @@ export default function TourEdit() {
 
     try {
       const uuid = draftTourId;
-      await supabase.from('tours').update(tourData).eq('id', uuid);
+      const { error: tourError } = await supabase.from('tours').update(tourData).eq('id', uuid);
+      if (tourError) throw tourError;
 
-      await supabase.from('content_layers').delete().eq('tour_id', uuid);
+      const { error: deleteLayersError } = await supabase.from('content_layers').delete().eq('tour_id', uuid);
+      if (deleteLayersError) throw deleteLayersError;
       if (contentLayers.length > 0) {
-        await supabase.from('content_layers').insert(
+        const { error } = await supabase.from('content_layers').insert(
           contentLayers.map((l, i) => ({
             tour_id: uuid, layer_key: l.id, name: l.name, icon: l.icon, color: l.color, sort_order: i,
           }))
         );
+        if (error) throw error;
       }
 
-      await supabase.from('locations').delete().eq('tour_id', uuid);
+      const { error: deleteLocationsError } = await supabase.from('locations').delete().eq('tour_id', uuid);
+      if (deleteLocationsError) throw deleteLocationsError;
       if (locations.length > 0) {
-        await supabase.from('locations').insert(
+        const { error } = await supabase.from('locations').insert(
           locations.map((loc, i) => ({
             id: loc.id, tour_id: uuid, name: loc.name,
             lat: loc.lat, lng: loc.lng, elevation: loc.elevation || '',
@@ -303,16 +284,19 @@ export default function TourEdit() {
             practical: loc.practical || {}, sort_order: i,
           }))
         );
+        if (error) throw error;
       }
 
-      await supabase.from('routes').delete().eq('tour_id', uuid);
+      const { error: deleteRoutesError } = await supabase.from('routes').delete().eq('tour_id', uuid);
+      if (deleteRoutesError) throw deleteRoutesError;
       if (routes.length > 0) {
-        await supabase.from('routes').insert(
+        const { error } = await supabase.from('routes').insert(
           routes.map((r, i) => ({
             id: r.id, tour_id: uuid, day_label: r.day,
             title: r.title, stops: r.stops, narrative: r.narrative || '', sort_order: i,
           }))
         );
+        if (error) throw error;
       }
 
       flash('保存成功！', 'ok');

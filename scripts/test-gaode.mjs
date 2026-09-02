@@ -113,10 +113,8 @@ async function gaode(name, destCity, bias) {
 }
 
 // ── 锚点 / 子景点逻辑（镜像 index.ts 2.4 节） ──
-const SUB_AREA_RADIUS = 12000;
 const SCAN_RADIUS = 12000;
 const ANCHOR_CAP = 12;
-const SUB_TOTAL_CAP = 10;
 const SUB_DEDUP_M = 300; // 与 index.ts 一致：1000m 会误杀百龙天梯(距张家界700m)/袁家界(距金鞭溪900m)
 const FACILITY_RE = /停车场|售票处|售票点|售票大厅|检票口|检票|门票站|乘车处|候车(?:处|亭|室)|索道(?:上站|下站|中站|入口|出口|站)?$|缆车$|观光车(?:站|场|停靠点)|游客中心|游客服务(?:点|中心)?|服务区|服务站|服务中心|管理处|管委会|委员会|居委会|村委会|派出所|加油站|银行|超市|商店|小卖部|商业街|饭店|餐厅|宾馆|酒店|客栈|民宿|山庄|农家乐|厕所|卫生间|洗手间|公厕|入口$|出口$|北门|南门|东门|西门|中门|大门|广场$|车站$|码头$|步道$|栈道$|观景台$|平台$|通道|门店|店\)|店$|综合服务|街道|步行街|(?<!故)居$|邮政|快递|营业厅|窗口|咨询|摄影|团队|散客|办事处|招商中心|营销中心|售楼处|工会|党员|人社|村委会/;
 function isScenicAnchor(loc, destName) {
@@ -189,17 +187,6 @@ async function scanAnchorSubs(anchor, locs, otherAnchors, aiKnown) {
     name: c.name, lat: c.lat, lng: c.lng,
     elevation: "", importance: 3, tags: ["子景点", `景区:${anchor.scenicName}`], scenic: anchor.scenicName,
   }));
-}
-function attachScenicTags(locs, anchors) {
-  for (const l of locs) {
-    if (l.scenic) continue;
-    const self = anchors.find(a => a.name === l.name || a.scenicName === l.name);
-    if (self) { l.scenic = self.scenicName; continue; }
-    let best = null, bestD = Infinity;
-    for (const a of anchors) { const d = haversineM(a, l); if (d < bestD) { bestD = d; best = a; } }
-    l.scenic = (best && bestD <= SUB_AREA_RADIUS) ? best.scenicName : "独立";
-  }
-  return locs;
 }
 function haversineM(a, b) {
   const toRad = (d) => (d * Math.PI) / 180;

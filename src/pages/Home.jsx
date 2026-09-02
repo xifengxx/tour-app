@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
+import { getErrorMessage } from '../lib/errorMessage';
+import { STATIC_TOURS } from '../lib/staticTours';
 import { searchTours, filterByCategory } from '../lib/filterTours';
 import { useAuth } from '../contexts/AuthContext';
 import NavBar from '../components/NavBar';
@@ -18,25 +20,6 @@ import {
   DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu';
 
-const STATIC_TOURS = [
-  {
-    id: 'nanyue-hengshan',
-    title: '剑出衡山 · 南岳巡礼',
-    subtitle: '跟着赵荣的脚步，登五神峰寻剑神之路',
-    theme: { primaryColor: '#c0392b' },
-    destination: { name: '南岳衡山', region: '湖南省衡阳市' },
-    stats: { locations: 21, routes: 5 },
-  },
-  {
-    id: 'huashan-xiaoao',
-    title: '笑傲江湖 · 华山巡礼',
-    subtitle: '跟着令狐冲，上思过崖寻独孤九剑',
-    theme: { primaryColor: '#c0392b' },
-    destination: { name: '华山', region: '陕西省华阴市' },
-    stats: { locations: 19, routes: 3 },
-  },
-];
-
 export default function Home() {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -50,6 +33,12 @@ export default function Home() {
   const [category, setCategory] = useState('全部');
   const [favIds, setFavIds] = useState(new Set());
   const [favTours, setFavTours] = useState([]);
+  const [notice, setNotice] = useState('');
+
+  const showNotice = (message) => {
+    setNotice(message);
+    window.setTimeout(() => setNotice(''), 4000);
+  };
 
   // Sync tab from URL params (for dropdown menu navigation)
   useEffect(() => {
@@ -58,29 +47,37 @@ export default function Home() {
 
   // Fetch public tours
   useEffect(() => {
+    let cancelled = false;
     supabase
       .from('tours')
       .select('id, title, subtitle, destination, theme, is_public, created_at, locations(count), routes(count)')
       .eq('is_public', true)
       .order('created_at', { ascending: false })
-      .then(({ data }) => {
-        if (data) setPublicTours(data);
+      .then(({ data, error }) => {
+        if (cancelled) return;
+        if (error) showNotice(getErrorMessage(error, '公开导览加载失败'));
+        else if (data) setPublicTours(data);
       });
+    return () => { cancelled = true; };
   }, []);
 
   // Fetch user's own tours
   useEffect(() => {
     if (!user) { setMyTours([]); return; }
     setMyToursLoading(true);
+    let cancelled = false;
     supabase
       .from('tours')
       .select('id, title, subtitle, destination, theme, is_public, created_at, locations(count), routes(count)')
       .eq('user_id', user.id)
       .order('created_at', { ascending: false })
-      .then(({ data }) => {
-        if (data) setMyTours(data);
+      .then(({ data, error }) => {
+        if (cancelled) return;
+        if (error) showNotice(getErrorMessage(error, '我的导览加载失败'));
+        else if (data) setMyTours(data);
         setMyToursLoading(false);
       });
+    return () => { cancelled = true; };
   }, [user]);
 
   // 加载我的收藏（DB + 静态导览混合）
@@ -88,18 +85,28 @@ export default function Home() {
     if (!user) { setFavIds(new Set()); setFavTours([]); return; }
     let cancelled = false;
     (async () => {
-      const { data } = await supabase.from('favorites').select('tour_id').eq('user_id', user.id);
-      if (cancelled || !data) { if (!cancelled) { setFavIds(new Set()); setFavTours([]); } return; }
+      const { data, error } = await supabase.from('favorites').select('tour_id').eq('user_id', user.id);
+      if (cancelled) return;
+      if (error || !data) {
+        setFavIds(new Set());
+        setFavTours([]);
+        showNotice(getErrorMessage(error, '收藏加载失败'));
+        return;
+      }
       const ids = data.map(f => f.tour_id);
       setFavIds(new Set(ids));
       const staticFavs = STATIC_TOURS.filter(s => ids.includes(s.id));
       const dbIds = ids.filter(id => !STATIC_TOURS.find(s => s.id === id));
       let dbFavs = [];
       if (dbIds.length > 0) {
-        const { data: rows } = await supabase
+        const { data: rows, error: rowsError } = await supabase
           .from('tours')
           .select('id, title, subtitle, destination, theme, is_public, created_at, locations(count), routes(count)')
           .in('id', dbIds);
+        if (rowsError) {
+          showNotice(getErrorMessage(rowsError, '收藏的导览加载失败'));
+          return;
+        }
         dbFavs = rows || [];
       }
       if (!cancelled) setFavTours([...dbFavs, ...staticFavs]);
@@ -112,11 +119,13 @@ export default function Home() {
     if (!user) { navigate('/login'); return; }
     const isFav = favIds.has(tour.id);
     if (isFav) {
-      await supabase.from('favorites').delete().eq('user_id', user.id).eq('tour_id', tour.id);
+      const { error } = await supabase.from('favorites').delete().eq('user_id', user.id).eq('tour_id', tour.id);
+      if (error) { showNotice(getErrorMessage(error, '取消收藏失败')); return; }
       setFavIds(prev => { const s = new Set(prev); s.delete(tour.id); return s; });
       setFavTours(prev => prev.filter(t => t.id !== tour.id));
     } else {
-      await supabase.from('favorites').insert({ user_id: user.id, tour_id: tour.id });
+      const { error } = await supabase.from('favorites').insert({ user_id: user.id, tour_id: tour.id });
+      if (error) { showNotice(getErrorMessage(error, '收藏失败')); return; }
       setFavIds(prev => new Set(prev).add(tour.id));
       setFavTours(prev => [tour, ...prev]);
     }
@@ -142,7 +151,7 @@ export default function Home() {
         ? (prev.some(t => t.id === tour.id) ? prev : [{ ...tour, is_public: true }, ...prev])
         : prev.filter(t => t.id !== tour.id)
       );
-    }
+    } else showNotice(getErrorMessage(error, '更新发布状态失败'));
   };
 
   // 删除导览（子表有 ON DELETE CASCADE，会连带删除地点/路线/内容）
@@ -151,7 +160,7 @@ export default function Home() {
     const { error } = await supabase.from('tours').delete().eq('id', tour.id);
     if (!error) {
       setMyTours(prev => prev.filter(t => t.id !== tour.id));
-    }
+    } else showNotice(getErrorMessage(error, '删除导览失败'));
   };
 
   const renderTourCard = (tour, isMyTour, idx = 0) => (
@@ -249,6 +258,7 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-background">
       <NavBar />
+      {notice && <div role="status" className="fixed top-14 left-1/2 -translate-x-1/2 z-50 px-4 py-2 bg-card border border-border rounded-xl shadow-lg text-sm text-primary">{notice}</div>}
 
       {/* ── Hero · 门面：对联式双竖排 + 菱形饰线 ── */}
       <header className="max-w-4xl mx-auto px-4 pt-9 pb-2">

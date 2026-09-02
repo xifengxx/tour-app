@@ -9,16 +9,18 @@ export default function RouteBar({ routes, currentRouteId, onSelectRoute }) {
   // 容器不受影响）。故容器必须可交互，用 touch-action:pan-x 声明只做横向滚动。
   // top 叠加 env(safe-area-inset-top)：NavBar 接入安全区后变高，避免刘海屏上压住副标题。
   return (
-    <div
-      className="absolute left-0 right-0 z-10 px-4 flex gap-2 overflow-x-auto"
-      style={{
-        top: 'calc(7rem + env(safe-area-inset-top))',
-        touchAction: 'pan-x',
-        WebkitOverflowScrolling: 'touch',
-        ...(currentRouteId ? {} : { WebkitMaskImage: 'linear-gradient(to right, black calc(100% - 28px), transparent)', maskImage: 'linear-gradient(to right, black calc(100% - 28px), transparent)' }),
-      }}
-    >
-      {routes.filter(r => r.id !== 'extra').map((route, i) => {
+    <div className="absolute left-0 right-0 z-10" style={{ top: 'calc(7rem + env(safe-area-inset-top))' }}>
+      <div
+        aria-label="导览路线"
+        className="flex gap-2 px-4 overflow-x-auto"
+        style={{
+          touchAction: 'pan-x',
+          WebkitOverflowScrolling: 'touch',
+          WebkitMaskImage: 'linear-gradient(to right, black calc(100% - 32px), transparent)',
+          maskImage: 'linear-gradient(to right, black calc(100% - 32px), transparent)',
+        }}
+      >
+        {routes.filter(r => r.id !== 'extra').map((route, i) => {
         const color = ROUTE_COLORS[i % ROUTE_COLORS.length];
         const active = currentRouteId === route.id;
         return (
@@ -37,15 +39,17 @@ export default function RouteBar({ routes, currentRouteId, onSelectRoute }) {
             {route.title}
           </button>
         );
-      })}
-      {currentRouteId && (
-        <button
-          onClick={() => onSelectRoute(null)}
-          className="px-3 py-2 rounded-full text-xs bg-black/[0.06] text-muted-foreground whitespace-nowrap flex-shrink-0"
-        >
-          ✕ 清除筛选
-        </button>
-      )}
+        })}
+        {currentRouteId && (
+          <button
+            onClick={() => onSelectRoute(null)}
+            className="px-3 py-2 rounded-full text-xs bg-black/[0.06] text-muted-foreground whitespace-nowrap flex-shrink-0"
+          >
+            ✕ 清除筛选
+          </button>
+        )}
+      </div>
+      <div className="pointer-events-none absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-background/70 to-transparent" aria-hidden="true" />
     </div>
   );
 }
