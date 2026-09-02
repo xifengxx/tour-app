@@ -16,7 +16,7 @@
     │                            │              ├─ 提取地点 ────→ DeepSeek
     │                            │              ├─ 查坐标 ──────→ 高德 Web API
     │                            │              ├─ 生成内容 ────→ DeepSeek
-    │                            │              └─ 规划路线 ────→ DeepSeek
+    │                            │              └─ 路线站点/顺序由代码确定，DeepSeek 只写文案
     │                            │              │
     │ 3. 轮询 GET locations ←────┼──────────────┘ 写入 locations
     │ 4. 加载完整数据 ←──────────┼────────────────── SELECT tours+join
@@ -32,6 +32,7 @@
 | `src/pages/TourEdit.jsx` | 导览编辑：保存草稿、ProcessingPhase 控制、审核保存 |
 | `src/components/ProcessingPhase.jsx` | 等待页面：轮询检测 + 自动重试加载数据 |
 | `supabase/functions/process-tour/index.ts` | Supabase Edge Function：AI 处理核心逻辑 |
+| `supabase/functions/process-tour/trail-routes.ts` | 知名山岳步道知识层：补关键步道点、确定站序、提供换乘提示 |
 
 ## 数据库配置
 
@@ -129,6 +130,7 @@ npx supabase functions deploy process-tour --project-ref qxunedraoviaonjdanag --
 | v70.2 | 卫星景区锚点规则：`isScenicAnchor` 识别"目的地+方位后缀"命名（青城后山/黄山北坡直接成锚点）→ 修青城山 2 日 day-2 偏都江堰簇；路线 `stops` 保序去重 → 修天门山 1 日首末站重复 |
 | v70.3 | 文学巡礼线 resolve 为空时回退核心池 top4（防小说源静默丢线）；`FACILITY_RE` 增补 招商中心/营销中心/售楼处；`cleanName` 剥"（暂停开放）"类状态后缀 |
 | v70.4 | 文学巡礼线 dedup 豁免：route 标记 `_free`（自由选点），stops-set 去重跳过 → 修黄山文学巡礼线与 1 日线同站点集合被误删（routes 3→4）；`process_report` 埋点 `plans`/`corePool`/`📖 resolve N 站` warning 辅助诊断 |
+| 2026-09-03 | 新增知名山岳策展步道层：先按已知步道补关键点，再按真实动线固定站序；AI 只负责 narrative 和换乘描述，不能改站点集合/顺序 |
 
 ## 测试记录
 

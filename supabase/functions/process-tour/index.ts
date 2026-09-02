@@ -10,6 +10,7 @@ import { gaodeNearbyCulturalPOIs, JUNK_RE } from "./gaode-scan.ts";
 import { AMUSE_RE, FACILITY_RE, gaode, gaodeRegionScenics } from "./gaode-search.ts";
 import { haversineM } from "./geo.ts";
 import { orderStopsGeographic, planRoutes as planRoutesModule } from "./routes.ts";
+import { getTrailNotes, injectTrailSeeds, orderStopsByTrail } from "./trail-routes.ts";
 import { attachScenicTags as attachScenicTagsModule, buildAnchors as buildAnchorsModule, scanAnchorSubs as scanAnchorSubsModule } from "./anchors.ts";
 import { REGION_RADIUS, SUB_DEDUP_M, SUB_TOTAL_CAP } from "./anchors.ts";
 
@@ -434,6 +435,12 @@ Deno.serve(async (req: Request) => {
     for (const [k, v] of countByScenic) if (v > maxC) { maxC = v; mainScenicName = k; }
     if (maxC < 2) mainScenicName = ""; // 没有 ≥2 子景区的非核心景区 → 无主景区
 
+    // 5. Known-trail layer：知名山岳用策展动线补关键点并固定站序。
+    // “地理最近邻”只能保证空间连贯，不知道“真武庙在虎风口下方、三清殿在山脚游客中心”
+    // 这类步道/换乘事实；恒山实测会继续产出上下锯齿。
+    const trailSeedNames = injectTrailSeeds(locs, destName, coreScenicName);
+    if (trailSeedNames.length) warnings.push(`🥾 已知步道补全 +${trailSeedNames.length} 个：${trailSeedNames.join("/")}`);
+
     // 3+4. Content 与 Routes 并行生成（互不依赖：路线只用 locs/id，内容独立按 loc 分批）。
     // 串行 4-6 个 DeepSeek 调用会吃满 Edge Function 60s 预算 → 两者并发，各内部再并行。
     // DeepSeek ids (slugs like "r1", "yujing-feng") are NOT globally unique,
@@ -443,6 +450,11 @@ Deno.serve(async (req: Request) => {
     const slugToDbId = new Map(locs.map(l => [l.id, `${scope}-${l.id}`]));
     // 数据库 id 视图的地点列表（供地理排序用：stops 存的是 db id）
     const dbLocs = locs.map(l => ({ ...l, id: slugToDbId.get(l.id) || l.id }));
+    const trailNotes = getTrailNotes(destName, dbLocs);
+    const orderStops = (stopIds: string[], source: any[]) => {
+      const trailOrdered = orderStopsByTrail(stopIds, source, destLoc, destName);
+      return trailOrdered.length ? trailOrdered : orderStopsGeographic(stopIds, source, destLoc);
+    };
 
     // DeepSeek's route step may reference stops by slug, Chinese name, or a
     // variant ("玉京峰景区") — resolve all of these back to the location db id.
@@ -463,7 +475,7 @@ Deno.serve(async (req: Request) => {
     const plans = planRoutesModule(locs, { coreScenicName, mainScenicName, destName, isNovelBased, novelName, hasRegionTour });
     // 站内顺序在调 AI 前排定，planText 即最终动线，AI 的 narrative 按此顺序展开
     for (const p of plans) {
-      if (p.allow) p.allow = orderStopsGeographic(p.allow, locs, destLoc);
+      if (p.allow) p.allow = orderStops(p.allow, locs);
     }
     // 每条路线的指定站点清单（文学巡礼线无 allow，AI 自由选）
     const planText = plans.map((p, i) => {
@@ -539,7 +551,7 @@ Deno.serve(async (req: Request) => {
         for (let attempt = 0; attempt < 2 && routes.length < plans.length; attempt++) {
           const rr = await deepseek([
             { role: "system", content: "你是旅游路线规划师。只返回JSON。" },
-            { role: "user", content: `${destName}路线。**每条路线的站点及其顺序已由系统按地理动线排定，stops 必须严格按给定顺序逐字输出（这是实际游览顺序，已保证不走回头路），严禁增删替换或调整顺序；文学巡礼线除外（可自由选点与排序）。**\n\n${planText}\n\n要求：\n1. 每条路线按上面的指定站点生成完整行程（从入口/索道进 → 逐点游览 → 出口/索道出）。\n2. narrative 各写 150-300 字完整行程描述：从哪个入口/索道进、每段用什么交通（徒步/索道/观光车）、依次经过哪些地点、从哪里出。narrative 中必须写地点的中文名（如"玉京峰"），严禁写 id 代号。narrative 的游览顺序必须与给定站点顺序一致。山地路线从半山下降到山脚庙宇/游客中心/停车场，或从游客中心前往外围峡谷/悬空景点时，必须写清换乘观光车、摆渡车或专车，不要把长距离位移写成连续徒步。\n3. **2日全景游 narrative 必须明确「第1天前山」「第2天后山」各去哪**；主题游写明主题与串联逻辑。\n4. day_label 必须是上面给定的标签（1日精华游/2日全景游/主题游/文学巡礼线）。\n5. 地点少时压缩天数，严禁编造不存在的多日行程。\n6. stops 数组顺序必须与 narrative 中的实际游览顺序一致（入口/索道在前，依次游览，出口/索道在后）；stops 只能从上面指定 id 中逐字复制。\n7. 路线条数必须与上述完全一致（${plans.length} 条），缺一不可。\nJSON: {"routes":[{"day_label":"","title":"","stops":["id1","id2"],"narrative":"完整行程描述"}]}` },
+            { role: "user", content: `${destName}路线。**每条路线的站点及其顺序已由系统按地理动线排定，stops 必须严格按给定顺序逐字输出（这是实际游览顺序，已保证不走回头路），严禁增删替换或调整顺序；文学巡礼线除外（可自由选点与排序）。**\n\n${planText}\n\n${trailNotes ? `参考真实动线：${trailNotes}\n\n` : ""}要求：\n1. 每条路线按上面的指定站点生成完整行程（从入口/索道进 → 逐点游览 → 出口/索道出）。\n2. narrative 各写 150-300 字完整行程描述：从哪个入口/索道进、每段用什么交通（徒步/索道/观光车）、依次经过哪些地点、从哪里出。narrative 中必须写地点的中文名（如"玉京峰"），严禁写 id 代号。narrative 的游览顺序必须与给定站点顺序一致。山地路线从半山下降到山脚庙宇/游客中心/停车场，或从游客中心前往外围峡谷/悬空景点时，必须写清换乘观光车、摆渡车或专车，不要把长距离位移写成连续徒步。\n3. **2日全景游 narrative 必须明确「第1天前山」「第2天后山」各去哪**；主题游写明主题与串联逻辑。\n4. day_label 必须是上面给定的标签（1日精华游/2日全景游/主题游/文学巡礼线）。\n5. 地点少时压缩天数，严禁编造不存在的多日行程。\n6. stops 数组顺序必须与 narrative 中的实际游览顺序一致（入口/索道在前，依次游览，出口/索道在后）；stops 只能从上面指定 id 中逐字复制。\n7. 路线条数必须与上述完全一致（${plans.length} 条），缺一不可。\nJSON: {"routes":[{"day_label":"","title":"","stops":["id1","id2"],"narrative":"完整行程描述"}]}` },
           ], { temperature: 0.2 });
           // Route stop validation: resolve + 确定性兜底。
           // 注意：不能按数组下标取 plan（AI 返回 routes 的顺序常与 plans 不一致 → 会张冠李戴，
@@ -572,7 +584,7 @@ Deno.serve(async (req: Request) => {
               }
               // v71：站点集合仍由代码确定（keep ∪ allowDb，Set 兜底去重——天门山 1日 AI 曾把
               // 入口/出口重复），顺序以地理最近邻为准，AI 顺序不再参与
-              stops = orderStopsGeographic([...new Set([...keep, ...allowDb])], dbLocs, destLoc);
+              stops = orderStops([...new Set([...keep, ...allowDb])], dbLocs);
             } else {
               stops = resolved; // 文学巡礼线：AI 自由选点
               // v70.3 诊断：文学巡礼线选点结果总是记进报告（线上 3/4 路线问题定位用）
