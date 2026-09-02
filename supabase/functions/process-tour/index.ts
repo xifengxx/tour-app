@@ -9,7 +9,7 @@ import { regeo } from "./gaode-validation.ts";
 import { JUNK_RE } from "./gaode-scan.ts";
 import { AMUSE_RE, FACILITY_RE, gaode, gaodeRegionScenics } from "./gaode-search.ts";
 import { haversineM } from "./geo.ts";
-import { planRoutes as planRoutesModule } from "./routes.ts";
+import { orderStopsGeographic, planRoutes as planRoutesModule } from "./routes.ts";
 import { attachScenicTags as attachScenicTagsModule, buildAnchors as buildAnchorsModule, scanAnchorSubs as scanAnchorSubsModule } from "./anchors.ts";
 import { REGION_RADIUS, SUB_DEDUP_M, SUB_TOTAL_CAP } from "./anchors.ts";
 
@@ -357,6 +357,8 @@ Deno.serve(async (req: Request) => {
     // or writes collide with other tours (409 duplicate key).
     const scope = tourId.slice(0, 8);
     const slugToDbId = new Map(locs.map(l => [l.id, `${scope}-${l.id}`]));
+    // 数据库 id 视图的地点列表（供地理排序用：stops 存的是 db id）
+    const dbLocs = locs.map(l => ({ ...l, id: slugToDbId.get(l.id) || l.id }));
 
     // DeepSeek's route step may reference stops by slug, Chinese name, or a
     // variant ("玉京峰景区") — resolve all of these back to the location db id.
@@ -369,11 +371,16 @@ Deno.serve(async (req: Request) => {
     };
 
     // 4. Routes — 确定性站点规划：1日精华游(必有) + 2日全景游(前山+后山) + 主题游(4热核心+统一地区景点) + 文学巡礼线(小说源)
-    // 路线「组成」由 planRoutes 代码决定（AI 屡次不遵守景区分区规则）；DeepSeek 只写 narrative + 站内排序。
+    // 路线「组成」由 planRoutes 代码决定（AI 屡次不遵守景区分区规则）；站内顺序 v71 起由代码地理最近邻
+    // 确定（AI 无坐标信息，锯齿动线实测恒山），DeepSeek 只写 narrative。
     const isNovelBased = !!(tour.source?.title || tour.source?.novelTitle);
     const novelName = String(tour.source?.title || tour.source?.novelTitle || '');
     const corePoolSize = locs.filter(l => !(l.tags || []).includes("地区景点") && l.scenic === coreScenicName).length;
     const plans = planRoutesModule(locs, { coreScenicName, mainScenicName, destName, isNovelBased, novelName, hasRegionTour });
+    // 站内顺序在调 AI 前排定，planText 即最终动线，AI 的 narrative 按此顺序展开
+    for (const p of plans) {
+      if (p.allow) p.allow = orderStopsGeographic(p.allow, locs, destLoc);
+    }
     // 每条路线的指定站点清单（文学巡礼线无 allow，AI 自由选）
     const planText = plans.map((p, i) => {
       const stopsTxt = p.allow
@@ -448,7 +455,7 @@ Deno.serve(async (req: Request) => {
         for (let attempt = 0; attempt < 2 && routes.length < plans.length; attempt++) {
           const rr = await deepseek([
             { role: "system", content: "你是旅游路线规划师。只返回JSON。" },
-            { role: "user", content: `${destName}路线。**每条路线的站点已由系统指定，stops 必须恰好包含这些 id（可调整顺序使行走合理），严禁增删替换；文学巡礼线除外（可自由选点）。**\n\n${planText}\n\n要求：\n1. 每条路线按上面的指定站点生成完整行程（从入口/索道进 → 逐点游览 → 出口/索道出）。\n2. narrative 各写 150-300 字完整行程描述：从哪个入口/索道进、每段用什么交通（徒步/索道/观光车）、依次经过哪些地点、从哪里出。narrative 中必须写地点的中文名（如"玉京峰"），严禁写 id 代号。\n3. **2日全景游 narrative 必须明确「第1天前山」「第2天后山」各去哪**；主题游写明主题与串联逻辑。\n4. day_label 必须是上面给定的标签（1日精华游/2日全景游/主题游/文学巡礼线）。\n5. 地点少时压缩天数，严禁编造不存在的多日行程。\n6. stops 数组顺序必须与 narrative 中的实际游览顺序一致（入口/索道在前，依次游览，出口/索道在后）；stops 只能从上面指定 id 中逐字复制。\n7. 路线条数必须与上述完全一致（${plans.length} 条），缺一不可。\nJSON: {"routes":[{"day_label":"","title":"","stops":["id1","id2"],"narrative":"完整行程描述"}]}` },
+            { role: "user", content: `${destName}路线。**每条路线的站点及其顺序已由系统按地理动线排定，stops 必须严格按给定顺序逐字输出（这是实际徒步顺序，已保证不走回头路），严禁增删替换或调整顺序；文学巡礼线除外（可自由选点与排序）。**\n\n${planText}\n\n要求：\n1. 每条路线按上面的指定站点生成完整行程（从入口/索道进 → 逐点游览 → 出口/索道出）。\n2. narrative 各写 150-300 字完整行程描述：从哪个入口/索道进、每段用什么交通（徒步/索道/观光车）、依次经过哪些地点、从哪里出。narrative 中必须写地点的中文名（如"玉京峰"），严禁写 id 代号。narrative 的游览顺序必须与给定站点顺序一致。\n3. **2日全景游 narrative 必须明确「第1天前山」「第2天后山」各去哪**；主题游写明主题与串联逻辑。\n4. day_label 必须是上面给定的标签（1日精华游/2日全景游/主题游/文学巡礼线）。\n5. 地点少时压缩天数，严禁编造不存在的多日行程。\n6. stops 数组顺序必须与 narrative 中的实际游览顺序一致（入口/索道在前，依次游览，出口/索道在后）；stops 只能从上面指定 id 中逐字复制。\n7. 路线条数必须与上述完全一致（${plans.length} 条），缺一不可。\nJSON: {"routes":[{"day_label":"","title":"","stops":["id1","id2"],"narrative":"完整行程描述"}]}` },
           ], { temperature: 0.2 });
           // Route stop validation: resolve + 确定性兜底。
           // 注意：不能按数组下标取 plan（AI 返回 routes 的顺序常与 plans 不一致 → 会张冠李戴，
@@ -479,10 +486,9 @@ Deno.serve(async (req: Request) => {
                 if (missing.length) warnings.push(`♻️ 路线"${plan.label}"补齐缺失站点 ${missing.length} 个`);
                 if (extra.length) warnings.push(`⚠️ 路线"${plan.label}"剔除多出站点 ${extra.length} 个`);
               }
-              stops = [...keep, ...missing]; // 按 AI 相对顺序保留 allow 内站点 + 末尾补齐缺失
-              // v70.2：stops 去重（保序）——AI 把入口/出口都写成景区大门时同一 id 会出现两次
-              // （天门山 1日 首末站都是"天门山国家森林公园"实测）
-              stops = stops.filter((s, j) => stops.indexOf(s) === j);
+              // v71：站点集合仍由代码确定（keep ∪ allowDb，Set 兜底去重——天门山 1日 AI 曾把
+              // 入口/出口重复），顺序以地理最近邻为准，AI 顺序不再参与
+              stops = orderStopsGeographic([...new Set([...keep, ...allowDb])], dbLocs, destLoc);
             } else {
               stops = resolved; // 文学巡礼线：AI 自由选点
               // v70.3 诊断：文学巡礼线选点结果总是记进报告（线上 3/4 路线问题定位用）

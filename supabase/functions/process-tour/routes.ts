@@ -53,3 +53,42 @@ export function planRoutes(locs: any[], ctx: { coreScenicName: string; mainSceni
   if (ctx.isNovelBased) plans.push({ label: "文学巡礼线", title: `《${ctx.novelName}》文学巡礼`, allow: null });
   return plans;
 }
+
+// v71: 站内顺序确定性地理排序。AI 拿不到坐标、屡次产出"山顶→山脚→山顶"锯齿动线（恒山实测），
+// 改为最近邻串联：以最接近目的地定位点（通常为入口/游客中心）的站点起步，依次走向最近的未访问站点。
+// 无坐标的站点保持原相对顺序追加在末尾。
+export function orderStopsGeographic(stopIds: string[], locs: any[], entrance?: { lng: number; lat: number } | null): string[] {
+  if (stopIds.length <= 2) return stopIds;
+  const byId = new Map(locs.map((l: any) => [l.id, l]));
+  let cur: string | null = null;
+  const remaining = new Set(stopIds);
+  if (entrance) {
+    let bestD = Infinity;
+    for (const id of remaining) {
+      const l = byId.get(id);
+      if (!l) continue;
+      const d = haversineM(l, entrance);
+      if (d < bestD) { bestD = d; cur = id; }
+    }
+  }
+  if (!cur || !byId.has(cur)) cur = stopIds.find(id => byId.has(id)) || null;
+  const ordered: string[] = [];
+  const noCoord = stopIds.filter(id => !byId.has(id));
+  for (const id of noCoord) remaining.delete(id);
+  while (cur && remaining.size) {
+    remaining.delete(cur);
+    ordered.push(cur);
+    const a = byId.get(cur)!;
+    let best: string | null = null;
+    let bestD = Infinity;
+    for (const id of remaining) {
+      const b = byId.get(id);
+      if (!b) continue;
+      const d = haversineM(a, b);
+      if (d < bestD) { bestD = d; best = id; }
+    }
+    cur = best;
+  }
+  if (remaining.size) ordered.push(...remaining);
+  return [...ordered, ...noCoord];
+}
