@@ -24,6 +24,14 @@ describe("planRoutes", () => {
     expect(plan.allow).toHaveLength(11);
   });
 
+  it("一日游核心点最多保留 20 站", () => {
+    const locs = Array.from({ length: 25 }, (_, i) => point(`核心${i}`, "核心", [], i + 1));
+    const plans = planRoutes(locs, { coreScenicName: "核心", mainScenicName: "", destName: "目的地", isNovelBased: false, novelName: "", hasRegionTour: false });
+    const oneDay = plans.find(plan => plan.label === "1日精华游");
+    expect(oneDay?.allow).toHaveLength(20);
+    expect(oneDay?.allow?.[0]).toBe("核心24");
+  });
+
   it("文学导览追加文学巡礼线", () => {
     const locs = Array.from({ length: 8 }, (_, i) => point(`核心${i}`, "核心", [], 3));
     const plans = planRoutes(locs, { coreScenicName: "核心", mainScenicName: "", destName: "目的地", isNovelBased: true, novelName: "山行", hasRegionTour: false });
