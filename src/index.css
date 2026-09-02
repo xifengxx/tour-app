@@ -1,6 +1,3 @@
-/* 思源宋体（本地打包，按 unicode-range 分片，浏览器只下载用到的切片） */
-@import '@fontsource/noto-serif-sc/500.css';
-@import '@fontsource/noto-serif-sc/700.css';
 @import "tailwindcss";
 
 /* ─────────────────────────────────────────────

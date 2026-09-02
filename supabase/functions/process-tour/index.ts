@@ -2,8 +2,8 @@
 // 部署: npx supabase functions deploy process-tour --project-ref qxunedraoviaonjdanag --no-verify-jwt
 // Secrets: supabase secrets set DEEPSEEK_API_KEY=sk-... GAODE_KEY=2ff1... --project-ref qxunedraoviaonjdanag
 
-import { hdr, SUPABASE_URL } from "./config.ts";
-import { deleteRows, json, postRows, setStatus } from "./http.ts";
+import { GAODE_KEY, hdr, SUPABASE_URL } from "./config.ts";
+import { cors, deleteRows, json, postRows, setStatus } from "./http.ts";
 import { deepseek, mapLimit } from "./ai.ts";
 import { regeo } from "./gaode-validation.ts";
 import { JUNK_RE } from "./gaode-scan.ts";
@@ -112,7 +112,7 @@ function regionMatch(geo: { province: string; city: string | string[]; district?
   // —— 否则"湖南张家界"这类连写串会把同省他市（株洲/长沙）的地点误放行
   if (norm.length <= 3) {
     const gProvN = gProv.replace(/省$/, ""); // "湖南省"→"湖南"
-    return gProv.includes(norm) || (gProvN && norm.includes(gProvN));
+    return gProv.includes(norm) || (gProvN !== "" && norm.includes(gProvN));
   }
   return false;
 }
@@ -455,7 +455,7 @@ Deno.serve(async (req: Request) => {
           // 2日 混入 西岭雪山 就是顺序错位导致的）。按 day_label 模糊匹配 plan，找不到才回退下标。
           // day_label/title/stops 全部以 plan 为准（路线组成 100% 确定），AI 只贡献 narrative 与站内相对顺序。
           const aiRoutes = rr.routes || [];
-          const allRoutes = plans.map((plan: any, i: number) => {
+          const allRoutes = plans.map((plan, i: number) => {
             const ai = aiRoutes.find((x: any) => {
               const lbl = String(x?.day_label || "").trim();
               return lbl && (lbl.includes(plan.label) || plan.label.includes(lbl));
@@ -463,14 +463,14 @@ Deno.serve(async (req: Request) => {
             const rawStops: string[] = (Array.isArray(ai.stops) ? ai.stops : [])
               .map((s: any) => s && typeof s === "object" ? (s.poi ?? s.id ?? s.name) : s)
               .filter(Boolean);
-            const resolved = rawStops.map((s: string) => resolveStop(s)).filter(Boolean);
+            const resolved = rawStops.map((s: string) => resolveStop(s)).filter((s): s is string => !!s);
             const unresolved = rawStops.filter((_, j) => !resolved[j]);
             if (unresolved.length > 0) {
               warnings.push(`⚠️ 路线"${ai.title || ai.day_label || `路线${i+1}`}"有 ${unresolved.length} 个站点无法匹配：${unresolved.join(', ')}`);
             }
             let stops: string[] = [];
             if (plan.allow) {
-              const allowDb = plan.allow.map(id => slugToDbId.get(id)).filter(Boolean);
+              const allowDb = plan.allow.map(id => slugToDbId.get(id)).filter((id): id is string => !!id);
               const allowSet = new Set(allowDb);
               const keep = resolved.filter(s => allowSet.has(s));
               const extra = resolved.filter(s => !allowSet.has(s));
@@ -492,7 +492,7 @@ Deno.serve(async (req: Request) => {
               if (!stops.length) {
                 const fallback = locs.filter(l => !(l.tags || []).includes("地区景点"))
                   .slice().sort((a, b) => (b.importance || 3) - (a.importance || 3)).slice(0, 4);
-                stops = fallback.map(l => slugToDbId.get(l.id)).filter(Boolean);
+                stops = fallback.map(l => slugToDbId.get(l.id)).filter((id): id is string => !!id);
                 if (stops.length) warnings.push(`♻️ 路线"${plan.label}"AI 选点无法匹配，回退核心 ${stops.length} 站`);
               }
             }

@@ -1,0 +1,4 @@
+/* 思源宋体（本地打包，按 unicode-range 分片，浏览器只下载用到的切片）。
+   独立拆分并由 main.jsx 动态加载，避免字体声明阻塞首屏渲染。 */
+@import '@fontsource/noto-serif-sc/500.css';
+@import '@fontsource/noto-serif-sc/700.css';

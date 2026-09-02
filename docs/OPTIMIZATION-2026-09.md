@@ -51,6 +51,15 @@
 
 导航栏中的账户下拉菜单进一步拆到 `src/components/UserMenu.jsx`，只在登录用户打开导航时加载。`NavBar` chunk 约 34KB，账户菜单和 Radix 下拉菜单依赖单独加载。
 
+### 字体样式异步加载
+
+思源宋体 500/700 两个字重的 `@font-face` 声明（按 unicode-range 分片后约 98 组）原本内联在主样式表中，导致主 CSS 达约 290KB。
+
+现拆分为独立的 `src/fonts.css`，由 `src/main.jsx` 动态导入，Vite 构建为异步加载的独立 chunk：
+
+- 主 CSS：约 290KB → 约 47KB（gzip 约 117KB → 约 9KB），首屏渲染不再被字体声明阻塞。
+- 字体 CSS（约 243KB，gzip 约 108KB）与页面渲染并行加载，浏览器仍按 unicode-range 只下载实际用到的字体切片。
+
 ### 交互和错误处理
 
 - 新增 `src/lib/errorMessage.js`，统一提取 Supabase 和普通 Error 的可读错误信息。
@@ -102,20 +111,25 @@ AI 仍然负责路线文案和站内排序，但不能随意增加或删除代�
 
 本次本地验证结果：
 
-- `npm test -- --run`：10 个测试文件，46 个测试全部通过。
+- `npm test -- --run`：12 个测试文件，51 个测试全部通过（含高德限流重试/耗尽、数据库写入失败、状态写入容错等异常路径测试）。
 - `npm run build`：构建通过。
 - `npm run lint`：通过，仅保留已有警告。
 - `git diff --check`：通过。
 
-当前环境没有安装 Deno，因此无法执行 `deno check`。Edge Function 的 TypeScript 语法已由 lint、测试导入和构建流程间接验证，正式部署前仍建议在 Supabase/Deno 环境中执行一次类型检查。
+已通过 `brew install deno` 安装 Deno 2.9.6，`deno check supabase/functions/process-tour/index.ts` 通过。该检查发现并修复了 7 个类型错误：
+
+- 补齐 `GAODE_KEY`、`cors` 两处缺失导入（`cors` 改为从 `http.ts` 导出）。
+- 省份匹配函数返回值类型修正（避免 `string | boolean`）。
+- 路线站点映射处 3 处 `filter(Boolean)` 改为类型谓词过滤，消除 `string | undefined` 泄漏。
+- 移除 `plans.map((plan: any, ...)` 的多余 `any` 标注，恢复路线类型推断。
 
 本地 production preview 已确认 `/` 和 `/tour/demo` 均返回 200，SPA 深链接兜底正常。Supabase CLI 命令入口存在，但其 macOS 二进制文件缺失，无法完成线上函数清单读取；本轮没有执行生产部署。
 
 ## 仍需处理的事项
 
-1. 在 Deno 环境中执行 Edge Function 类型检查。
-2. 为高德限流、DeepSeek 非法 JSON、地图加载失败和创建失败补充更完整的集成测试。
-3. 对 `NavBar` 等公共 chunk 继续分析，确认是否存在可延迟加载的图标或地图依赖。
+1. ~~在 Deno 环境中执行 Edge Function 类型检查。~~（已完成，`deno check` 通过）
+2. ~~为高德限流、DeepSeek 非法 JSON、地图加载失败和创建失败补充更完整的集成测试。~~（单元级异常路径测试已完成；涉及真实外部服务的端到端集成测试仍待线上环境验证）
+3. ~~对 `NavBar` 等公共 chunk 继续分析，确认是否存在可延迟加载的图标或地图依赖。~~（已拆分 UserMenu；图标与地图依赖已确认不在公共 chunk 中）
 4. 用黄山、泰山、三清山等非张家界样例做一次线上前后结果对比。
 5. 完成部署前的 Supabase Edge Function 和生产站点验证。
 
