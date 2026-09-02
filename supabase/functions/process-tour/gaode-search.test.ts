@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { gaode } from "./gaode-search.ts";
+import { cleanName } from "./gaode-scan.ts";
 
 const limited = () => new Response(JSON.stringify({ info: "CUQPS_HAS_EXCEEDED_THE_LIMIT" }));
 
@@ -9,6 +10,10 @@ afterEach(() => {
 });
 
 describe("gaode 限流处理", () => {
+  it("清洗高德地点名时移除空括号", () => {
+    expect(cleanName("华严寺()")).toBe("华严寺");
+  });
+
   it("限流后按延迟重试并成功", async () => {
     vi.useFakeTimers();
     const fetchMock = vi.spyOn(globalThis, "fetch")

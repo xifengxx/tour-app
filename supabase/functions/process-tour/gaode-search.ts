@@ -62,7 +62,7 @@ export async function gaodeRegionScenics(city: string, bias?: { lng: number; lat
   return (d.pois || [])
     .filter((p: any) => p.location && !/省.*市/.test(p.name || ""))
     .filter((p: any) => !AMUSE_RE.test(p.name || "") && !JUNK_RE.test(p.name || "") && !FACILITY_RE.test(p.name || ""))
-    .map((p: any) => { const [lng, lat] = p.location.split(",").map(Number); return { lng, lat, name: p.name }; });
+    .map((p: any) => { const [lng, lat] = p.location.split(",").map(Number); return { lng, lat, name: cleanName(p.name) }; });
 }
 
 export { AMUSE_RE, FACILITY_RE };

@@ -6,7 +6,7 @@ import { GAODE_KEY, hdr, SUPABASE_URL } from "./config.ts";
 import { cors, deleteRows, json, postRows, setStatus } from "./http.ts";
 import { deepseek, mapLimit } from "./ai.ts";
 import { regeo } from "./gaode-validation.ts";
-import { JUNK_RE } from "./gaode-scan.ts";
+import { gaodeNearbyCulturalPOIs, JUNK_RE } from "./gaode-scan.ts";
 import { AMUSE_RE, FACILITY_RE, gaode, gaodeRegionScenics } from "./gaode-search.ts";
 import { haversineM } from "./geo.ts";
 import { orderStopsGeographic, planRoutes as planRoutesModule } from "./routes.ts";
@@ -54,7 +54,8 @@ function pruneFarPoints(cands: { lng: number; lat: number }[]): { lng: number; l
       if (c) c.locs.push(p);
       else clusters.push({ rep: p, locs: [p] });
     }
-    for (const c of clusters) if (c.locs.length >= 2) pts = [...pts, ...c.locs];
+    // 只有重要点簇才恢复；两个 importance 3 的远距离小庙容易是同名误定位（恒山实测混入大同市区庙宇）。
+    for (const c of clusters) if (c.locs.length >= 2 && c.locs.some(l => (l.importance || 3) >= 4)) pts = [...pts, ...c.locs];
   }
   return pts;
 }
@@ -118,6 +119,7 @@ function regionMatch(geo: { province: string; city: string | string[]; district?
 }
 
 const DEDUP_M = 150;
+const INFRA_RE = /车站$|停车场|售票|游客中心|服务(?:中心|区|站|处)|管理处|管委会|监测|接待|讲解|卫生间|厕所|公交站|地铁站|候车|入口$|出口$|门店|商店|超市|银行|加油站/;
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: cors() });
@@ -182,6 +184,12 @@ Deno.serve(async (req: Request) => {
       } catch { /* AI 提议失败不阻断 */ }
       return { regionScenics, aiAttractions: aiFromPrep };
     })() : Promise.resolve({ regionScenics: [], aiAttractions: [] as string[] });
+    // 核心景区二次提议：第一轮提取偶发只给山顶/山腰点，漏掉半山庙宇和山脚殿宇（恒山实测漏真武庙、三清殿）。
+    // 只问“景区内部/紧邻入口”，避免市域独立景点混入；后续仍必须过高德定位、区域校验和核心距离校验。
+    const corePrep = destName ? deepseek([
+      { role: "system", content: "你是景区动线专家。只返回JSON。只列固定旅游景点/古迹/建筑/山岭/峡口，不确定的不要列。" },
+      { role: "user", content: `列出「${destName}」景区内部及紧邻入口/游客中心的固定游览点，不要列 ${destRegion || "所在地区"} 的其他独立景区。\n必须覆盖：主峰/山顶点、半山自然或文化节点、山脚/入口处的庙宇殿堂宫观祠院、外围峡谷或悬崖建筑。不要餐饮、住宿、停车场、售票处、商店、公交站和商业设施。至少 10-16 个，宁多勿漏，由坐标校验过滤。\nJSON: {"locations":[{"id":"core-en-id","name":"地点","importance":3-5}]}` },
+    ], { temperature: 0 }).catch(() => ({ locations: [] })) : Promise.resolve({ locations: [] });
     // 并行校验（原串行：12 地点 × gaode+regeo 两次往返 ≈ 10-20s，会吃满 60s 预算）
     // v70：并发 6→4，配合 gaode 限流退避，减少 CUQPS 随机丢点（天子山/袁家界实锤）
     const extract = await mapLimit(lr.locations || [], 4, async (l: any) => {
@@ -194,6 +202,10 @@ Deno.serve(async (req: Request) => {
       if (!regionMatch(geo, destRegion)) return { warn: `⚠️ "${l.name}" 坐标(${c.lng},${c.lat})位于 ${geo.province}${geo.city || ''}，不在 ${destRegion}，已跳过`, loc: null as any };
       // Use Gaode's official name if available
       const displayName = c.name && c.name !== l.name ? c.name : l.name;
+      // 首层提取拒绝服务设施；不用 FACILITY_RE，避免误杀“金龙峡栈道”这类真实游览点。
+      if (INFRA_RE.test(displayName) || JUNK_RE.test(displayName) || AMUSE_RE.test(displayName)) {
+        return { warn: `⚠️ "${displayName}" 是服务/商业设施，已跳过`, loc: null as any };
+      }
       return { warn: null, loc: { id: l.id, name: displayName, lat: c.lat, lng: c.lng, elevation: l.elevation || "", importance: l.importance || 3, tags: l.tags || [] } };
     });
     for (const r of extract) {
@@ -243,6 +255,78 @@ Deno.serve(async (req: Request) => {
     locs.push(...deduped);
     const afterExtractDedup = locs.length; // 报告用：地区/子景点并入会在此之后增长，不能拿去算 deduped
     console.log(`${locs.length} locations (${warnings.length} warnings)`);
+
+    // 核心景区补全：只有核心池不足 10 个时才启用，补足山脚/半山关键点。
+    const coreCountBeforeRepair = locs.filter(l => !(l.tags || []).includes("地区景点")).length;
+    if (coreCountBeforeRepair < 10) {
+      const coreSeedList = locs.filter(l => !(l.tags || []).includes("地区景点"));
+      const coreSeed = coreSeedList.slice().sort((a, b) => (b.importance || 3) - (a.importance || 3))[0] || destLoc;
+      const proposed = ((await corePrep).locations || []).filter((l: any) => l?.name).slice(0, 20);
+      const repaired = await mapLimit(proposed, 4, async (l: any, proposalIndex: number) => {
+        const c = await gaode(l.name, destRegion, destLoc || undefined).catch(() => null);
+        if (!c || !c.lat) return null;
+        const n = String(c.name || l.name || "");
+        if (!/庙|殿|宫|道观|祠|寺|塔|阁|窟|洞|亭|坊|碑|石刻|岭|口|峡|栈道/.test(n)) return null;
+        if (/餐|饮|饭|店$|早点|早餐|小吃|停车场|售票|游客中心|观光|索道(?:站|入口|出口)?$|公交站|地铁站|卫生间|厕所|管理处|服务处/.test(n)) return null;
+        if (FACILITY_RE.test(n) || JUNK_RE.test(n) || AMUSE_RE.test(n)) return null;
+        if (locs.some(l2 => String(l2.name) === n || haversineM(l2, c) < DEDUP_M)) return null;
+        if (!coreSeed || haversineM(coreSeed, c) > 5000) return null;
+        const geo = await regeo(c.lng, c.lat);
+        if (!geo || !regionMatch(geo, destRegion)) return null;
+        return {
+          id: `core-repair-${proposalIndex}`, name: n, lat: c.lat, lng: c.lng, elevation: "",
+          importance: /庙|殿|宫|道观|祠/.test(n) ? 4 : 3, tags: ["子景点", "核心补全"],
+          layers: {}, reflection: "", practical: {}, scenic: destName,
+        };
+      });
+      const wantedRepairs = Math.min(10 - coreCountBeforeRepair, 5);
+      let validRepaired = repaired.filter((l): l is any => !!l).slice(0, wantedRepairs);
+      // AI 提议仍可能漏掉高评分庙殿（恒山漏三清殿）。高德周边扫描按评分兜底，
+      // 只补 5km 内的文化类固定景点，避免回到早期“周边扫描污染”的做法。
+      if (validRepaired.length < wantedRepairs && coreSeed) {
+        try {
+          const [nearbyCultural, nearbyNature] = await Promise.all([
+            gaodeNearbyCulturalPOIs(coreSeed.lng, coreSeed.lat, 5000),
+            gaodeNearbyCulturalPOIs(coreSeed.lng, coreSeed.lat, 5000, "风景名胜;旅游景点"),
+          ]);
+          let nearbyCandidates = [
+            ...nearbyCultural,
+            ...nearbyNature.filter(p => /峰|岭|口|峡|栈道|洞|亭|台|谷|岩|石|松|门|府/.test(p.name)),
+          ]
+            .filter(p => {
+              const cultural = /庙|殿|宫|道观|祠|寺|观$/.test(p.name);
+              const natural = /峰|岭|口|峡|栈道|洞|亭|台|谷|岩|石|松|门|府/.test(p.name);
+              return (cultural || natural) && p.rating >= (cultural ? 3.5 : 3.0);
+            })
+            .filter(p => !INFRA_RE.test(p.name) && !JUNK_RE.test(p.name) && !AMUSE_RE.test(p.name))
+            .filter(p => ![...locs, ...validRepaired].some(q => String(q.name) === p.name || haversineM(q, p) < DEDUP_M))
+            .sort((a, b) => {
+              const rank = (n: string) => /庙$|殿$|宫$|祠$/.test(n) ? 3 : /寺$|观$/.test(n) ? 2 : /峰|岭|口|峡|栈道|洞|亭|台|谷|岩|石|松|门|府/.test(n) ? 1 : 0;
+              return rank(b.name) - rank(a.name) || b.rating - a.rating || a.name.length - b.name.length;
+            });
+          const repairNeeded = wantedRepairs - validRepaired.length;
+          // 山地动线的关键“口/岭/峡”节点常被高评分庙殿挤掉，保留一个目的地名前缀的自然节点名额。
+          const naturalMust = nearbyCandidates.find(p => destName && p.name.includes(destName) && /口|岭|峡|栈道/.test(p.name));
+          if (naturalMust) nearbyCandidates = [naturalMust, ...nearbyCandidates.filter(p => p !== naturalMust)];
+          const scannedRepairs = await mapLimit(nearbyCandidates.slice(0, Math.max(repairNeeded * 3, repairNeeded)), 4, async (p, i: number) => {
+            const geo = await regeo(p.lng, p.lat);
+            if (!geo || !regionMatch(geo, destRegion)) return null;
+            return {
+              id: `core-scan-${i}`, name: p.name, lat: p.lat, lng: p.lng, elevation: "",
+              importance: 4, tags: ["子景点", "核心补全", "高德扫描"],
+              layers: {}, reflection: "", practical: {}, scenic: destName,
+            };
+          });
+          for (const l of scannedRepairs.filter((l): l is any => !!l).slice(0, repairNeeded)) {
+            (l as any).sort_order = locs.length;
+            locs.push(l);
+            validRepaired.push(l);
+          }
+        } catch { /* 周边扫描失败时保留 AI 提议结果 */ }
+      }
+      for (const l of validRepaired) { (l as any).sort_order = locs.length; locs.push(l); }
+      if (validRepaired.length) warnings.push(`🏔 核心子景点补全 +${validRepaired.length} 个：${validRepaired.map(l => l.name).join("/")}`);
+    }
 
     // 地区景点补充（确定性）：查询目的地区域知名景点，与核心所有点相距 >5km 的独立景点 ≥3 个
     // → 并入并触发主题游（不依赖 AI 随机判断；如张家界市并入国家森林公园/黄龙洞等）
@@ -455,7 +539,7 @@ Deno.serve(async (req: Request) => {
         for (let attempt = 0; attempt < 2 && routes.length < plans.length; attempt++) {
           const rr = await deepseek([
             { role: "system", content: "你是旅游路线规划师。只返回JSON。" },
-            { role: "user", content: `${destName}路线。**每条路线的站点及其顺序已由系统按地理动线排定，stops 必须严格按给定顺序逐字输出（这是实际徒步顺序，已保证不走回头路），严禁增删替换或调整顺序；文学巡礼线除外（可自由选点与排序）。**\n\n${planText}\n\n要求：\n1. 每条路线按上面的指定站点生成完整行程（从入口/索道进 → 逐点游览 → 出口/索道出）。\n2. narrative 各写 150-300 字完整行程描述：从哪个入口/索道进、每段用什么交通（徒步/索道/观光车）、依次经过哪些地点、从哪里出。narrative 中必须写地点的中文名（如"玉京峰"），严禁写 id 代号。narrative 的游览顺序必须与给定站点顺序一致。\n3. **2日全景游 narrative 必须明确「第1天前山」「第2天后山」各去哪**；主题游写明主题与串联逻辑。\n4. day_label 必须是上面给定的标签（1日精华游/2日全景游/主题游/文学巡礼线）。\n5. 地点少时压缩天数，严禁编造不存在的多日行程。\n6. stops 数组顺序必须与 narrative 中的实际游览顺序一致（入口/索道在前，依次游览，出口/索道在后）；stops 只能从上面指定 id 中逐字复制。\n7. 路线条数必须与上述完全一致（${plans.length} 条），缺一不可。\nJSON: {"routes":[{"day_label":"","title":"","stops":["id1","id2"],"narrative":"完整行程描述"}]}` },
+            { role: "user", content: `${destName}路线。**每条路线的站点及其顺序已由系统按地理动线排定，stops 必须严格按给定顺序逐字输出（这是实际游览顺序，已保证不走回头路），严禁增删替换或调整顺序；文学巡礼线除外（可自由选点与排序）。**\n\n${planText}\n\n要求：\n1. 每条路线按上面的指定站点生成完整行程（从入口/索道进 → 逐点游览 → 出口/索道出）。\n2. narrative 各写 150-300 字完整行程描述：从哪个入口/索道进、每段用什么交通（徒步/索道/观光车）、依次经过哪些地点、从哪里出。narrative 中必须写地点的中文名（如"玉京峰"），严禁写 id 代号。narrative 的游览顺序必须与给定站点顺序一致。山地路线从半山下降到山脚庙宇/游客中心/停车场，或从游客中心前往外围峡谷/悬空景点时，必须写清换乘观光车、摆渡车或专车，不要把长距离位移写成连续徒步。\n3. **2日全景游 narrative 必须明确「第1天前山」「第2天后山」各去哪**；主题游写明主题与串联逻辑。\n4. day_label 必须是上面给定的标签（1日精华游/2日全景游/主题游/文学巡礼线）。\n5. 地点少时压缩天数，严禁编造不存在的多日行程。\n6. stops 数组顺序必须与 narrative 中的实际游览顺序一致（入口/索道在前，依次游览，出口/索道在后）；stops 只能从上面指定 id 中逐字复制。\n7. 路线条数必须与上述完全一致（${plans.length} 条），缺一不可。\nJSON: {"routes":[{"day_label":"","title":"","stops":["id1","id2"],"narrative":"完整行程描述"}]}` },
           ], { temperature: 0.2 });
           // Route stop validation: resolve + 确定性兜底。
           // 注意：不能按数组下标取 plan（AI 返回 routes 的顺序常与 plans 不一致 → 会张冠李戴，

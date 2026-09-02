@@ -44,10 +44,10 @@ export function planRoutes(locs: any[], ctx: { coreScenicName: string; mainSceni
   // 会出现地点已入库（如应县木塔 47km、华严寺 60km）但没有任何路线引用的“孤岛地点”。
   const unifiedRegion60 = clusterRegionPts(locs, corePool).map((c) => pickRep(c, ctx.destName)).filter((l: any) => nearCore(l, REGION_RADIUS));
   const plans: { label: string; title: string; allow: string[] | null }[] = [];
-  plans.push({ label: "1日精华游", title: `${ctx.destName}一日精华游`, allow: corePool.slice(0, 8).map((l) => l.id) });
+  plans.push({ label: "1日精华游", title: `${ctx.destName}一日精华游`, allow: corePool.slice(0, 12).map((l) => l.id) });
   if (mainPool.length) {
-    plans.push({ label: "2日全景游", title: `${ctx.destName}两日全景游`, allow: [...corePool.slice(0, 8).map((l) => l.id), ...mainPool.slice(0, 8).map((l) => l.id)] });
-  } else if (corePool.length >= 8) {
+    plans.push({ label: "2日全景游", title: `${ctx.destName}两日全景游`, allow: [...corePool.slice(0, 12).map((l) => l.id), ...mainPool.slice(0, 8).map((l) => l.id)] });
+  } else if (corePool.length > 10) {
     plans.push({ label: "2日全景游", title: `${ctx.destName}两日全景游`, allow: corePool.slice(0, 14).map((l) => l.id) });
   }
   if (ctx.hasRegionTour && unifiedRegion60.length) {

@@ -8,8 +8,20 @@ describe("planRoutes", () => {
     const locs = Array.from({ length: 9 }, (_, i) => point(`核心${i}`, "核心", [], i + 1));
     const [plan] = planRoutes(locs, { coreScenicName: "核心", mainScenicName: "", destName: "目的地", isNovelBased: false, novelName: "", hasRegionTour: false });
     expect(plan.label).toBe("1日精华游");
-    expect(plan.allow).toHaveLength(8);
-    expect(plan.allow?.[0]).toBe("核心8");
+    expect(plan.allow).toHaveLength(9);
+  expect(plan.allow?.[0]).toBe("核心8");
+  });
+
+  it("9 个核心点且无主景区时不生成重复的两日路线", () => {
+    const locs = Array.from({ length: 9 }, (_, i) => point(`核心${i}`, "核心", [], i + 1));
+    const plans = planRoutes(locs, { coreScenicName: "核心", mainScenicName: "", destName: "目的地", isNovelBased: false, novelName: "", hasRegionTour: false });
+    expect(plans.map(plan => plan.label)).toEqual(["1日精华游"]);
+  });
+
+  it("11 个核心点时保留完整核心动线，不再按 10 个截断", () => {
+    const locs = Array.from({ length: 11 }, (_, i) => point(`核心${i}`, "核心", [], i + 1));
+    const [plan] = planRoutes(locs, { coreScenicName: "核心", mainScenicName: "", destName: "目的地", isNovelBased: false, novelName: "", hasRegionTour: false });
+    expect(plan.allow).toHaveLength(11);
   });
 
   it("文学导览追加文学巡礼线", () => {
