@@ -67,6 +67,31 @@ describe("planRoutes", () => {
     expect(theme?.allow).toContain("华严寺");
   });
 
+  it("景区泛指和店铺、道路名不进入徒步路线", () => {
+    const locs = [
+      point("核心", "核心", [], 5, 113.95, 27.5),
+      point("核心子点", "核心", [], 4, 113.96, 27.51),
+      point("核心子点2", "核心", [], 3, 113.97, 27.49),
+      point("核心子点3", "核心", [], 3, 113.98, 27.52),
+      { ...point("萍乡武功山国家级风景名胜区", "核心", ["景区泛指"], 5) },
+      { ...point("武功山", "核心", ["景区泛指"], 2) },
+      { ...point("明月山大米", "独立", ["地区景点"], 3, 113.85, 27.65) },
+      { ...point("白鹤峰路", "独立", ["地区景点"], 3, 114.05, 27.64) },
+      point("应县木塔", "独立", ["地区景点"], 3, 114.0, 27.5),
+    ];
+    const plans = planRoutes(locs, {
+      coreScenicName: "核心", mainScenicName: "", destName: "武功山",
+      isNovelBased: false, novelName: "", hasRegionTour: true,
+    });
+    for (const plan of plans) {
+      expect(plan.allow).not.toContain("萍乡武功山国家级风景名胜区");
+      expect(plan.allow).not.toContain("武功山");
+      expect(plan.allow).not.toContain("明月山大米");
+      expect(plan.allow).not.toContain("白鹤峰路");
+    }
+    expect(plans.find(plan => plan.label === "主题游")?.allow).toContain("应县木塔");
+  });
+
   it("景区锚点失败且 corePool 为空时，一日线回退到全部非地区景点", () => {
     // 嵩山线上实测：提取结果没有带“景区/风景名胜区”后缀的伞形锚点，导致 corePool=0，
     // 常规一日线因 stops 为空被丢掉，最终只剩文学巡礼线。

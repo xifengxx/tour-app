@@ -15,7 +15,72 @@ export function cleanName(n: string): string {
 }
 
 export const SCAN_RADIUS = 12000;
-export const JUNK_RE = /咖啡|餐厅|奶茶|小吃|甜品|麦当劳|瑞幸|肯德基|烧仙草|汉堡|客栈|民宿|山庄|农家乐|火锅|三下锅|菜馆|私房菜|家常菜|中餐馆|餐馆|乡厨|烧烤|快餐|美食|门店|服务社|宾馆|酒店|超市|银行|加油站|KTV|健身房|旅行社|蜜雪|面包|饮品|烘焙|酸奶|烤面包|速递|快递|饭庄/;
+export const JUNK_RE = /咖啡|餐厅|奶茶|小吃|甜品|麦当劳|瑞幸|肯德基|烧仙草|汉堡|客栈|民宿|山庄|农家乐|火锅|三下锅|菜馆|私房菜|家常菜|中餐馆|餐馆|乡厨|烧烤|快餐|美食|门店|服务社|宾馆|酒店|超市|银行|加油站|KTV|健身房|旅行社|蜜雪|面包|饮品|烘焙|酸奶|烤面包|速递|快递|饭庄|大米|特产|农产品|便利店|商行|购物中心/;
+
+// 地名语义键：同一地标常有“目的地前缀 + 行政/景区后缀 + 地标名”多种写法。
+// 这里不能只做字符串包含（“武功山金顶帐篷”会误配“金顶”），必须先剥掉目的地与
+// 通用景区后缀，只保留真实地标词。空结果表示地点只是目的地伞形名。
+export function landmarkKey(name: unknown, destination?: unknown): string {
+  let value = String(name || "").toLowerCase().replace(/[，。、·—\-_\s（）()《》"]/g, "");
+  const dest = String(destination || "").toLowerCase().replace(/[，。、·—\-_\s（）()《》"]/g, "");
+  if (dest && value.includes(dest)) value = value.replace(dest, "");
+  for (let i = 0; i < 3; i++) {
+    const next = value
+      .replace(/国家级|国家重点|国家|重点|世界|地质公园|森林公园|风景名胜区|风景名胜|风景区|景区|旅游区|公园/g, "")
+      .trim();
+    if (next === value) break;
+    value = next;
+  }
+  return value;
+}
+
+// “武功山”“萍乡武功山国家级风景名胜区”是目的地伞形名，可做地图锚点，
+// 但不应作为徒步站点；“武功山风景名胜区金顶”剥后缀后仍是“金顶”，不是伞形名。
+export function isDestinationUmbrella(name: unknown, destination?: unknown): boolean {
+  const raw = String(name || "");
+  const dest = String(destination || "");
+  // 先移除目的地，再看剩余部分是否只是景区后缀/行政区残留。
+  // 如果先对完整名取 landmarkKey，“武功山风景名胜区金顶”剩余的“金顶”太短，
+  // 会被误判成泛指；这里显式区分“泛指残留”和“真实地标词”。
+  // 泛指名通常是“[城市] + 目的地 + 景区后缀”。只取目的地之后的部分，
+  // “萍乡武功山国家级风景名胜区”归空；“武功山风景名胜区金顶”保留“金顶”。
+  const key = landmarkKey(dest && raw.includes(dest) ? raw.slice(raw.indexOf(dest) + dest.length) : raw, destination);
+  if (!key) return true;
+  return false;
+}
+
+export function semanticDedupLocations(locs: any[], destination?: string): any[] {
+  const semanticScore = (loc: any) => {
+    const tags = loc.tags || [];
+    return (loc.importance || 3)
+      - (tags.includes("路线补全") ? 2 : 0)
+      - (isDestinationUmbrella(loc.name, destination) ? 100 : 0);
+  };
+  const accepted: any[] = [];
+  for (const loc of locs) {
+    if (isDestinationUmbrella(loc.name, destination) && !(loc.tags || []).includes("景区泛指")) {
+      loc.tags = [...(loc.tags || []), "景区泛指"];
+    }
+    const key = landmarkKey(loc.name, destination);
+    if (!key) {
+      accepted.push(loc);
+      continue;
+    }
+    const existingIndex = accepted.findIndex(item => landmarkKey(item.name, destination) === key);
+    if (existingIndex < 0) {
+      accepted.push(loc);
+      continue;
+    }
+    const existing = accepted[existingIndex];
+    if (semanticScore(loc) > semanticScore(existing)) {
+      loc.tags = [...new Set([...(loc.tags || []), ...(existing.tags || [])])];
+      accepted[existingIndex] = loc;
+    } else {
+      existing.tags = [...new Set([...(existing.tags || []), ...(loc.tags || [])])];
+    }
+  }
+  return accepted;
+}
 
 export async function gaodeAroundScenics(lng: number, lat: number, radius = SCAN_RADIUS): Promise<{ lng: number; lat: number; name: string; raw: string }[]> {
   const ATTRACTION = /景|峰|峡|桥|梯|画廊|溪|界|寨|洞|寺|观|湖|湾|山|岭|谷|岩|石|门|瀑|泉|亭|阁|殿|庙|祠|塔|墓|园|池|林|松|海|台|田|索道|温泉|漂流|故居|书院/;

@@ -1,6 +1,6 @@
 import { deepseek } from "../process-tour/ai.ts";
 import { gaode } from "../process-tour/gaode-search.ts";
-import { gaodeAroundScenics, JUNK_RE } from "../process-tour/gaode-scan.ts";
+import { gaodeAroundScenics, JUNK_RE, landmarkKey } from "../process-tour/gaode-scan.ts";
 
 export type RouteEvidence = {
   provider: string;
@@ -213,10 +213,13 @@ export function normalizeResearchResult(destination: string, raw: any, evidenceC
         } | null => {
           const name = stopName(stop);
           if (!name) return null;
-          const nameKey = coordinateKey(name);
-          const matched = evidenceCoords.find(coord =>
-            coord.nameKey.includes(nameKey) || nameKey.includes(coord.nameKey)
-          );
+          // 外部 POI 坐标只允许绑定同一个语义地标。“武功山金顶帐篷”不能因为
+          // 包含“金顶”就把帐篷营地坐标写成山顶点。
+          const coordKeys = new Set([
+            name,
+            ...(Array.isArray(stop?.aliases) ? stop.aliases.map(String) : []),
+          ].map(value => landmarkKey(value, destination)).filter(Boolean));
+          const matched = evidenceCoords.find(coord => coordKeys.has(landmarkKey(coord.nameKey, destination)));
           const lat = Number(stop?.lat ?? matched?.lat);
           const lng = Number(stop?.lng ?? matched?.lng);
           return {

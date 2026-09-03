@@ -6,7 +6,7 @@ import { GAODE_KEY, hdr, SUPABASE_URL } from "./config.ts";
 import { cors, deleteRows, json, postRows, setStatus } from "./http.ts";
 import { deepseek, mapLimit } from "./ai.ts";
 import { regeo } from "./gaode-validation.ts";
-import { gaodeNearbyCulturalPOIs, JUNK_RE } from "./gaode-scan.ts";
+import { gaodeNearbyCulturalPOIs, isDestinationUmbrella, JUNK_RE, semanticDedupLocations } from "./gaode-scan.ts";
 import { AMUSE_RE, FACILITY_RE, gaode, gaodeRegionScenics } from "./gaode-search.ts";
 import { haversineM } from "./geo.ts";
 import { orderStopsGeographic, planRoutes as planRoutesModule } from "./routes.ts";
@@ -378,7 +378,10 @@ Deno.serve(async (req: Request) => {
         if (regionFinal.length >= 3) {
           // v70：名称含目的地名的点（"嵩山国家重点风景名胜区""中国·嵩山世界地质公园"）是目的地自身/别名，
           // 并入后会作为"地区景点"混进主题游 → 剔除；cap 20→12、importance 4→3（不该压过核心点）
-          const final = regionFinal.filter(p => !(destName && (p.name.includes(destName) || destName.includes(p.name))));
+          const final = regionFinal.filter(p =>
+            !(destName && (p.name.includes(destName) || destName.includes(p.name))) &&
+            !isDestinationUmbrella(p.name, destName),
+          );
           if (final.length < 3) { console.log("Region merge skipped: only destination aliases within radius"); }
           else {
           const addN = Math.min(12, final.length);
@@ -455,6 +458,15 @@ Deno.serve(async (req: Request) => {
     // 这类步道/换乘事实；恒山实测会继续产出上下锯齿。
     const trailSeedNames = injectTrailSeeds(locs, destName, coreScenicName, routeKnowledge.trails);
     if (trailSeedNames.length) warnings.push(`🥾 已知步道补全 +${trailSeedNames.length} 个：${trailSeedNames.join("/")}`);
+    // 所有来源（AI、高德、地区合并、子景点扫描、步道补全）都进入同一语义清洗层。
+    // 泛指地点保留在地图数据里但带“景区泛指”标签；路线组成和补全层都不会把它当徒步站。
+    const semanticMerged = semanticDedupLocations(locs, destName);
+    if (semanticMerged.length !== locs.length) {
+      warnings.push(`♻️ 语义去重移除重复地标 ${locs.length - semanticMerged.length} 个`);
+    }
+    locs.length = 0;
+    locs.push(...semanticMerged);
+    locs.forEach((l, i) => (l.sort_order = i));
 
     // 3+4. Content 与 Routes 并行生成（互不依赖：路线只用 locs/id，内容独立按 loc 分批）。
     // 串行 4-6 个 DeepSeek 调用会吃满 Edge Function 60s 预算 → 两者并发，各内部再并行。

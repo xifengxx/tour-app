@@ -1,4 +1,5 @@
 import { haversineM } from "./geo.ts";
+import { landmarkKey } from "./gaode-scan.ts";
 import type { TrailRoute, TrailStop } from "./route-knowledge-types.ts";
 
 export type { TrailRoute, TrailStop } from "./route-knowledge-types.ts";
@@ -178,7 +179,14 @@ export function injectTrailSeeds(
   const added: string[] = [];
   for (const stop of selected.route.stops) {
     if (!stop.required || !stop.lat || !stop.lng) continue;
-    if (locs.some(l => scoreCandidate(l, stop))) continue;
+    // 语义键必须先于模糊名称匹配。“武功山风景名胜区金顶”和“金顶”是同一地标；
+    // 而“武功山金顶帐篷”只是营地，不能因名称包含“金顶”就抢走或复刻金顶站点。
+    const stopKeys = trailAliases(stop).map(alias => landmarkKey(alias, destName)).filter(Boolean);
+    const semanticHit = locs.some(l => {
+      const locKey = landmarkKey(l.name, destName);
+      return !!locKey && stopKeys.includes(locKey);
+    });
+    if (semanticHit || locs.some(l => scoreCandidate(l, stop))) continue;
     const id = `trail-${locs.length}`;
     locs.push({
       id,
@@ -246,7 +254,9 @@ export function applyTrailGroups(locs: any[], destName: string, trails: TrailRou
 // 会退回“全部非地区景点”，一日线又混入少室山。这里给出第一个真实徒步区。
 export function getPrimaryTrailScenicName(destName: string, trails: TrailRoute[] = CURATED_TRAILS): string | null {
   const matchedRoutes = trails.filter(route => route.scenicName && isDestinationTrail(route, destName));
-  return matchedRoutes.length > 1 ? matchedRoutes[0].scenicName! : null;
+  // 单条已知路线也要接管核心池命名。否则“萍乡武功山国家级风景名胜区”这类
+  // 伞形锚点会变成 coreScenicName，而真实步道点反而留在另一个 scenic 池。
+  return matchedRoutes[0]?.scenicName || null;
 }
 
 export function getTrailNotes(destName: string, locs: LocLike[], trails: TrailRoute[] = CURATED_TRAILS) {

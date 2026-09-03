@@ -1,13 +1,15 @@
 import { haversineM } from "./geo.ts";
+import { isDestinationUmbrella, JUNK_RE } from "./gaode-scan.ts";
 import { REGION_RADIUS } from "./anchors.ts";
 
 const CLUSTER_R = 8000;
 const SUB_DEDUP_M = 300;
 // 主景点数量不固定：少于上限时全保留，多于上限时按重要性取前 20 个。
 const CORE_ROUTE_MAX_STOPS = 20;
+const ROAD_RE = /公路$|大道$|路$|街$|巷$/;
 
 function clusterRegionPts(locs: any[], corePool: any[]) {
-  const pts = locs.filter((l: any) => (l.tags || []).includes("地区景点"))
+  const pts = locs.filter((l: any) => (l.tags || []).includes("地区景点") && !(l.tags || []).includes("景区泛指"))
     .filter((p: any) => !corePool.some((c: any) => haversineM(c, p) < SUB_DEDUP_M));
   const clusters: { rep: any; locs: any[] }[] = [];
   for (const p of pts) {
@@ -28,22 +30,27 @@ function pickRep(cluster: { locs: any[] }, destName: string): any {
 }
 
 export function planRoutes(locs: any[], ctx: { coreScenicName: string; mainScenicName: string; destName: string; isNovelBased: boolean; novelName: string; hasRegionTour: boolean }) {
+  const canRoute = (l: any) => !(l.tags || []).includes("景区泛指") && !isDestinationUmbrella(l.name, ctx.destName);
+  const isRouteSite = (l: any) => canRoute(l) && !JUNK_RE.test(String(l.name || "")) && !ROAD_RE.test(String(l.name || ""));
   const isRegion = (l: any) => (l.tags || []).includes("地区景点");
   const byImp = (a: any, b: any) => (b.importance || 3) - (a.importance || 3);
   const corePool = locs.filter((l: any) => !isRegion(l) && l.scenic === ctx.coreScenicName).sort(byImp);
   // 锚点失败时不能产出空一日线：用所有非地区景点兜底，保住“必有常规路线”的底线。
-  const routeCorePool = corePool.length ? corePool : locs.filter((l: any) => !isRegion(l)).sort(byImp);
+  const routeCorePool = (corePool.length ? corePool : locs.filter((l: any) => !isRegion(l)).sort(byImp)).filter(isRouteSite);
   let mainPool = ctx.mainScenicName ? locs.filter((l: any) => l.scenic === ctx.mainScenicName).sort(byImp) : [];
   // 没有真实第二景区时不要用地区景点拼“两日全景”。这类 30km+ 的人文点属于主题游，
   // 混进山岳两日线会产生“下山→纪念馆→结束”的假接驳。
-  const coreCenter = corePool.reduce((acc, l) => ({ lng: acc.lng + l.lng, lat: acc.lat + l.lat }), { lng: 0, lat: 0 });
-  const coreN = corePool.length || 1;
+  // 泛指锚点可以保留在地图里，但不能拉偏核心景区几何中心；否则 60km 主题游筛选会误判。
+  const routeableCore = corePool.filter(canRoute);
+  const centerPool = routeableCore.length ? routeableCore : corePool;
+  const coreCenter = centerPool.reduce((acc, l) => ({ lng: acc.lng + l.lng, lat: acc.lat + l.lat }), { lng: 0, lat: 0 });
+  const coreN = centerPool.length || 1;
   const cc = { lng: coreCenter.lng / coreN, lat: coreCenter.lat / coreN };
   const nearCore = (l: any, maxM: number) => haversineM(cc, l) <= maxM;
-  if (mainPool.length) mainPool = mainPool.filter(l => nearCore(l, 35000));
+  if (mainPool.length) mainPool = mainPool.filter(l => isRouteSite(l) && nearCore(l, 35000));
   // 主题游的覆盖半径应与地区景点合并半径一致（60km）。此前只取 40km，
   // 会出现地点已入库（如应县木塔 47km、华严寺 60km）但没有任何路线引用的“孤岛地点”。
-  const unifiedRegion60 = clusterRegionPts(locs, corePool).map((c) => pickRep(c, ctx.destName)).filter((l: any) => nearCore(l, REGION_RADIUS));
+  const unifiedRegion60 = clusterRegionPts(locs, corePool).map((c) => pickRep(c, ctx.destName)).filter((l: any) => isRouteSite(l) && nearCore(l, REGION_RADIUS));
   const plans: { label: string; title: string; allow: string[] | null }[] = [];
   plans.push({ label: "1日精华游", title: `${ctx.destName}一日精华游`, allow: routeCorePool.slice(0, CORE_ROUTE_MAX_STOPS).map((l) => l.id) });
   if (mainPool.length) {

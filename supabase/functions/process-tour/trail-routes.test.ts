@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { landmarkKey } from "./gaode-scan.ts";
 import { applyTrailGroups, getPrimaryTrailScenicName, getTrailNotes, injectTrailSeeds, orderStopsByTrail } from "./trail-routes.ts";
 
 const loc = (id: string, name: string, lng: number, lat: number) => ({ id, name, lng, lat });
@@ -38,6 +39,22 @@ describe("curated trail routes", () => {
     expect(locs.find(l => l.name === "真武庙")).toMatchObject({ scenic: "北岳恒山", importance: 4 });
   });
 
+  it("已存在同名地标时不再注入语义重复的路线补全点", () => {
+    const locs = [
+      loc("jinding", "武功山风景名胜区金顶", 114.178404, 27.452146),
+      loc("gate", "游客服务中心", 114.15618, 27.46568),
+    ];
+    const trails = [{
+      id: "wugong", aliases: ["武功山"], scenicName: "武功山",
+      stops: [
+        { name: "游客服务中心", required: true },
+        { name: "金顶", aliases: ["武功山金顶"], lat: 27.47809, lng: 114.1356, required: true },
+      ],
+    }];
+    expect(injectTrailSeeds(locs, "武功山", "武功山", trails as any)).toEqual([]);
+    expect(locs.filter(l => landmarkKey(l.name, "武功山") === "金顶")).toHaveLength(1);
+  });
+
   it("匹配到多条真实站点时提供真实动线提示；未知目的地回退空结果", () => {
     const locs = [
       loc("gate", "北岳恒山", 113.727792, 39.66954),
@@ -45,6 +62,14 @@ describe("curated trail routes", () => {
     ];
     expect(getTrailNotes("北岳恒山", locs)).toContain("三清殿");
     expect(orderStopsByTrail(["gate", "tianfengling"], locs, null, "无名小山")).toEqual([]);
+  });
+
+  it("单条已知路线也能提供核心景区名，避免伞形锚点抢占核心池", () => {
+    const trails = [{
+      id: "wugong", aliases: ["武功山"], scenicName: "武功山",
+      stops: [{ name: "石鼓寺" }, { name: "中庵索道" }, { name: "金顶" }],
+    }];
+    expect(getPrimaryTrailScenicName("武功山", trails as any)).toBe("武功山");
   });
 
   it("嵩山双山线路将少室山景点分到独立景区池，而不是混入一日爬线", () => {

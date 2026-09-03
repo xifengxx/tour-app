@@ -60,6 +60,20 @@ describe("route research", () => {
     expect(result?.trails[0].stops[3].required).toBe(false);
   });
 
+  it("相似但语义不同的外部 POI 不能冒充路线点坐标", () => {
+    const result = normalizeResearchResult("武功山", {
+      trails: [{
+        aliases: ["武功山"],
+        stops: [{ name: "金顶" }, { name: "武功山金顶" }],
+        evidence: ["1. 武功山金顶帐篷 @27.47809,114.13560"],
+      }],
+    }, 1);
+    expect(result?.trails[0].stops[0].lat).toBeUndefined();
+    expect(result?.trails[0].stops[0].lng).toBeUndefined();
+    expect(result?.trails[0].stops[1].lat).toBeUndefined();
+    expect(result?.trails[0].stops[1].lng).toBeUndefined();
+  });
+
   it("提示词要求引用证据并限制最高置信度", () => {
     const prompt = buildResearchPrompt("北岳恒山", "山西省大同市", { lng: 113.73, lat: 39.67 }, [
       { provider: "wikipedia", title: "恒山", text: "恒山主峰天峰岭。", url: "https://example.com" },
