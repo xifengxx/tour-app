@@ -10,7 +10,7 @@ import { gaodeNearbyCulturalPOIs, JUNK_RE } from "./gaode-scan.ts";
 import { AMUSE_RE, FACILITY_RE, gaode, gaodeRegionScenics } from "./gaode-search.ts";
 import { haversineM } from "./geo.ts";
 import { orderStopsGeographic, planRoutes as planRoutesModule } from "./routes.ts";
-import { applyTrailGroups, getTrailNotes, injectTrailSeeds, orderStopsByTrail } from "./trail-routes.ts";
+import { applyTrailGroups, getPrimaryTrailScenicName, getTrailNotes, injectTrailSeeds, orderStopsByTrail } from "./trail-routes.ts";
 import { attachScenicTags as attachScenicTagsModule, buildAnchors as buildAnchorsModule, scanAnchorSubs as scanAnchorSubsModule } from "./anchors.ts";
 import { REGION_RADIUS, SUB_DEDUP_M, SUB_TOTAL_CAP } from "./anchors.ts";
 
@@ -435,9 +435,10 @@ Deno.serve(async (req: Request) => {
     const coreAnchor = anchors.find(a => destName && (a.name === destName || a.scenicName === destName))
       || anchors.find(a => destName && (a.name.includes(destName) || destName.includes(a.name)))
       || anchors[0] || null;
-    const coreScenicName = coreAnchor?.scenicName || (destName || "");
     const trailGroupNames = applyTrailGroups(locs, destName);
     if (trailGroupNames.length) warnings.push(`🥾 已知多山线路分区：${trailGroupNames.join("/")}`);
+    const primaryTrailScenicName = getPrimaryTrailScenicName(destName);
+    const coreScenicName = primaryTrailScenicName || coreAnchor?.scenicName || (destName || "");
     // 主景区须为真实景区（≥2 个子点）。"独立"是兜底标签不是景区——若让它当主景区，2日 day-2
     // 会被要求"只含独立景区站点"，把九寨沟/四姑娘山等远点全塞进来。无主景区时留空，2日 day-2 继续覆盖核心景区。
     const countByScenic = new Map<string, number>();

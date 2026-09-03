@@ -99,7 +99,7 @@ export const CURATED_TRAILS: TrailRoute[] = [
       { name: "老母洞" },
       { name: "中岳行宫" },
       { name: "三皇口" },
-      { name: "峻极峰" },
+      { name: "峻极峰", aliases: ["太室山", "太室山主峰"] },
     ],
     notes: "太室山经典线：嵩阳书院→老母洞→中岳行宫→三皇口→峻极峰。",
   },
@@ -212,7 +212,8 @@ export function injectTrailSeeds(locs: any[], destName: string, coreScenicName: 
 // 这里不生成路线，只把已有真实站点归到策展景区池；路线组成仍交给 planRoutes。
 export function applyTrailGroups(locs: any[], destName: string): string[] {
   const changed: string[] = [];
-  for (const route of CURATED_TRAILS) {
+  const matchedRoutes = CURATED_TRAILS.filter(route => route.scenicName && isDestinationTrail(route, destName));
+  for (const route of matchedRoutes) {
     if (!route.scenicName || !isDestinationTrail(route, destName)) continue;
     const { matches } = matchStops(route, locs);
     if (matches.size < 2) continue;
@@ -223,8 +224,38 @@ export function applyTrailGroups(locs: any[], destName: string): string[] {
         changed.push(`${loc.name}→${route.scenicName}`);
       }
     }
+    // AI/高德可能返回“少室山碑”这类未收录但语义明确的名称。按景区名做关键词兜底，
+    // 避免少室山侧的点再落回嵩山核心池，混入太室山一日爬线。
+    for (const loc of locs) {
+      const locName = normalizeName(loc.name);
+      if (!locName || !locName.includes(normalizeName(route.scenicName!))) continue;
+      if (loc.scenic !== route.scenicName) {
+        loc.scenic = route.scenicName;
+        changed.push(`${loc.name}→${route.scenicName}`);
+      }
+    }
+  }
+  // 双山目的地里，未带“太室山/少室山”字样的核心人文点仍属于第一个主徒步区。
+  // 若不归组，它们会留在“嵩山”伞形池，把一日线变成太室山+少室山混合路线。
+  if (matchedRoutes.length > 1) {
+    const primaryScenicName = matchedRoutes[0].scenicName!;
+    const groupedIds = new Set(locs.filter(l => matchedRoutes.some(r => l.scenic === r.scenicName)).map(l => l.id));
+    for (const loc of locs) {
+      if (groupedIds.has(loc.id) || (loc.tags || []).includes("地区景点")) continue;
+      if (loc.scenic !== primaryScenicName) {
+        loc.scenic = primaryScenicName;
+        changed.push(`${loc.name}→${primaryScenicName}`);
+      }
+    }
   }
   return changed;
+}
+
+// 双山目的地不能再用“嵩山”这个伞形景区当天池，否则 planRoutes 在核心池为空时
+// 会退回“全部非地区景点”，一日线又混入少室山。这里给出第一个真实徒步区。
+export function getPrimaryTrailScenicName(destName: string): string | null {
+  const matchedRoutes = CURATED_TRAILS.filter(route => route.scenicName && isDestinationTrail(route, destName));
+  return matchedRoutes.length > 1 ? matchedRoutes[0].scenicName! : null;
 }
 
 export function getTrailNotes(destName: string, locs: LocLike[]) {
@@ -232,9 +263,9 @@ export function getTrailNotes(destName: string, locs: LocLike[]) {
 }
 
 export function orderStopsByTrail(stopIds: string[], locs: any[], entrance: { lng: number; lat: number } | null | undefined, destName: string): string[] {
+  const byId = new Map(locs.map(l => [l.id, l]));
   const selected = selectTrail(destName, locs.filter(l => stopIds.includes(l.id)));
   if (!selected) return [];
-  const byId = new Map(locs.map(l => [l.id, l]));
   const routeOrder = selected.route.stops
     .map((_, index) => ({ id: selected.matches.get(index)?.id, index }))
     .filter((hit): hit is { id: string; index: number } => !!hit.id && stopIds.includes(hit.id));
@@ -256,6 +287,32 @@ export function orderStopsByTrail(stopIds: string[], locs: any[], entrance: { ln
     for (const uid of near) {
       ordered.push(uid);
       unmatched.splice(unmatched.indexOf(uid), 1);
+    }
+  }
+  // 嵩山等双山目的地的 2日线可能同时包含两个策展段。若仍按单条线排序，
+  // 会产生“少林寺→太室山→塔林”这种跨山往返；这里先把同一 trail 匹配到的段
+  // 排好，再按 stopIds 的原始出现顺序拼接（planRoutes 中通常就是“核心段+主景区段”）。
+  if (routeOrder.length && routeOrder.length < stopIds.length) {
+    const groups: { scenicName?: string; ids: string[] }[] = [];
+    const assigned = new Set<string>();
+    for (const route of CURATED_TRAILS) {
+      if (!isDestinationTrail(route, destName)) continue;
+      const { matches } = matchStops(route, locs.filter(l => stopIds.includes(l.id) && !assigned.has(l.id)));
+      if (matches.size < 2) continue;
+      const ids = route.stops
+        .map((_, index) => matches.get(index)?.id)
+        .filter((id): id is string => !!id && stopIds.includes(id) && !assigned.has(id));
+      const routeIds = new Set(ids);
+      for (const id of stopIds.filter(id => !assigned.has(id) && !routeIds.has(id) && byId.get(id)?.scenic === route.scenicName)) ids.push(id);
+      if (!ids.length) continue;
+      for (const id of ids) assigned.add(id);
+      groups.push({ scenicName: route.scenicName, ids });
+    }
+    if (groups.length > 1) {
+      const remaining = stopIds.filter(id => !assigned.has(id));
+      // CURATED_TRAILS 已按“太室山在前、少室山在后”编排，避免按 stopIds 首个匹配
+      // 又把少室山段插到太室山段前面。
+      return [...groups.flatMap(group => group.ids), ...remaining];
     }
   }
   for (const uid of unmatched) ordered.push(uid);

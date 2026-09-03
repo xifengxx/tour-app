@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyTrailGroups, getTrailNotes, injectTrailSeeds, orderStopsByTrail } from "./trail-routes.ts";
+import { applyTrailGroups, getPrimaryTrailScenicName, getTrailNotes, injectTrailSeeds, orderStopsByTrail } from "./trail-routes.ts";
 
 const loc = (id: string, name: string, lng: number, lat: number) => ({ id, name, lng, lat });
 
@@ -53,10 +53,37 @@ describe("curated trail routes", () => {
       { ...loc("shaolin", "少林寺", 112.941373, 34.507029), scenic: "嵩山" },
       { ...loc("talin", "塔林", 112.937188, 34.503335), scenic: "嵩山" },
       { ...loc("sanhuangzhai", "三皇寨", 112.952063, 34.473496), scenic: "嵩山" },
+      { ...loc("shaoshiStele", "少室山碑", 112.938088, 34.489904), scenic: "嵩山" },
       { ...loc("taishi", "太室山", 113.042706, 34.491078), scenic: "嵩山" },
     ];
     const changed = applyTrailGroups(locs, "嵩山");
-    expect(changed).toHaveLength(3);
-    expect(locs.filter(l => l.scenic === "少室山").map(l => l.name)).toEqual(["少林寺", "塔林", "三皇寨"]);
+    expect(changed).toHaveLength(6);
+    expect(locs.filter(l => l.scenic === "少室山").map(l => l.name)).toEqual(["少林寺", "塔林", "三皇寨", "少室山碑"]);
+  });
+
+  it("嵩山一日线只用太室山池，两日线按太室山段+少室山段拼接", () => {
+    const locs = [
+      { ...loc("shenzhou", "神州第一圣地", 113.024861, 34.494863), scenic: "嵩山", tags: [] },
+      { ...loc("zhongyue", "中岳庙", 113.074125, 34.457862), scenic: "嵩山", tags: [] },
+      { ...loc("songyang", "嵩阳书院", 113.033552, 34.480289), scenic: "嵩山", tags: [] },
+      { ...loc("taishi", "太室山", 113.042706, 34.491078), scenic: "嵩山", tags: [] },
+      { ...loc("songyueta", "嵩岳寺塔", 113.022266, 34.500246), scenic: "嵩山", tags: [] },
+      { ...loc("guanxing", "观星台", 113.146903, 34.400929), scenic: "嵩山", tags: [] },
+      { ...loc("huishan", "会善寺", 113.005234, 34.491258), scenic: "嵩山", tags: [] },
+      { ...loc("shaolin", "少林寺", 112.941373, 34.507029), scenic: "嵩山", tags: [] },
+      { ...loc("talin", "塔林", 112.937188, 34.503335), scenic: "嵩山", tags: [] },
+      { ...loc("shaoshiStele", "少室山碑", 112.938088, 34.489904), scenic: "嵩山", tags: [] },
+      { ...loc("sanhuangzhai", "三皇寨", 112.952063, 34.473496), scenic: "嵩山", tags: [] },
+    ];
+    applyTrailGroups(locs, "嵩山");
+    const coreScenicName = getPrimaryTrailScenicName("嵩山");
+    expect(coreScenicName).toBe("太室山");
+    const oneDay = locs.filter(l => l.scenic === coreScenicName).map(l => l.id);
+    expect(oneDay).not.toContain("shaoshiStele");
+
+    const twoDayIds = [...oneDay, "shaolin", "talin", "shaoshiStele", "sanhuangzhai"];
+    const ordered = orderStopsByTrail(twoDayIds, locs, null, "嵩山");
+    expect(ordered.slice(0, oneDay.length)).toEqual(expect.arrayContaining(oneDay));
+    expect(ordered.slice(oneDay.length)).toEqual(["shaolin", "talin", "sanhuangzhai", "shaoshiStele"]);
   });
 });
