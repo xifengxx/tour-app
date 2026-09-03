@@ -12,7 +12,7 @@ import { haversineM } from "./geo.ts";
 import { orderStopsGeographic, planRoutes as planRoutesModule } from "./routes.ts";
 import { applyTrailGroups, getPrimaryTrailScenicName, getTrailNotes, injectTrailSeeds, orderStopsByTrail } from "./trail-routes.ts";
 import { loadOrResearchRouteKnowledge } from "./route-knowledge.ts";
-import { buildRouteLegs, planGraphStops, routeGraphIssues, routeGraphNotes, routeLegsText } from "./route-graph.ts";
+import { buildRouteLegs, estimateRouteDuration, planGraphStops, routeGraphIssues, routeGraphNotes, routeLegsText } from "./route-graph.ts";
 import { attachScenicTags as attachScenicTagsModule, buildAnchors as buildAnchorsModule, scanAnchorSubs as scanAnchorSubsModule } from "./anchors.ts";
 import { REGION_RADIUS, SUB_DEDUP_M, SUB_TOTAL_CAP } from "./anchors.ts";
 
@@ -653,9 +653,14 @@ Deno.serve(async (req: Request) => {
     // v80：路线图校验。这里不吞掉结构问题——跨区往返、步道顺序回退、长距离徒步
     // 都写入 process_report；只有主题游允许长距离接驳（它本来就串联 60km 内独立景点）。
     let routeGraphIssueCount = 0;
+    let routeDurationMinutes = 0;
     for (const route of routes) {
+      const legs = buildRouteLegs(route.stops, dbLocs, routeKnowledge);
+      route.legs = legs;
+      routeDurationMinutes += estimateRouteDuration(legs, route.stops.length).totalMinutes;
       const issues = routeGraphIssues(route.stops, dbLocs, routeKnowledge, {
         allowLongTransfers: route.day_label === "主题游",
+        dayLabel: route.day_label,
       });
       routeGraphIssueCount += issues.length;
       for (const issue of issues) warnings.push(`🧭 路线「${route.day_label}」${issue.message}`);
@@ -680,7 +685,7 @@ Deno.serve(async (req: Request) => {
       { layer_key: "folklore", name: "民间传说", icon: "🐉", color: "#27ae60", sort_order: 2 },
       { layer_key: "customs", name: "地域文化", icon: "🎭", color: "#2980b9", sort_order: 3 },
     ].map(ly => ({ ...ly, tour_id: tourId })));
-    await postRows("routes", routes.map(r => ({ id: r.id, tour_id: tourId, day_label: r.day_label, title: r.title, stops: r.stops, narrative: r.narrative, sort_order: r.sort_order })));
+    await postRows("routes", routes.map(r => ({ id: r.id, tour_id: tourId, day_label: r.day_label, title: r.title, stops: r.stops, legs: r.legs || [], narrative: r.narrative, sort_order: r.sort_order })));
 
     // Quality report
     const report = {
@@ -689,7 +694,7 @@ Deno.serve(async (req: Request) => {
       plans: plans.length, // v70.3 诊断：计划路线数 vs 实际路线数
       corePool: corePoolSize, mainScenic: mainScenicName, coreScenic: coreScenicName,
       routeKnowledge: { source: routeKnowledge.source, confidence: routeKnowledge.confidence, destination: routeKnowledge.destinationName },
-      routeGraph: { checked: routes.length, issues: routeGraphIssueCount },
+      routeGraph: { checked: routes.length, issues: routeGraphIssueCount, estimatedMinutes: Math.round(routeDurationMinutes) },
       warnings: warnings.length > 0 ? warnings : undefined,
       rejected: (lr.locations || []).length - extractedBeforeDedup, // regeo/坐标校验被拒
       deduped: extractedBeforeDedup - afterExtractDedup, // 坐标去重数（在地区/子景点并入前计算）

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildRouteGraph, buildRouteLegs, planGraphStops, routeGraphSegments, routeGraphIssues, routeGraphNotes } from "./route-graph.ts";
+import { buildRouteGraph, buildRouteLegs, estimateRouteDuration, planGraphStops, routeGraphSegments, routeGraphIssues, routeGraphNotes } from "./route-graph.ts";
 import type { DestinationRouteKnowledge } from "./route-knowledge-types.ts";
 import { CURATED_TRAILS, orderStopsByTrail } from "./trail-routes.ts";
 
@@ -38,6 +38,18 @@ describe("route graph", () => {
     expect(graph.edges.get("入口|中亭")?.mode).toBe("walk");
     expect(graph.edges.get("主峰|南门")?.mode).toBe("shuttle");
     expect(graph.edges.get("南门|主峰")?.mode).toBe("shuttle");
+  });
+
+  it("显式交通边强制覆盖同向的默认徒步边", () => {
+    const overrideKnowledge: DestinationRouteKnowledge = {
+      ...knowledge,
+      edges: [
+        { from: "入口", to: "中亭", mode: "cableway", duration: "8分钟" },
+        ...knowledge.edges,
+      ],
+    };
+    const graph = buildRouteGraph(overrideKnowledge);
+    expect(graph.edges.get("入口|中亭")).toMatchObject({ mode: "cableway", duration: "8分钟" });
   });
 
   it("发现同一条步道中的顺序回退", () => {
@@ -116,6 +128,34 @@ describe("route graph", () => {
     expect(planGraphStops(["gate"], [{ id: "gate", name: "入口" }], { ...knowledge, trails: [] })).toEqual([]);
     const legs = buildRouteLegs(["入口", "no-coord"], [loc("入口", "入口", 116, 39), loc("no-coord", "无名点")], knowledge);
     expect(legs[0]).toMatchObject({ fromId: "入口", toId: "no-coord", mode: "walk" });
+  });
+
+  it("耗时估算优先使用资料时长，并累计停留时间", () => {
+    const duration = estimateRouteDuration([
+      { fromId: "a", toId: "b", fromName: "A", toName: "B", mode: "walk", duration: "1小时20分钟" },
+      { fromId: "b", toId: "c", fromName: "B", toName: "C", mode: "shuttle", distanceM: 8000 },
+    ], 5);
+    expect(duration).toEqual({
+      movementMinutes: 105,
+      visitMinutes: 80,
+      totalMinutes: 185,
+      estimatedLegs: 1,
+    });
+  });
+
+  it("发现每日行程超过容量上限", () => {
+    const locs = [
+      loc("a", "入口", 116.0, 39.0),
+      loc("b", "山腰", 116.1, 39.0),
+      loc("c", "山顶", 116.2, 39.0),
+    ];
+    const issues = routeGraphIssues(locs.map(l => l.id), locs, {
+      ...knowledge,
+      edges: [],
+    }, { dayLabel: "1日精华游", maxDailyHours: 1 });
+    expect(issues).toEqual(expect.arrayContaining([
+      expect.objectContaining({ type: "long-day" }),
+    ]));
   });
 
   it("真实恒山策展动线不触发路线图误报", () => {

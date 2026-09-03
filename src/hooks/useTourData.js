@@ -95,6 +95,7 @@ export function normalizeTour(row) {
     day: r.day_label,
     title: r.title,
     stops: r.stops,
+    legs: r.legs || [],
     narrative: r.narrative,
   }));
 

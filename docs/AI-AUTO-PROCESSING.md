@@ -141,6 +141,7 @@ npx supabase functions deploy process-tour --project-ref qxunedraoviaonjdanag --
 | 2026-09-03 v78 | 新增 `destination_route_knowledge` 结构化路线知识层：`zones/trails/edges` 存数据库，`process-tour` 启动时按目的地别名加载；命中高置信数据时用数据库路线，未命中回退内置 `CURATED_TRAILS`。处理报告记录 `routeKnowledge.source/confidence/destination`。这是后续自动搜索和 route-research 写入的落库地基。 |
 | 2026-09-03 v79 | 新增自动路线研究：山岳目的地缺少数据库知识时，先抓取 Wikipedia/OSM/高德证据，再抽取 `zones/trails/edges` 并以 `auto-research` 写入。自动研究置信度上限 0.80，不会覆盖人工策展的 0.90+ 数据；研究失败仍回退内置数据。 |
 | 2026-09-03 v80 | 新增路线图校验：`trails` 连续站点生成默认徒步边，显式 `edges` 可表达索道/观光车/专车。写库前检查步道顺序回退、跨徒步区交错、>8km 长距离位移是否缺少非徒步衔接；结果写入 `process_report.routeGraph`，并给路线 narrative 提供交通衔接提示。 |
+| 2026-09-03 v82 | 路线图交通分段落库：显式 `edges` 强制覆盖同向默认徒步边；`buildRouteLegs` 为每条路线生成结构化 `legs` 并写入 `routes.legs`；详情页和 AI 使用同一份交通分段。新增每日容量校验，按资料时长或保守默认速度累计移动/停留时间，超过日数 × 10 小时时写入 `long-day` 告警。 |
 
 ## 测试记录
 
@@ -280,11 +281,12 @@ curl -X POST 'https://qxunedraoviaonjdanag.supabase.co/functions/v1/route-resear
 - 反向查询也会建边，方便校验倒序或下山动线；
 - `trail` 顺序仍保留方向语义，用于检测顺序回退。
 
-写库前会检查三类结构问题：
+写库前会检查四类结构问题：
 
 1. **步道顺序回退**：同一条已知步道的站点出现 A→C→B；
 2. **跨徒步区交错**：北线→南线→北线这类乱跳；
-3. **长距离徒步误判**：相邻点相距超过 8km，但没有索道、观光车、专车等非徒步衔接。
+3. **长距离徒步误判**：相邻点相距超过 8km，但没有索道、观光车、专车等非徒步衔接；
+4. **每日容量超载**：按资料时长或保守默认速度累计移动时间，加上每站约 20 分钟停留估算；超过 `日数 × 10 小时` 时写 `long-day` 告警。
 
 主题游允许长距离接驳，因为它本来就会串联核心景区和 60km 内的独立景点。校验结果不会中断生成，但会写入 `process_report.routeGraph` 和 `warnings`，便于发现数据源质量问题。
 
@@ -295,6 +297,7 @@ curl -X POST 'https://qxunedraoviaonjdanag.supabase.co/functions/v1/route-resear
 1. `routeGraphSegments`：把站点归到完整徒步区段，段内按已知 trail 顺序推进；未匹配近点归入 5km 内区段，远点保留在末尾等待接驳；
 2. `planGraphStops`：展开所有区段，形成“太室山整段 → 少室山整段”这类稳定站序；
 3. `buildRouteLegs`：为相邻站生成交通 leg。显式 `edges` 优先；没有资料时，>60km 推断为专车/出租车，>8km 推断为观光车/摆渡车，其余默认徒步；
-4. `routeLegsText`：把 legs 转成给 AI 的固定衔接约束，写进路线 prompt。AI 只负责叙述这些衔接，不能自行发明站点顺序或交通方式。
+4. `routeLegsText`：把 legs 转成给 AI 的固定衔接约束，写进路线 prompt。AI 只负责叙述这些衔接，不能自行发明站点顺序或交通方式；
+5. 处理完成后把每条路线自己的 `legs` 写入 `routes.legs`，详情页读取同一份数据展示交通分段。
 
 这层不做路线组成决策，也不改变站点集合；研究知识不足时仍回退 trail 排序，再回退地理最近邻。

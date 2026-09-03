@@ -22,7 +22,7 @@ export type RouteGraph = {
 };
 
 export type RouteGraphIssue = {
-  type: "zone-interleaved" | "trail-backtrack" | "long-transfer";
+  type: "zone-interleaved" | "trail-backtrack" | "long-transfer" | "long-day";
   message: string;
 };
 
@@ -30,6 +30,8 @@ export type RouteGraphOptions = {
   // 主题游本来就串联核心景区和 60km 内的独立景点；长距离换乘是预期行为。
   allowLongTransfers?: boolean;
   longTransferM?: number;
+  dayLabel?: string;
+  maxDailyHours?: number;
 };
 
 export type RouteGraphSegment = {
@@ -48,6 +50,13 @@ export type RouteLeg = {
   duration?: string;
   note?: string;
   distanceM?: number;
+};
+
+export type RouteDurationEstimate = {
+  movementMinutes: number;
+  visitMinutes: number;
+  totalMinutes: number;
+  estimatedLegs: number;
 };
 
 const MODE_TEXT: Record<RouteEdge["mode"], string> = {
@@ -75,10 +84,10 @@ function ensureNode(graph: RouteGraph, name: string, stop?: { lat?: number; lng?
   return key;
 }
 
-function addEdge(graph: RouteGraph, from: string, to: string, edge: RouteEdge) {
+function addEdge(graph: RouteGraph, from: string, to: string, edge: RouteEdge, force = false) {
   if (!from || !to || from === to) return;
   const key = `${from}|${to}`;
-  if (!graph.edges.has(key)) graph.edges.set(key, edge);
+  if (force || !graph.edges.has(key)) graph.edges.set(key, edge);
   // 山地资料里的步道经常只写单向后检索时需要反查；真实方向由 trail 顺序保留。
   const reverseKey = `${to}|${from}`;
   if (!graph.edges.has(reverseKey)) {
@@ -119,7 +128,9 @@ export function buildRouteGraph(knowledge: DestinationRouteKnowledge): RouteGrap
   for (const edge of knowledge.edges) {
     const from = ensureNode(graph, edge.from);
     const to = ensureNode(graph, edge.to);
-    addEdge(graph, from, to, edge);
+    // trails 先生成默认 walk 边；这里必须强制覆盖，否则显式索道/观光车/专车
+    // 会在同向同名边上被默认徒步边挡住。
+    addEdge(graph, from, to, edge, true);
   }
   return graph;
 }
@@ -327,6 +338,20 @@ export function routeGraphIssues(
     }
   }
 
+  // 4. 每日容量：2日全景游整条 stops 无法在数据库里拆出“第1/2天”，
+  // 所以先按标签日数放大阈值；只要总耗时除以天数后仍超限就告警。
+  const legs = buildRouteLegs(stopIds, locs, knowledge);
+  const duration = estimateRouteDuration(legs, stopIds.length);
+  const dayMatch = String(options.dayLabel || "").match(/(\d+)\s*日/);
+  const days = dayMatch ? Math.max(1, Number(dayMatch[1])) : 1;
+  const dailyHours = options.maxDailyHours ?? 10;
+  if (duration.totalMinutes > days * dailyHours * 60) {
+    issues.push({
+      type: "long-day",
+      message: `预计全程 ${Math.round(duration.totalMinutes / 60 * 10) / 10} 小时（移动 ${Math.round(duration.movementMinutes / 60 * 10) / 10}h + 停留 ${Math.round(duration.visitMinutes / 60 * 10) / 10}h），超过 ${days} 日 × ${dailyHours} 小时容量`,
+    });
+  }
+
   const seen = new Set<string>();
   return issues.filter(issue => {
     const key = `${issue.type}|${issue.message}`;
@@ -403,4 +428,38 @@ export function routeLegsText(legs: RouteLeg[]) {
     const detail = [mode, leg.duration, leg.note].filter(Boolean).join("，");
     return `${leg.fromName} → ${leg.toName}：${detail}`;
   }).join("；");
+}
+
+// 粗粒度行程容量校验：优先使用资料中的 duration；缺资料时用交通方式的保守默认速度。
+// 停留时间按每站 20 分钟估算，只用于发现“一天塞 20 站”这类明显超载，不假装是精确 ETA。
+export function estimateRouteDuration(legs: RouteLeg[], stopCount: number): RouteDurationEstimate {
+  let movementMinutes = 0;
+  let estimatedLegs = 0;
+  for (const leg of legs) {
+    const durationText = String(leg.duration || "").trim();
+    let minutes: number | null = null;
+    const hourMatch = durationText.match(/(\d+(?:\.\d+)?)\s*(?:小时|hr|hour)/i);
+    const minuteMatch = durationText.match(/(\d+(?:\.\d+)?)\s*(?:分钟|min|minute)/i);
+    if (hourMatch) minutes = Number(hourMatch[1]) * 60;
+    if (minuteMatch) minutes = (minutes || 0) + Number(minuteMatch[1]);
+
+    const km = (leg.distanceM || 0) / 1000;
+    if (minutes == null) {
+      estimatedLegs++;
+      if (leg.mode === "walk") minutes = Math.max(5, km * 18);
+      else if (leg.mode === "cableway") minutes = Math.max(8, km * 3 + 8);
+      else if (leg.mode === "shuttle") minutes = Math.max(8, km * 2.5 + 5);
+      else if (leg.mode === "car") minutes = Math.max(8, km * 1.8 + 5);
+      else minutes = 15;
+    }
+    movementMinutes += Math.max(0, Math.round(minutes));
+  }
+  const visitMinutes = Math.max(0, stopCount - 1) * 20;
+  const totalMinutes = movementMinutes + visitMinutes;
+  return {
+    movementMinutes,
+    visitMinutes,
+    totalMinutes,
+    estimatedLegs,
+  };
 }

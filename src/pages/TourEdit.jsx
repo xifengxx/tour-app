@@ -300,7 +300,8 @@ export default function TourEdit() {
         const { error } = await supabase.from('routes').insert(
           routes.map((r, i) => ({
             id: r.id, tour_id: uuid, day_label: r.day,
-            title: r.title, stops: r.stops, narrative: r.narrative || '', sort_order: i,
+            title: r.title, stops: r.stops, legs: r.legs || [],
+            narrative: r.narrative || '', sort_order: i,
           }))
         );
         if (error) throw error;

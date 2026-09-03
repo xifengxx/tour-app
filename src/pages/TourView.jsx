@@ -366,6 +366,13 @@ export default function TourView() {
                 <p className="font-kai text-xs text-muted-foreground leading-relaxed bg-background rounded-lg p-3 border-l-2 border-dai max-h-24 overflow-y-auto">{activeRoute.narrative}</p>
               </div>
             )}
+            {activeRoute?.legs?.length > 0 && (
+              <div className="px-4 pb-2">
+                <p className="text-[11px] leading-relaxed text-muted-foreground bg-background rounded-lg p-2 border border-border/60 max-h-16 overflow-y-auto">
+                  <span className="font-semibold text-foreground/70">交通分段：</span>{routeLegsText(activeRoute.legs)}
+                </p>
+              </div>
+            )}
             {/* Location strip · 壹贰叁编号 — 右缘渐变提示可横向滚动查看更多 */}
             <div className="flex gap-2 px-4 pb-2 overflow-x-auto"
                  style={{ WebkitMaskImage: 'linear-gradient(to right, black calc(100% - 28px), transparent)', maskImage: 'linear-gradient(to right, black calc(100% - 28px), transparent)' }}>
@@ -427,3 +434,4 @@ export default function TourView() {
     </div>
   );
 }
+import { routeLegsText } from '../lib/routeLegs.js';
