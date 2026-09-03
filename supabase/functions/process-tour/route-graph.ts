@@ -32,6 +32,24 @@ export type RouteGraphOptions = {
   longTransferM?: number;
 };
 
+export type RouteGraphSegment = {
+  zoneId: string;
+  zoneName: string;
+  trailIds: string[];
+  stopIds: string[];
+};
+
+export type RouteLeg = {
+  fromId: string;
+  toId: string;
+  fromName: string;
+  toName: string;
+  mode: RouteEdge["mode"];
+  duration?: string;
+  note?: string;
+  distanceM?: number;
+};
+
 const MODE_TEXT: Record<RouteEdge["mode"], string> = {
   walk: "徒步",
   cableway: "索道",
@@ -143,6 +161,91 @@ export function matchLocsToGraph(stopIds: string[], locs: any[], graph: RouteGra
 
 function primaryZone(node: GraphNode) {
   return node.zoneIds.size ? [...node.zoneIds][0] : "";
+}
+
+function trailOrderForZone(zoneId: string, ids: Set<string>, matches: Map<string, GraphNode>, knowledge: DestinationRouteKnowledge) {
+  const ordered: string[] = [];
+  for (const trail of knowledge.trails) {
+    const trailZone = trail.zoneId || trail.scenicName || "";
+    if (zoneId && trailZone !== zoneId) continue;
+    for (const stop of trail.stops) {
+      const key = normalizeName(stop.name);
+      const hit = [...ids].find(id => matches.get(id)?.key === key);
+      if (hit && !ordered.includes(hit)) ordered.push(hit);
+    }
+  }
+  return ordered;
+}
+
+// 路线图规划第一层：把站点分成完整的徒步区段，而不是把 A 区、B 区站点按重要性混排。
+// 每段内部用 trail 顺序；未匹配点先归入 5km 内最近区段，真正的远点保留在最后，
+// 交给显式 edges 或长距离接驳处理。
+export function routeGraphSegments(stopIds: string[], locs: any[], knowledge: DestinationRouteKnowledge): RouteGraphSegment[] {
+  if (!stopIds.length || !knowledge.trails.length) return [];
+  const graph = buildRouteGraph(knowledge);
+  const matches = matchLocsToGraph(stopIds, locs, graph);
+  if (![...matches.keys()].some(id => stopIds.includes(id))) return [];
+  const byId = new Map(locs.map(loc => [loc.id, loc]));
+  const groupMap = new Map<string, RouteGraphSegment>();
+  const groupOrder: string[] = [];
+  const assigned = new Set<string>();
+
+  const ensureGroup = (zoneId: string) => {
+    if (!groupMap.has(zoneId)) {
+      groupMap.set(zoneId, { zoneId, zoneName: zoneId, trailIds: [], stopIds: [] });
+      groupOrder.push(zoneId);
+    }
+    return groupMap.get(zoneId)!;
+  };
+
+  for (const trail of knowledge.trails) {
+    const zoneId = trail.zoneId || trail.scenicName || "";
+    const group = ensureGroup(zoneId);
+    const trailId = trail.id || `trail-${knowledge.trails.indexOf(trail) + 1}`;
+    if (!group.trailIds.includes(trailId)) group.trailIds.push(trailId);
+    for (const stop of trail.stops) {
+      const key = normalizeName(stop.name);
+      const hit = stopIds.find(id => matches.get(id)?.key === key);
+      if (hit && !assigned.has(hit)) {
+        group.stopIds.push(hit);
+        assigned.add(hit);
+      }
+    }
+  }
+
+  for (const id of stopIds) {
+    if (assigned.has(id)) continue;
+    const loc = byId.get(id);
+    let nearest: { zoneId: string; distance: number } | null = null;
+    for (const group of groupMap.values()) {
+      for (const anchorId of group.stopIds) {
+        const anchor = byId.get(anchorId);
+        if (!loc?.lat || !loc.lng || !anchor?.lat || !anchor.lng) continue;
+        const distance = haversineM(loc, anchor);
+        if (distance <= 5000 && (!nearest || distance < nearest.distance)) nearest = { zoneId: group.zoneId, distance };
+      }
+    }
+    if (nearest) ensureGroup(nearest.zoneId).stopIds.push(id);
+    if (nearest) assigned.add(id);
+  }
+
+  const segments = groupOrder.map(zoneId => groupMap.get(zoneId)!).filter(group => group.stopIds.length);
+  const leftovers = stopIds.filter(id => !assigned.has(id));
+  if (leftovers.length) {
+    if (segments.length) segments[segments.length - 1].stopIds.push(...leftovers);
+    else segments.push({ zoneId: "", zoneName: "未分区", trailIds: [], stopIds: leftovers });
+  }
+  for (const segment of segments) {
+    const idSet = new Set(segment.stopIds);
+    const trailOrdered = trailOrderForZone(segment.zoneId, idSet, matches, knowledge);
+    segment.stopIds = [...trailOrdered, ...segment.stopIds.filter(id => !trailOrdered.includes(id))];
+  }
+  return segments;
+}
+
+export function planGraphStops(stopIds: string[], locs: any[], knowledge: DestinationRouteKnowledge): string[] {
+  const segments = routeGraphSegments(stopIds, locs, knowledge);
+  return segments.flatMap(segment => segment.stopIds);
 }
 
 export function routeGraphIssues(
@@ -258,4 +361,46 @@ export function routeGraphNotes(stopIds: string[], locs: any[], knowledge: Desti
     }
   }
   return [...new Set(notes)].join("；");
+}
+
+// 把站点序列拆成交通 leg。显式 edge 优先；同一条 trail 的相邻点默认徒步；
+// 缺资料但距离很远时用保守的接驳描述，不把长距离位移交给 AI 自由想象。
+export function buildRouteLegs(stopIds: string[], locs: any[], knowledge: DestinationRouteKnowledge): RouteLeg[] {
+  if (stopIds.length < 2) return [];
+  const graph = buildRouteGraph(knowledge);
+  const matches = matchLocsToGraph(stopIds, locs, graph);
+  const byId = new Map(locs.map(loc => [loc.id, loc]));
+  const legs: RouteLeg[] = [];
+  for (let i = 0; i < stopIds.length - 1; i++) {
+    const from = byId.get(stopIds[i]);
+    const to = byId.get(stopIds[i + 1]);
+    if (!from || !to) continue;
+    const fromKey = matches.get(from.id)?.key;
+    const toKey = matches.get(to.id)?.key;
+    const edge = fromKey && toKey ? graph.edges.get(`${fromKey}|${toKey}`) : undefined;
+    const distanceM = from.lat && from.lng && to.lat && to.lng ? Math.round(haversineM(from, to)) : undefined;
+    let mode: RouteEdge["mode"] = "walk";
+    if (edge) mode = edge.mode;
+    else if (distanceM != null && distanceM > 60000) mode = "car";
+    else if (distanceM != null && distanceM > 8000) mode = "shuttle";
+    legs.push({
+      fromId: from.id,
+      toId: to.id,
+      fromName: String(from.name || ""),
+      toName: String(to.name || ""),
+      mode,
+      duration: edge?.duration,
+      note: edge?.note || (distanceM != null && distanceM > 8000 ? `直线约 ${Math.round(distanceM / 1000)}km，需接驳` : undefined),
+      distanceM,
+    });
+  }
+  return legs;
+}
+
+export function routeLegsText(legs: RouteLeg[]) {
+  return legs.map(leg => {
+    const mode = MODE_TEXT[leg.mode] || MODE_TEXT.other;
+    const detail = [mode, leg.duration, leg.note].filter(Boolean).join("，");
+    return `${leg.fromName} → ${leg.toName}：${detail}`;
+  }).join("；");
 }

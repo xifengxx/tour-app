@@ -12,7 +12,7 @@ import { haversineM } from "./geo.ts";
 import { orderStopsGeographic, planRoutes as planRoutesModule } from "./routes.ts";
 import { applyTrailGroups, getPrimaryTrailScenicName, getTrailNotes, injectTrailSeeds, orderStopsByTrail } from "./trail-routes.ts";
 import { loadOrResearchRouteKnowledge } from "./route-knowledge.ts";
-import { routeGraphIssues, routeGraphNotes } from "./route-graph.ts";
+import { buildRouteLegs, planGraphStops, routeGraphIssues, routeGraphNotes, routeLegsText } from "./route-graph.ts";
 import { attachScenicTags as attachScenicTagsModule, buildAnchors as buildAnchorsModule, scanAnchorSubs as scanAnchorSubsModule } from "./anchors.ts";
 import { REGION_RADIUS, SUB_DEDUP_M, SUB_TOTAL_CAP } from "./anchors.ts";
 
@@ -467,7 +467,12 @@ Deno.serve(async (req: Request) => {
     const dbLocs = locs.map(l => ({ ...l, id: slugToDbId.get(l.id) || l.id }));
     const trailNotes = getTrailNotes(destName, dbLocs, routeKnowledge.trails);
     const orderStops = (stopIds: string[], source: any[]) => {
-      const trailOrdered = orderStopsByTrail(stopIds, source, destLoc, destName, routeKnowledge.trails);
+      // v81：优先用真实路线图做“整段分区 + 段内步道顺序”，避免太室山/少室山这类
+      // 多徒步区被地理最近邻或重要性排序穿插。研究/策展资料缺分区时仍走旧层。
+      const graphOrdered = planGraphStops(stopIds, source, routeKnowledge);
+      const trailOrdered = graphOrdered.length
+        ? graphOrdered
+        : orderStopsByTrail(stopIds, source, destLoc, destName, routeKnowledge.trails);
       return trailOrdered.length ? trailOrdered : orderStopsGeographic(stopIds, source, destLoc);
     };
 
@@ -492,13 +497,16 @@ Deno.serve(async (req: Request) => {
     for (const p of plans) {
       if (p.allow) p.allow = orderStops(p.allow, locs);
     }
+    // 每条路线单独生成交通 legs：1日/2日只描述本线衔接，主题游的长距离接驳不污染普通徒步线。
+    const routeTrafficHints = new Map(plans.map(plan => [plan.label, plan.allow ? routeLegsText(buildRouteLegs(plan.allow, locs, routeKnowledge)) : ""]));
     const graphNotes = routeGraphNotes(plans.flatMap(p => p.allow || []), dbLocs, routeKnowledge);
     // 每条路线的指定站点清单（文学巡礼线无 allow，AI 自由选）
     const planText = plans.map((p, i) => {
       const stopsTxt = p.allow
         ? p.allow.map(id => { const l = locs.find(x => x.id === id); return l ? `${id}: ${l.name}` : id; }).join(", ")
         : "（文学巡礼线：自由选点）";
-      return `${i + 1}. ${p.label}「${p.title}」 — 指定站点: ${stopsTxt}`;
+      const traffic = routeTrafficHints.get(p.label);
+      return `${i + 1}. ${p.label}「${p.title}」 — 指定站点: ${stopsTxt}${traffic ? `\n   交通衔接（narrative 必须按此执行）: ${traffic}` : ""}`;
     }).join("\n");
 
     const [contentById, routes] = await Promise.all([

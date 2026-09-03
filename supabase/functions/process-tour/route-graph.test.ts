@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildRouteGraph, routeGraphIssues, routeGraphNotes } from "./route-graph.ts";
+import { buildRouteGraph, buildRouteLegs, planGraphStops, routeGraphSegments, routeGraphIssues, routeGraphNotes } from "./route-graph.ts";
 import type { DestinationRouteKnowledge } from "./route-knowledge-types.ts";
 import { CURATED_TRAILS, orderStopsByTrail } from "./trail-routes.ts";
 
@@ -69,6 +69,53 @@ describe("route graph", () => {
     const notes = routeGraphNotes(["中亭", "主峰", "南门"], graphLocs, knowledge);
     expect(notes).toContain("中亭 → 主峰：徒步");
     expect(notes).toContain("主峰 → 南门：观光车/摆渡车，30分钟");
+  });
+
+  it("路线图规划按徒步区整段串联，段内保持步道顺序", () => {
+    const ordered = planGraphStops(graphLocs.map(l => l.id), graphLocs, knowledge);
+    expect(ordered).toEqual(["入口", "中亭", "主峰", "南门", "石桥", "南顶"]);
+    const segments = routeGraphSegments(ordered, graphLocs, knowledge);
+    expect(segments.map(s => s.zoneId)).toEqual(["north", "south"]);
+    expect(segments.map(s => s.stopIds)).toEqual([
+      ["入口", "中亭", "主峰"],
+      ["南门", "石桥", "南顶"],
+    ]);
+  });
+
+  it("把未匹配的近点归入最近区段，远点保留到最后接驳", () => {
+    const locs = [
+      ...graphLocs,
+      loc("near-summit", "山顶服务点", 116.0025, 39.0025),
+      loc("far-park", "外围游客中心", 117.0, 38.0),
+    ];
+    const ordered = planGraphStops(locs.map(l => l.id), locs, knowledge);
+    expect(ordered.slice(0, 3)).toEqual(["入口", "中亭", "主峰"]);
+    expect(ordered).toContain("near-summit");
+    expect(ordered.indexOf("near-summit")).toBeLessThan(ordered.indexOf("南门"));
+    expect(ordered.at(-1)).toBe("far-park");
+  });
+
+  it("交通 leg 优先使用显式边，并按距离保守推断接驳方式", () => {
+    const legs = buildRouteLegs(["中亭", "主峰", "南门"], graphLocs, knowledge);
+    expect(legs[0]).toMatchObject({ fromId: "中亭", toId: "主峰", mode: "walk" });
+    expect(legs[1]).toMatchObject({ fromId: "主峰", toId: "南门", mode: "shuttle", duration: "30分钟" });
+
+    const transferKnowledge: DestinationRouteKnowledge = {
+      ...knowledge,
+      edges: [],
+    };
+    const transferLegs = buildRouteLegs(["入口", "中亭", "far-park"], [
+      ...graphLocs,
+      loc("far-park", "外围游客中心", 117.0, 38.0),
+    ], transferKnowledge);
+    expect(transferLegs.at(-1)).toMatchObject({ mode: "car", note: expect.stringContaining("需接驳") });
+  });
+
+  it("缺少坐标或匹配资料时不崩溃并回退到徒步", () => {
+    expect(planGraphStops(["gate"], [{ id: "gate", name: "入口" }], knowledge)).toEqual(["gate"]);
+    expect(planGraphStops(["gate"], [{ id: "gate", name: "入口" }], { ...knowledge, trails: [] })).toEqual([]);
+    const legs = buildRouteLegs(["入口", "no-coord"], [loc("入口", "入口", 116, 39), loc("no-coord", "无名点")], knowledge);
+    expect(legs[0]).toMatchObject({ fromId: "入口", toId: "no-coord", mode: "walk" });
   });
 
   it("真实恒山策展动线不触发路线图误报", () => {

@@ -287,3 +287,14 @@ curl -X POST 'https://qxunedraoviaonjdanag.supabase.co/functions/v1/route-resear
 3. **长距离徒步误判**：相邻点相距超过 8km，但没有索道、观光车、专车等非徒步衔接。
 
 主题游允许长距离接驳，因为它本来就会串联核心景区和 60km 内的独立景点。校验结果不会中断生成，但会写入 `process_report.routeGraph` 和 `warnings`，便于发现数据源质量问题。
+
+### 路线图分段规划（v81）
+
+路线组成仍由 `planRoutes` 决定；`route-graph.ts` 只负责在每条路线内部排序和描述交通衔接。当前顺序是：
+
+1. `routeGraphSegments`：把站点归到完整徒步区段，段内按已知 trail 顺序推进；未匹配近点归入 5km 内区段，远点保留在末尾等待接驳；
+2. `planGraphStops`：展开所有区段，形成“太室山整段 → 少室山整段”这类稳定站序；
+3. `buildRouteLegs`：为相邻站生成交通 leg。显式 `edges` 优先；没有资料时，>60km 推断为专车/出租车，>8km 推断为观光车/摆渡车，其余默认徒步；
+4. `routeLegsText`：把 legs 转成给 AI 的固定衔接约束，写进路线 prompt。AI 只负责叙述这些衔接，不能自行发明站点顺序或交通方式。
+
+这层不做路线组成决策，也不改变站点集合；研究知识不足时仍回退 trail 排序，再回退地理最近邻。
