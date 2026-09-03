@@ -46,4 +46,33 @@ describe("destination route knowledge", () => {
     expect(knowledge.confidence).toBeLessThanOrEqual(0.8);
     expect(knowledge.trails[0].stops).toHaveLength(3);
   });
+
+  it("创作者确认知识优先于自动研究，但不覆盖官方/精选知识", () => {
+    const creatorConfirmed = {
+      destination_name: "武功山",
+      aliases: ["武功山", "萍乡武功山"],
+      model: {
+        zones: [],
+        trails: [{ id: "confirmed-main", aliases: ["武功山"], stops: [{ name: "游客中心" }, { name: "金顶" }] }],
+        edges: [{ from: "游客中心", to: "中庵", mode: "shuttle" }],
+      },
+      source: "creator-confirmed",
+      confidence: 0.85,
+    };
+    const autoResearch = {
+      ...creatorConfirmed,
+      source: "auto-research",
+      confidence: 0.78,
+      model: { ...creatorConfirmed.model, trails: [{ ...creatorConfirmed.model.trails[0], id: "auto-main" }] },
+    };
+    expect(selectRouteKnowledge([autoResearch, creatorConfirmed], "武功山").source).toBe("creator-confirmed");
+
+    const curated = {
+      ...creatorConfirmed,
+      source: "curated",
+      confidence: 0.92,
+      model: { ...creatorConfirmed.model, trails: [{ ...creatorConfirmed.model.trails[0], id: "curated-main" }] },
+    };
+    expect(selectRouteKnowledge([creatorConfirmed, curated], "武功山").source).toBe("curated");
+  });
 });

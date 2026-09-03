@@ -77,6 +77,8 @@ export default function TourView() {
   const [isFav, setIsFav] = useState(false);
   const [toast, setToast] = useState(null);
   const [mapError, setMapError] = useState('');
+  const [routeConfirmations, setRouteConfirmations] = useState([]);
+  const [confirmingRouteId, setConfirmingRouteId] = useState(null);
 
   const { tour, loading } = useTourData(tourId);
 
@@ -125,6 +127,86 @@ export default function TourView() {
       if (error) { setToast(getErrorMessage(error, '收藏失败')); return; }
       setIsFav(true);
     }
+  };
+
+  const routeFingerprint = (route) => (route?.stops || []).join('|');
+
+  // 创作者路线确认：不阻断发布，只把“看过并认可”的路线沉淀成同目的地可复用知识。
+  useEffect(() => {
+    if (!user || !tourId || !tour?.userId || tour.userId !== user.id) {
+      setRouteConfirmations([]);
+      return;
+    }
+    let cancelled = false;
+    supabase
+      .from('route_confirmations')
+      .select('id, route_id, stops, route_fingerprint, created_at')
+      .eq('tour_id', tourId)
+      .order('created_at', { ascending: false })
+      .then(({ data, error }) => {
+        if (cancelled) return;
+        if (error) setToast(getErrorMessage(error, '路线确认状态加载失败'));
+        else setRouteConfirmations(data || []);
+      });
+    return () => { cancelled = true; };
+  }, [user, tourId, tour?.userId]);
+
+  const confirmRoute = async (route) => {
+    if (!user) { navigate('/login'); return; }
+    if (!route?.stops?.length || !tour?.destination?.name) return;
+    setConfirmingRouteId(route.id);
+    const destinationName = String(tour.destination.name || '').trim();
+    const aliases = [...new Set([
+      destinationName,
+      String(tour.destination.region || '').trim(),
+      destinationName.replace(/之旅[。.]?$/, ''),
+    ])].filter(Boolean);
+    const stops = route.stops
+      .map(id => locByIdRef.current[id])
+      .filter(loc => loc?.name)
+      .map(loc => ({
+        name: loc.name,
+        aliases: [loc.name],
+        ...(loc.lat && loc.lng ? { lat: loc.lat, lng: loc.lng } : {}),
+      }));
+    if (stops.length < 2) {
+      setConfirmingRouteId(null);
+      setToast('路线至少需要两个有效地点才能确认');
+      return;
+    }
+    const { data, error } = await supabase.from('route_confirmations').insert({
+      tour_id: tourId,
+      route_id: route.id,
+      route_label: [route.day, route.title].filter(Boolean).join(' · '),
+      destination_name: destinationName,
+      destination_aliases: aliases,
+      stops: stops.map(loc => loc.name),
+      legs: route.legs || [],
+      route_model: {
+        zones: [],
+        trails: [{
+          id: `confirmed-${route.id}`,
+          aliases,
+          stops,
+          notes: route.narrative || '',
+        }],
+        edges: (route.legs || []).map(leg => ({
+          from: leg.fromName,
+          to: leg.toName,
+          mode: leg.mode || 'walk',
+          duration: leg.duration || '',
+          note: leg.note || '',
+        })),
+      },
+      warnings: [],
+      route_fingerprint: routeFingerprint(route),
+      source: 'creator-confirmed',
+      confidence: 0.85,
+    }).select('id, route_id, stops, route_fingerprint, created_at').single();
+    setConfirmingRouteId(null);
+    if (error) { setToast(getErrorMessage(error, '路线确认失败')); return; }
+    setRouteConfirmations(prev => [data, ...prev]);
+    setToast('路线确认已沉淀，后续同目的地导览可复用');
   };
 
   // Init map
@@ -301,6 +383,11 @@ export default function TourView() {
         .map(id => locByIdRef.current[id]).filter(Boolean)
     : (tour?.locations || []);
   const activeRoute = currentRouteId ? (tour?.routes || []).find(r => r.id === currentRouteId) : null;
+  const activeRouteConfirmed = activeRoute
+    && routeConfirmations.some(row => (
+      row.route_id === activeRoute.id
+      && (row.route_fingerprint || (row.stops || []).join('|')) === routeFingerprint(activeRoute)
+    ));
 
   // ── Render ──
   if (loading) return <div className="min-h-screen bg-background flex items-center justify-center text-muted-foreground">加载中...</div>;
@@ -371,6 +458,33 @@ export default function TourView() {
                 <p className="text-[11px] leading-relaxed text-muted-foreground bg-background rounded-lg p-2 border border-border/60 max-h-16 overflow-y-auto">
                   <span className="font-semibold text-foreground/70">交通分段：</span>{routeLegsText(activeRoute.legs)}
                 </p>
+              </div>
+            )}
+            {user && tour.userId === user.id && activeRoute && (
+              <div className="px-4 pb-2">
+                {activeRouteConfirmed ? (
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground bg-background rounded-lg p-2 border border-border/60">
+                    <Check className="h-3.5 w-3.5 text-primary" />
+                    当前路线已确认为可复用知识；修改站点后需重新确认
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-between gap-3 bg-background rounded-lg p-2 border border-border/60">
+                    <div className="min-w-0">
+                      <p className="text-xs font-medium text-foreground">这条路线正确吗？</p>
+                      <p className="text-[11px] text-muted-foreground truncate">
+                        确认只沉淀路线知识，不影响本导览发布
+                      </p>
+                    </div>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      disabled={confirmingRouteId === activeRoute.id || activeRoute.stops.length < 2}
+                      onClick={() => confirmRoute(activeRoute)}
+                    >
+                      {confirmingRouteId === activeRoute.id ? '确认中…' : '确认正确'}
+                    </Button>
+                  </div>
+                )}
               </div>
             )}
             {/* Location strip · 壹贰叁编号 — 右缘渐变提示可横向滚动查看更多 */}

@@ -142,6 +142,7 @@ npx supabase functions deploy process-tour --project-ref qxunedraoviaonjdanag --
 | 2026-09-03 v79 | 新增自动路线研究：山岳目的地缺少数据库知识时，先抓取 Wikipedia/OSM/高德证据，再抽取 `zones/trails/edges` 并以 `auto-research` 写入。自动研究置信度上限 0.80，不会覆盖人工策展的 0.90+ 数据；研究失败仍回退内置数据。 |
 | 2026-09-03 v80 | 新增路线图校验：`trails` 连续站点生成默认徒步边，显式 `edges` 可表达索道/观光车/专车。写库前检查步道顺序回退、跨徒步区交错、>8km 长距离位移是否缺少非徒步衔接；结果写入 `process_report.routeGraph`，并给路线 narrative 提供交通衔接提示。 |
 | 2026-09-03 v82 | 路线图交通分段落库：显式 `edges` 强制覆盖同向默认徒步边；`buildRouteLegs` 为每条路线生成结构化 `legs` 并写入 `routes.legs`；详情页和 AI 使用同一份交通分段。新增每日容量校验，按资料时长或保守默认速度累计移动/停留时间，超过日数 × 10 小时时写入 `long-day` 告警。 |
+| 2026-09-03 v83 | 新增创作者路线确认：AI 生成后仍可直接发布，确认不阻断展示。创作者确认单条路线后，系统把站点顺序、`legs`、`zones/trails/edges` 快照存入 `route_confirmations`。加载路线知识时优先级为官方/精选 0.90+ > 创作者确认 0.85 > 自动研究 0.80 > 内置兜底。 |
 
 ## 测试记录
 
@@ -301,3 +302,19 @@ curl -X POST 'https://qxunedraoviaonjdanag.supabase.co/functions/v1/route-resear
 5. 处理完成后把每条路线自己的 `legs` 写入 `routes.legs`，详情页读取同一份数据展示交通分段。
 
 这层不做路线组成决策，也不改变站点集合；研究知识不足时仍回退 trail 排序，再回退地理最近邻。
+
+### 创作者路线确认（v83）
+
+这不是发布审核。AI 处理完成后，导览可以继续直接预览和发布；路线校验只写入警告。
+
+导览详情页只给导览作者显示“这条路线正确吗？”入口。确认对象是当前选中的单条路线；确认后会保存一条 `route_confirmations` 历史：
+
+- `destination_name/destination_aliases`：目的地与常用别名；
+- `stops/route_fingerprint`：确认时的站点顺序和指纹；
+- `legs`：结构化交通分段；
+- `route_model`：确认时的 `zones/trails/edges` 快照；
+- `user_id/created_at`：确认人和时间。
+
+站点指纹用于防止旧确认被自动套用到已修改路线。只要站点顺序改变，旧确认仍保留为历史，但当前路线需要重新确认。
+
+`process-tour` 会把确认记录合并进目的地路线知识候选集。同目的地同置信度下的顺序是：官方/精选 > 创作者确认 > 自动研究 > 内置兜底。这样普通自动研究结果不会覆盖用户确认过的路线；官方/精选数据仍然优先。

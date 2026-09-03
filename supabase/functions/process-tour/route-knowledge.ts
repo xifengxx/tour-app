@@ -53,13 +53,31 @@ export function selectRouteKnowledge(
 export async function loadRouteKnowledge(destName: string): Promise<DestinationRouteKnowledge> {
   if (!destName || !SUPABASE_URL || !SR_KEY) return builtinKnowledge(destName);
   try {
-    const res = await fetch(
-      `${SUPABASE_URL}/rest/v1/destination_route_knowledge?select=destination_name,aliases,model,source,confidence&order=confidence.desc`,
-      { headers: hdr },
-    );
-    if (!res.ok) return builtinKnowledge(destName);
-    const rows: DestinationRouteKnowledgeRow[] = await res.json();
-    return selectRouteKnowledge(Array.isArray(rows) ? rows : [], destName);
+    // 精选/官方知识在 destination_route_knowledge；创作者确认是独立历史表。
+    // 两层合并后仍按 confidence 选择：official/curated 0.90+ > creator-confirmed 0.85 > auto-research <=0.80。
+    const [knowledgeRes, confirmationRes] = await Promise.all([
+      fetch(
+        `${SUPABASE_URL}/rest/v1/destination_route_knowledge?select=destination_name,aliases,model,source,confidence&order=confidence.desc`,
+        { headers: hdr },
+      ),
+      fetch(
+        `${SUPABASE_URL}/rest/v1/route_confirmations?select=destination_name,destination_aliases,route_model,source,confidence&order=created_at.desc&limit=200`,
+        { headers: hdr },
+      ),
+    ]);
+    if (!knowledgeRes.ok) return builtinKnowledge(destName);
+    const rows: DestinationRouteKnowledgeRow[] = await knowledgeRes.json();
+    const confirmedRows: any[] = confirmationRes.ok ? await confirmationRes.json() : [];
+    const mappedConfirmations: DestinationRouteKnowledgeRow[] = (Array.isArray(confirmedRows) ? confirmedRows : [])
+      .filter(row => row?.route_model && Array.isArray(row.route_model?.trails))
+      .map(row => ({
+        destination_name: row.destination_name,
+        aliases: row.destination_aliases || [],
+        model: row.route_model,
+        source: row.source || "creator-confirmed",
+        confidence: Number(row.confidence || 0.85),
+      }));
+    return selectRouteKnowledge([...(Array.isArray(rows) ? rows : []), ...mappedConfirmations], destName);
   } catch {
     return builtinKnowledge(destName);
   }
