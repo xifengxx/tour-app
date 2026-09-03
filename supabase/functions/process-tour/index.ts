@@ -11,6 +11,7 @@ import { AMUSE_RE, FACILITY_RE, gaode, gaodeRegionScenics } from "./gaode-search
 import { haversineM } from "./geo.ts";
 import { orderStopsGeographic, planRoutes as planRoutesModule } from "./routes.ts";
 import { applyTrailGroups, getPrimaryTrailScenicName, getTrailNotes, injectTrailSeeds, orderStopsByTrail } from "./trail-routes.ts";
+import { loadRouteKnowledge } from "./route-knowledge.ts";
 import { attachScenicTags as attachScenicTagsModule, buildAnchors as buildAnchorsModule, scanAnchorSubs as scanAnchorSubsModule } from "./anchors.ts";
 import { REGION_RADIUS, SUB_DEDUP_M, SUB_TOTAL_CAP } from "./anchors.ts";
 
@@ -149,6 +150,7 @@ Deno.serve(async (req: Request) => {
     const destName = tour.destination?.name || "";
     const destRegion = tour.destination?.region || "";
     const src = tour.source?.rawText || "";
+    const routeKnowledge = await loadRouteKnowledge(destName);
     console.log(`Processing: ${tour.title}, ${src.length} chars`);
 
     // 目的地坐标：作所有高德搜索的 location 位置偏置。目的地地区是裸省名（如"四川"）时，
@@ -435,9 +437,9 @@ Deno.serve(async (req: Request) => {
     const coreAnchor = anchors.find(a => destName && (a.name === destName || a.scenicName === destName))
       || anchors.find(a => destName && (a.name.includes(destName) || destName.includes(a.name)))
       || anchors[0] || null;
-    const trailGroupNames = applyTrailGroups(locs, destName);
+    const trailGroupNames = applyTrailGroups(locs, destName, routeKnowledge.trails);
     if (trailGroupNames.length) warnings.push(`🥾 已知多山线路分区：${trailGroupNames.join("/")}`);
-    const primaryTrailScenicName = getPrimaryTrailScenicName(destName);
+    const primaryTrailScenicName = getPrimaryTrailScenicName(destName, routeKnowledge.trails);
     const coreScenicName = primaryTrailScenicName || coreAnchor?.scenicName || (destName || "");
     // 主景区须为真实景区（≥2 个子点）。"独立"是兜底标签不是景区——若让它当主景区，2日 day-2
     // 会被要求"只含独立景区站点"，把九寨沟/四姑娘山等远点全塞进来。无主景区时留空，2日 day-2 继续覆盖核心景区。
@@ -450,7 +452,7 @@ Deno.serve(async (req: Request) => {
     // 5. Known-trail layer：知名山岳用策展动线补关键点并固定站序。
     // “地理最近邻”只能保证空间连贯，不知道“真武庙在虎风口下方、三清殿在山脚游客中心”
     // 这类步道/换乘事实；恒山实测会继续产出上下锯齿。
-    const trailSeedNames = injectTrailSeeds(locs, destName, coreScenicName);
+    const trailSeedNames = injectTrailSeeds(locs, destName, coreScenicName, routeKnowledge.trails);
     if (trailSeedNames.length) warnings.push(`🥾 已知步道补全 +${trailSeedNames.length} 个：${trailSeedNames.join("/")}`);
 
     // 3+4. Content 与 Routes 并行生成（互不依赖：路线只用 locs/id，内容独立按 loc 分批）。
@@ -462,9 +464,9 @@ Deno.serve(async (req: Request) => {
     const slugToDbId = new Map(locs.map(l => [l.id, `${scope}-${l.id}`]));
     // 数据库 id 视图的地点列表（供地理排序用：stops 存的是 db id）
     const dbLocs = locs.map(l => ({ ...l, id: slugToDbId.get(l.id) || l.id }));
-    const trailNotes = getTrailNotes(destName, dbLocs);
+    const trailNotes = getTrailNotes(destName, dbLocs, routeKnowledge.trails);
     const orderStops = (stopIds: string[], source: any[]) => {
-      const trailOrdered = orderStopsByTrail(stopIds, source, destLoc, destName);
+      const trailOrdered = orderStopsByTrail(stopIds, source, destLoc, destName, routeKnowledge.trails);
       return trailOrdered.length ? trailOrdered : orderStopsGeographic(stopIds, source, destLoc);
     };
 
@@ -665,6 +667,7 @@ Deno.serve(async (req: Request) => {
       routes: routes.length,
       plans: plans.length, // v70.3 诊断：计划路线数 vs 实际路线数
       corePool: corePoolSize, mainScenic: mainScenicName, coreScenic: coreScenicName,
+      routeKnowledge: { source: routeKnowledge.source, confidence: routeKnowledge.confidence, destination: routeKnowledge.destinationName },
       warnings: warnings.length > 0 ? warnings : undefined,
       rejected: (lr.locations || []).length - extractedBeforeDedup, // regeo/坐标校验被拒
       deduped: extractedBeforeDedup - afterExtractDedup, // 坐标去重数（在地区/子景点并入前计算）

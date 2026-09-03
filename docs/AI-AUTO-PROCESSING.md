@@ -33,6 +33,8 @@
 | `src/components/ProcessingPhase.jsx` | 等待页面：轮询检测 + 自动重试加载数据 |
 | `supabase/functions/process-tour/index.ts` | Supabase Edge Function：AI 处理核心逻辑 |
 | `supabase/functions/process-tour/trail-routes.ts` | 知名山岳步道知识层：补关键步道点、确定站序、提供换乘提示 |
+| `supabase/functions/process-tour/route-knowledge.ts` | 目的地路线知识读取层：数据库优先，内置策展数据兜底 |
+| `supabase/route-knowledge.sql` | `destination_route_knowledge` 表与初始策展种子数据 |
 
 ## 数据库配置
 
@@ -131,6 +133,7 @@ npx supabase functions deploy process-tour --project-ref qxunedraoviaonjdanag --
 | v70.3 | 文学巡礼线 resolve 为空时回退核心池 top4（防小说源静默丢线）；`FACILITY_RE` 增补 招商中心/营销中心/售楼处；`cleanName` 剥"（暂停开放）"类状态后缀 |
 | v70.4 | 文学巡礼线 dedup 豁免：route 标记 `_free`（自由选点），stops-set 去重跳过 → 修黄山文学巡礼线与 1 日线同站点集合被误删（routes 3→4）；`process_report` 埋点 `plans`/`corePool`/`📖 resolve N 站` warning 辅助诊断 |
 | 2026-09-03 | 新增知名山岳策展步道层：先按已知步道补关键点，再按真实动线固定站序；AI 只负责 narrative 和换乘描述，不能改站点集合/顺序 |
+| 2026-09-03 v78 | 新增 `destination_route_knowledge` 结构化路线知识层：`zones/trails/edges` 存数据库，`process-tour` 启动时按目的地别名加载；命中高置信数据时用数据库路线，未命中回退内置 `CURATED_TRAILS`。处理报告记录 `routeKnowledge.source/confidence/destination`。这是后续自动搜索和 route-research 写入的落库地基。 |
 
 ## 测试记录
 
@@ -181,3 +184,39 @@ curl -s "https://qxunedraoviaonjdanag.supabase.co/rest/v1/locations?tour_id=eq.<
 5. **RLS 策略**：`SELECT * FROM pg_policies WHERE tablename IN ('locations', 'routes');`
 6. **浏览器扩展**：`chrome://extensions/` 禁用所有扩展后测试
 7. **SPA 路由**：确认 `vercel.json` 存在且含 `rewrites` 配置
+
+## 路线知识层
+
+`destination_route_knowledge` 是为“真实路线证据 → 结构化模型 → 确定性规划”准备的表。当前 `model` 至少包含：
+
+```json
+{
+  "zones": [
+    { "id": "taishi", "name": "太室山", "aliases": ["太室山", "嵩山"] }
+  ],
+  "trails": [
+    {
+      "id": "songshan-taishi",
+      "zoneId": "taishi",
+      "aliases": ["嵩山", "太室山"],
+      "scenicName": "太室山",
+      "stops": [{ "name": "嵩阳书院" }, { "name": "峻极峰" }],
+      "notes": "太室山经典线。"
+    }
+  ],
+  "edges": [
+    { "from": "嵩阳书院", "to": "老母洞", "mode": "walk" }
+  ]
+}
+```
+
+- `zones` 表示一个目的地内的独立徒步/游览区，如嵩山的太室山和少室山。
+- `trails` 保留当前已验证的站点顺序，供补点、分区和排序使用。
+- `edges` 是后续路线图化改造的关键，用来表达步行、索道、观光车、专车等真实交通关系。
+- `source` 与 `confidence` 用来区分官方资料、人工策展、自动研究或低置信回退。
+
+部署/更新：
+
+```bash
+supabase db query --linked --project-ref qxunedraoviaonjdanag --file supabase/route-knowledge.sql
+```

@@ -1,21 +1,7 @@
 import { haversineM } from "./geo.ts";
+import type { TrailRoute, TrailStop } from "./route-knowledge-types.ts";
 
-export type TrailStop = {
-  name: string;
-  aliases?: string[];
-  lat?: number;
-  lng?: number;
-  required?: boolean;
-};
-
-export type TrailRoute = {
-  aliases: string[];
-  stops: TrailStop[];
-  // 多景区目的地（嵩山=太室山+少室山）用这个字段把已知线路分到不同景区池。
-  // 不填时站点沿用目的地核心景区，适配恒山这类单主线目的地。
-  scenicName?: string;
-  notes?: string;
-};
+export type { TrailRoute, TrailStop } from "./route-knowledge-types.ts";
 
 // 知名山岳的实际游览顺序比“地理最近邻”更接近真实动线。这里保存低频更新的
 // 策展快照，而不是在 Edge Function 里实时抓网页：60s 函数预算和反爬都不稳定。
@@ -168,9 +154,9 @@ function matchStops(route: TrailRoute, locs: LocLike[]) {
   return { matches, used };
 }
 
-function selectTrail(destName: string, locs: LocLike[]) {
+function selectTrail(destName: string, locs: LocLike[], trails: TrailRoute[] = CURATED_TRAILS) {
   let best: { route: TrailRoute; matches: Map<number, LocLike>; score: number } | null = null;
-  for (const route of CURATED_TRAILS) {
+  for (const route of trails) {
     if (!isDestinationTrail(route, destName)) continue;
     const { matches } = matchStops(route, locs);
     const score = matches.size * 2 + route.stops.filter(s => s.required).length;
@@ -181,8 +167,13 @@ function selectTrail(destName: string, locs: LocLike[]) {
 
 // 缺失关键点用策展坐标补进核心池。它发生在高德定位和区域校验之后，属于最后一层兜底；
 // 只补有坐标且 required 的站点，避免把“苦甜井”这类不确定点写进导览。
-export function injectTrailSeeds(locs: any[], destName: string, coreScenicName: string): string[] {
-  const selected = selectTrail(destName, locs);
+export function injectTrailSeeds(
+  locs: any[],
+  destName: string,
+  coreScenicName: string,
+  trails: TrailRoute[] = CURATED_TRAILS,
+): string[] {
+  const selected = selectTrail(destName, locs, trails);
   if (!selected) return [];
   const added: string[] = [];
   for (const stop of selected.route.stops) {
@@ -210,9 +201,9 @@ export function injectTrailSeeds(locs: any[], destName: string, coreScenicName: 
 
 // 嵩山这类目的地不是一条线性步道：太室山和少室山分别徒步，一天不可能混爬。
 // 这里不生成路线，只把已有真实站点归到策展景区池；路线组成仍交给 planRoutes。
-export function applyTrailGroups(locs: any[], destName: string): string[] {
+export function applyTrailGroups(locs: any[], destName: string, trails: TrailRoute[] = CURATED_TRAILS): string[] {
   const changed: string[] = [];
-  const matchedRoutes = CURATED_TRAILS.filter(route => route.scenicName && isDestinationTrail(route, destName));
+  const matchedRoutes = trails.filter(route => route.scenicName && isDestinationTrail(route, destName));
   for (const route of matchedRoutes) {
     if (!route.scenicName || !isDestinationTrail(route, destName)) continue;
     const { matches } = matchStops(route, locs);
@@ -253,18 +244,24 @@ export function applyTrailGroups(locs: any[], destName: string): string[] {
 
 // 双山目的地不能再用“嵩山”这个伞形景区当天池，否则 planRoutes 在核心池为空时
 // 会退回“全部非地区景点”，一日线又混入少室山。这里给出第一个真实徒步区。
-export function getPrimaryTrailScenicName(destName: string): string | null {
-  const matchedRoutes = CURATED_TRAILS.filter(route => route.scenicName && isDestinationTrail(route, destName));
+export function getPrimaryTrailScenicName(destName: string, trails: TrailRoute[] = CURATED_TRAILS): string | null {
+  const matchedRoutes = trails.filter(route => route.scenicName && isDestinationTrail(route, destName));
   return matchedRoutes.length > 1 ? matchedRoutes[0].scenicName! : null;
 }
 
-export function getTrailNotes(destName: string, locs: LocLike[]) {
-  return selectTrail(destName, locs)?.route.notes || "";
+export function getTrailNotes(destName: string, locs: LocLike[], trails: TrailRoute[] = CURATED_TRAILS) {
+  return selectTrail(destName, locs, trails)?.route.notes || "";
 }
 
-export function orderStopsByTrail(stopIds: string[], locs: any[], entrance: { lng: number; lat: number } | null | undefined, destName: string): string[] {
+export function orderStopsByTrail(
+  stopIds: string[],
+  locs: any[],
+  entrance: { lng: number; lat: number } | null | undefined,
+  destName: string,
+  trails: TrailRoute[] = CURATED_TRAILS,
+): string[] {
   const byId = new Map(locs.map(l => [l.id, l]));
-  const selected = selectTrail(destName, locs.filter(l => stopIds.includes(l.id)));
+  const selected = selectTrail(destName, locs.filter(l => stopIds.includes(l.id)), trails);
   if (!selected) return [];
   const routeOrder = selected.route.stops
     .map((_, index) => ({ id: selected.matches.get(index)?.id, index }))
@@ -295,7 +292,7 @@ export function orderStopsByTrail(stopIds: string[], locs: any[], entrance: { ln
   if (routeOrder.length && routeOrder.length < stopIds.length) {
     const groups: { scenicName?: string; ids: string[] }[] = [];
     const assigned = new Set<string>();
-    for (const route of CURATED_TRAILS) {
+    for (const route of trails) {
       if (!isDestinationTrail(route, destName)) continue;
       const { matches } = matchStops(route, locs.filter(l => stopIds.includes(l.id) && !assigned.has(l.id)));
       if (matches.size < 2) continue;
