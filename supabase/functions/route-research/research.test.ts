@@ -31,6 +31,18 @@ describe("route research", () => {
     expect(normalizeResearchResult("未知山", { trails: [{ stops: ["入口", "山顶"] }] }, 1)).toBeNull();
   });
 
+  it("根据备注纠偏索道/景区交通模式", () => {
+    const result = normalizeResearchResult("北岳恒山", {
+      trails: [{ stops: ["下站", "上站", "庙群", "主峰"] }],
+      edges: [
+        { from: "下站", to: "上站", mode: "walk", note: "乘坐恒山索道" },
+        { from: "主峰", to: "停车场", mode: "walk", note: "乘坐景区交通" },
+      ],
+    }, 1);
+    expect(result?.edges[0].mode).toBe("cableway");
+    expect(result?.edges[1].mode).toBe("shuttle");
+  });
+
   it("提示词要求引用证据并限制最高置信度", () => {
     const prompt = buildResearchPrompt("北岳恒山", "山西省大同市", { lng: 113.73, lat: 39.67 }, [
       { provider: "wikipedia", title: "恒山", text: "恒山主峰天峰岭。", url: "https://example.com" },

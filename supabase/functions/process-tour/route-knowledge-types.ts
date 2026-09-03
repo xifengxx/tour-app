@@ -7,6 +7,7 @@ export type TrailStop = {
 };
 
 export type TrailRoute = {
+  id?: string;
   aliases: string[];
   stops: TrailStop[];
   // 嵩山=太室山+少室山这类多徒步区需要把已知线路分到不同景区池；

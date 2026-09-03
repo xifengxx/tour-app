@@ -202,7 +202,16 @@ export function normalizeResearchResult(destination: string, raw: any, evidenceC
     .map((e: any) => ({
       from: String(e?.from || ""),
       to: String(e?.to || ""),
-      mode: ["walk", "cableway", "shuttle", "car", "other"].includes(e?.mode) ? e.mode : "walk",
+      mode: (() => {
+        const rawMode = ["walk", "cableway", "shuttle", "car", "other"].includes(e?.mode) ? e.mode : "walk";
+        // 模型常把“乘坐索道/观光车”的说明塞进 note，却把 mode 写成 walk。
+        // 交通方式是路线图校验的关键字段，这里用原文做一次确定性纠偏。
+        const text = `${rawMode} ${e?.note || ""}`;
+        if (/索道|缆车/.test(text)) return "cableway";
+        if (/观光车|摆渡|景区交通|接驳/.test(text)) return "shuttle";
+        if (/专车|出租车|打车|大巴|汽车/.test(text)) return "car";
+        return rawMode;
+      })(),
       duration: String(e?.duration || "") || undefined,
       note: String(e?.note || "") || undefined,
     }))

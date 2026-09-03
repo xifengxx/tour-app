@@ -12,6 +12,7 @@ import { haversineM } from "./geo.ts";
 import { orderStopsGeographic, planRoutes as planRoutesModule } from "./routes.ts";
 import { applyTrailGroups, getPrimaryTrailScenicName, getTrailNotes, injectTrailSeeds, orderStopsByTrail } from "./trail-routes.ts";
 import { loadOrResearchRouteKnowledge } from "./route-knowledge.ts";
+import { routeGraphIssues, routeGraphNotes } from "./route-graph.ts";
 import { attachScenicTags as attachScenicTagsModule, buildAnchors as buildAnchorsModule, scanAnchorSubs as scanAnchorSubsModule } from "./anchors.ts";
 import { REGION_RADIUS, SUB_DEDUP_M, SUB_TOTAL_CAP } from "./anchors.ts";
 
@@ -491,6 +492,7 @@ Deno.serve(async (req: Request) => {
     for (const p of plans) {
       if (p.allow) p.allow = orderStops(p.allow, locs);
     }
+    const graphNotes = routeGraphNotes(plans.flatMap(p => p.allow || []), dbLocs, routeKnowledge);
     // 每条路线的指定站点清单（文学巡礼线无 allow，AI 自由选）
     const planText = plans.map((p, i) => {
       const stopsTxt = p.allow
@@ -565,7 +567,7 @@ Deno.serve(async (req: Request) => {
         for (let attempt = 0; attempt < 2 && routes.length < plans.length; attempt++) {
           const rr = await deepseek([
             { role: "system", content: "你是旅游路线规划师。只返回JSON。" },
-            { role: "user", content: `${destName}路线。**每条路线的站点及其顺序已由系统按地理动线排定，stops 必须严格按给定顺序逐字输出（这是实际游览顺序，已保证不走回头路），严禁增删替换或调整顺序；文学巡礼线除外（可自由选点与排序）。**\n\n${planText}\n\n${trailNotes ? `参考真实动线：${trailNotes}\n\n` : ""}要求：\n1. 每条路线按上面的指定站点生成完整行程（从入口/索道进 → 逐点游览 → 出口/索道出）。\n2. narrative 各写 150-300 字完整行程描述：从哪个入口/索道进、每段用什么交通（徒步/索道/观光车）、依次经过哪些地点、从哪里出。narrative 中必须写地点的中文名（如"玉京峰"），严禁写 id 代号。narrative 的游览顺序必须与给定站点顺序一致。山地路线从半山下降到山脚庙宇/游客中心/停车场，或从游客中心前往外围峡谷/悬空景点时，必须写清换乘观光车、摆渡车或专车，不要把长距离位移写成连续徒步。\n3. **2日全景游 narrative 必须明确「第1天前山」「第2天后山」各去哪**；主题游写明主题与串联逻辑。\n4. day_label 必须是上面给定的标签（1日精华游/2日全景游/主题游/文学巡礼线）。\n5. 地点少时压缩天数，严禁编造不存在的多日行程。\n6. stops 数组顺序必须与 narrative 中的实际游览顺序一致（入口/索道在前，依次游览，出口/索道在后）；stops 只能从上面指定 id 中逐字复制。\n7. 路线条数必须与上述完全一致（${plans.length} 条），缺一不可。\nJSON: {"routes":[{"day_label":"","title":"","stops":["id1","id2"],"narrative":"完整行程描述"}]}` },
+            { role: "user", content: `${destName}路线。**每条路线的站点及其顺序已由系统按地理动线排定，stops 必须严格按给定顺序逐字输出（这是实际游览顺序，已保证不走回头路），严禁增删替换或调整顺序；文学巡礼线除外（可自由选点与排序）。**\n\n${planText}\n\n${trailNotes ? `参考真实动线：${trailNotes}\n\n` : ""}${graphNotes ? `路线衔接：${graphNotes}\n\n` : ""}要求：\n1. 每条路线按上面的指定站点生成完整行程（从入口/索道进 → 逐点游览 → 出口/索道出）。\n2. narrative 各写 150-300 字完整行程描述：从哪个入口/索道进、每段用什么交通（徒步/索道/观光车）、依次经过哪些地点、从哪里出。narrative 中必须写地点的中文名（如"玉京峰"），严禁写 id 代号。narrative 的游览顺序必须与给定站点顺序一致。山地路线从半山下降到山脚庙宇/游客中心/停车场，或从游客中心前往外围峡谷/悬空景点时，必须写清换乘观光车、摆渡车或专车，不要把长距离位移写成连续徒步。\n3. **2日全景游 narrative 必须明确「第1天前山」「第2天后山」各去哪**；主题游写明主题与串联逻辑。\n4. day_label 必须是上面给定的标签（1日精华游/2日全景游/主题游/文学巡礼线）。\n5. 地点少时压缩天数，严禁编造不存在的多日行程。\n6. stops 数组顺序必须与 narrative 中的实际游览顺序一致（入口/索道在前，依次游览，出口/索道在后）；stops 只能从上面指定 id 中逐字复制。\n7. 路线条数必须与上述完全一致（${plans.length} 条），缺一不可。\nJSON: {"routes":[{"day_label":"","title":"","stops":["id1","id2"],"narrative":"完整行程描述"}]}` },
           ], { temperature: 0.2 });
           // Route stop validation: resolve + 确定性兜底。
           // 注意：不能按数组下标取 plan（AI 返回 routes 的顺序常与 plans 不一致 → 会张冠李戴，
@@ -640,6 +642,17 @@ Deno.serve(async (req: Request) => {
       })(),
     ]);
 
+    // v80：路线图校验。这里不吞掉结构问题——跨区往返、步道顺序回退、长距离徒步
+    // 都写入 process_report；只有主题游允许长距离接驳（它本来就串联 60km 内独立景点）。
+    let routeGraphIssueCount = 0;
+    for (const route of routes) {
+      const issues = routeGraphIssues(route.stops, dbLocs, routeKnowledge, {
+        allowLongTransfers: route.day_label === "主题游",
+      });
+      routeGraphIssueCount += issues.length;
+      for (const issue of issues) warnings.push(`🧭 路线「${route.day_label}」${issue.message}`);
+    }
+
     // 应用内容到各地点（供写库）
     for (const l of locs) {
       const cd = contentById.get(l.id) || {};
@@ -668,6 +681,7 @@ Deno.serve(async (req: Request) => {
       plans: plans.length, // v70.3 诊断：计划路线数 vs 实际路线数
       corePool: corePoolSize, mainScenic: mainScenicName, coreScenic: coreScenicName,
       routeKnowledge: { source: routeKnowledge.source, confidence: routeKnowledge.confidence, destination: routeKnowledge.destinationName },
+      routeGraph: { checked: routes.length, issues: routeGraphIssueCount },
       warnings: warnings.length > 0 ? warnings : undefined,
       rejected: (lr.locations || []).length - extractedBeforeDedup, // regeo/坐标校验被拒
       deduped: extractedBeforeDedup - afterExtractDedup, // 坐标去重数（在地区/子景点并入前计算）

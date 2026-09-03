@@ -34,6 +34,7 @@
 | `supabase/functions/process-tour/index.ts` | Supabase Edge Function：AI 处理核心逻辑 |
 | `supabase/functions/process-tour/trail-routes.ts` | 知名山岳步道知识层：补关键步道点、确定站序、提供换乘提示 |
 | `supabase/functions/process-tour/route-knowledge.ts` | 目的地路线知识读取层：数据库优先，内置策展数据兜底 |
+| `supabase/functions/process-tour/route-graph.ts` | 路线图构建、顺序/跨区/长距离交通校验、AI narrative 衔接提示 |
 | `supabase/functions/route-research/research.ts` | 自动路线研究：抓取外部证据并让 AI 抽取结构化路线 |
 | `supabase/functions/route-research/index.ts` | 手动研究入口：按目的地/tourId 研究并写入路线知识表 |
 | `supabase/route-knowledge.sql` | `destination_route_knowledge` 表与初始策展种子数据 |
@@ -139,6 +140,7 @@ npx supabase functions deploy process-tour --project-ref qxunedraoviaonjdanag --
 | 2026-09-03 | 新增知名山岳策展步道层：先按已知步道补关键点，再按真实动线固定站序；AI 只负责 narrative 和换乘描述，不能改站点集合/顺序 |
 | 2026-09-03 v78 | 新增 `destination_route_knowledge` 结构化路线知识层：`zones/trails/edges` 存数据库，`process-tour` 启动时按目的地别名加载；命中高置信数据时用数据库路线，未命中回退内置 `CURATED_TRAILS`。处理报告记录 `routeKnowledge.source/confidence/destination`。这是后续自动搜索和 route-research 写入的落库地基。 |
 | 2026-09-03 v79 | 新增自动路线研究：山岳目的地缺少数据库知识时，先抓取 Wikipedia/OSM/高德证据，再抽取 `zones/trails/edges` 并以 `auto-research` 写入。自动研究置信度上限 0.80，不会覆盖人工策展的 0.90+ 数据；研究失败仍回退内置数据。 |
+| 2026-09-03 v80 | 新增路线图校验：`trails` 连续站点生成默认徒步边，显式 `edges` 可表达索道/观光车/专车。写库前检查步道顺序回退、跨徒步区交错、>8km 长距离位移是否缺少非徒步衔接；结果写入 `process_report.routeGraph`，并给路线 narrative 提供交通衔接提示。 |
 
 ## 测试记录
 
@@ -233,7 +235,7 @@ supabase db query --linked --project-ref qxunedraoviaonjdanag --file supabase/ro
 1. 读取 `destination_route_knowledge`；
 2. 命中数据库知识 → 直接使用；
 3. 未命中且 `destination.type === "mountain"` → 抓取 Wikipedia、OpenStreetMap、高德周边 POI；
-4. DeepSeek 只做结构化抽取，输出 `zones/trails/edges/evidence`；
+4. DeepSeek 只做结构化抽取，输出 `zones/trails/edges/evidence`；若 `note` 明确写“索道/观光车/专车”，会确定性纠偏 `mode`；
 5. 结果以 `source="auto-research"`、`confidence <= 0.80` 写入路线知识表，供本次和后续处理复用；
 6. 抽取失败时回退 `CURATED_TRAILS`，处理不中断。
 
@@ -267,3 +269,21 @@ curl -X POST 'https://qxunedraoviaonjdanag.supabase.co/functions/v1/route-resear
 ```
 
 自动研究当前定位是“低置信兜底 + 新目的地冷启动”，不是人工策展的替代。来源证据不足时，抽取的路线可能偏短；人工策展数据仍会优先。
+接口也会在写入前检查同名现有知识：`curated` 或更高置信记录会直接跳过，返回 `skipped=true`。
+
+### 路线图校验
+
+`route-graph.ts` 会把路线知识转成可校验的图：
+
+- 每条 `trail` 的连续站点生成默认 `walk` 边；
+- 每条显式 `edge` 覆盖默认交通方式，可写 `walk/cableway/shuttle/car/other`；
+- 反向查询也会建边，方便校验倒序或下山动线；
+- `trail` 顺序仍保留方向语义，用于检测顺序回退。
+
+写库前会检查三类结构问题：
+
+1. **步道顺序回退**：同一条已知步道的站点出现 A→C→B；
+2. **跨徒步区交错**：北线→南线→北线这类乱跳；
+3. **长距离徒步误判**：相邻点相距超过 8km，但没有索道、观光车、专车等非徒步衔接。
+
+主题游允许长距离接驳，因为它本来就会串联核心景区和 60km 内的独立景点。校验结果不会中断生成，但会写入 `process_report.routeGraph` 和 `warnings`，便于发现数据源质量问题。
