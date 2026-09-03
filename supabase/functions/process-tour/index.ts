@@ -10,7 +10,7 @@ import { gaodeNearbyCulturalPOIs, JUNK_RE } from "./gaode-scan.ts";
 import { AMUSE_RE, FACILITY_RE, gaode, gaodeRegionScenics } from "./gaode-search.ts";
 import { haversineM } from "./geo.ts";
 import { orderStopsGeographic, planRoutes as planRoutesModule } from "./routes.ts";
-import { getTrailNotes, injectTrailSeeds, orderStopsByTrail } from "./trail-routes.ts";
+import { applyTrailGroups, getTrailNotes, injectTrailSeeds, orderStopsByTrail } from "./trail-routes.ts";
 import { attachScenicTags as attachScenicTagsModule, buildAnchors as buildAnchorsModule, scanAnchorSubs as scanAnchorSubsModule } from "./anchors.ts";
 import { REGION_RADIUS, SUB_DEDUP_M, SUB_TOTAL_CAP } from "./anchors.ts";
 
@@ -393,6 +393,15 @@ Deno.serve(async (req: Request) => {
     // 2.4 子景点确定性补全 + 景区归属（接线 gaodeAroundScenics，不依赖 AI 提议）
     // 解决：袁家界/十里画廊/水绕四门/杨家界等被高德 types 查询召回不到 → 靠周边扫描确定性拉取。
     const anchors = buildAnchorsModule(locs, destName);
+    // 山岳目的地可能提取不到带“景区/风景名胜区”后缀的伞形锚点（嵩山实测只有神州第一圣地/少林寺等），
+    // 但目的地坐标本身是高德稳定返回的核心点。此时不能让全部点落到“独立”→ corePool=0 → 一日线消失。
+    if (!anchors.length && destLoc && tour.destination?.type === "mountain") {
+      anchors.push({
+        id: "destination-core", name: destName, scenicName: destName, lat: destLoc.lat, lng: destLoc.lng,
+        elevation: "", importance: 5, tags: [], weight: 99, mergedNames: [], subPoints: [],
+      });
+      warnings.push(`⛰ 未识别出景区锚点，已用目的地坐标「${destName}」作为核心锚点`);
+    }
     try {
       // 只扫描非核心伞形/景区锚点（核心景区子景点已由 AI 提取覆盖；省 API 调用与时间）
       const scanAnchors = anchors.filter(a => a.weight >= 4 && !(destName && a.scenicName.includes(destName)));
@@ -427,6 +436,8 @@ Deno.serve(async (req: Request) => {
       || anchors.find(a => destName && (a.name.includes(destName) || destName.includes(a.name)))
       || anchors[0] || null;
     const coreScenicName = coreAnchor?.scenicName || (destName || "");
+    const trailGroupNames = applyTrailGroups(locs, destName);
+    if (trailGroupNames.length) warnings.push(`🥾 已知多山线路分区：${trailGroupNames.join("/")}`);
     // 主景区须为真实景区（≥2 个子点）。"独立"是兜底标签不是景区——若让它当主景区，2日 day-2
     // 会被要求"只含独立景区站点"，把九寨沟/四姑娘山等远点全塞进来。无主景区时留空，2日 day-2 继续覆盖核心景区。
     const countByScenic = new Map<string, number>();
@@ -594,7 +605,8 @@ Deno.serve(async (req: Request) => {
               if (!stops.length) {
                 const fallback = locs.filter(l => !(l.tags || []).includes("地区景点"))
                   .slice().sort((a, b) => (b.importance || 3) - (a.importance || 3)).slice(0, 4);
-                stops = fallback.map(l => slugToDbId.get(l.id)).filter((id): id is string => !!id);
+                const fallbackIds = fallback.map(l => slugToDbId.get(l.id)).filter((id): id is string => !!id);
+                stops = orderStops(fallbackIds, dbLocs);
                 if (stops.length) warnings.push(`♻️ 路线"${plan.label}"AI 选点无法匹配，回退核心 ${stops.length} 站`);
               }
             }

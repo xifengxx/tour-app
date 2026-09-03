@@ -31,6 +31,8 @@ export function planRoutes(locs: any[], ctx: { coreScenicName: string; mainSceni
   const isRegion = (l: any) => (l.tags || []).includes("地区景点");
   const byImp = (a: any, b: any) => (b.importance || 3) - (a.importance || 3);
   const corePool = locs.filter((l: any) => !isRegion(l) && l.scenic === ctx.coreScenicName).sort(byImp);
+  // 锚点失败时不能产出空一日线：用所有非地区景点兜底，保住“必有常规路线”的底线。
+  const routeCorePool = corePool.length ? corePool : locs.filter((l: any) => !isRegion(l)).sort(byImp);
   let mainPool = ctx.mainScenicName ? locs.filter((l: any) => l.scenic === ctx.mainScenicName).sort(byImp) : [];
   if (!mainPool.length) {
     const clusters = clusterRegionPts(locs, corePool);
@@ -46,12 +48,12 @@ export function planRoutes(locs: any[], ctx: { coreScenicName: string; mainSceni
   // 会出现地点已入库（如应县木塔 47km、华严寺 60km）但没有任何路线引用的“孤岛地点”。
   const unifiedRegion60 = clusterRegionPts(locs, corePool).map((c) => pickRep(c, ctx.destName)).filter((l: any) => nearCore(l, REGION_RADIUS));
   const plans: { label: string; title: string; allow: string[] | null }[] = [];
-  plans.push({ label: "1日精华游", title: `${ctx.destName}一日精华游`, allow: corePool.slice(0, CORE_ROUTE_MAX_STOPS).map((l) => l.id) });
+  plans.push({ label: "1日精华游", title: `${ctx.destName}一日精华游`, allow: routeCorePool.slice(0, CORE_ROUTE_MAX_STOPS).map((l) => l.id) });
   if (mainPool.length) {
-    plans.push({ label: "2日全景游", title: `${ctx.destName}两日全景游`, allow: [...corePool.slice(0, CORE_ROUTE_MAX_STOPS).map((l) => l.id), ...mainPool.slice(0, 8).map((l) => l.id)] });
+    plans.push({ label: "2日全景游", title: `${ctx.destName}两日全景游`, allow: [...routeCorePool.slice(0, CORE_ROUTE_MAX_STOPS).map((l) => l.id), ...mainPool.slice(0, 8).map((l) => l.id)] });
   }
   if (ctx.hasRegionTour && unifiedRegion60.length) {
-    plans.push({ label: "主题游", title: `${ctx.destName}深度主题游`, allow: [...corePool.slice(0, 4).map((l) => l.id), ...unifiedRegion60.map((l) => l.id)] });
+    plans.push({ label: "主题游", title: `${ctx.destName}深度主题游`, allow: [...routeCorePool.slice(0, 4).map((l) => l.id), ...unifiedRegion60.map((l) => l.id)] });
   }
   if (ctx.isNovelBased) plans.push({ label: "文学巡礼线", title: `《${ctx.novelName}》文学巡礼`, allow: null });
   return plans;

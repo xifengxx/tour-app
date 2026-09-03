@@ -55,6 +55,24 @@ describe("planRoutes", () => {
     expect(theme?.allow).toContain("应县木塔");
     expect(theme?.allow).toContain("华严寺");
   });
+
+  it("景区锚点失败且 corePool 为空时，一日线回退到全部非地区景点", () => {
+    // 嵩山线上实测：提取结果没有带“景区/风景名胜区”后缀的伞形锚点，导致 corePool=0，
+    // 常规一日线因 stops 为空被丢掉，最终只剩文学巡礼线。
+    const locs = [
+      { ...point("神州第一圣地", "独立", [], 5) },
+      { ...point("少林寺", "独立", [], 5) },
+      { ...point("塔林", "独立", [], 4) },
+      { ...point("中岳庙", "独立", [], 4) },
+      { ...point("嵩阳书院", "独立", [], 4) },
+    ];
+    const [plan] = planRoutes(locs, {
+      coreScenicName: "嵩山", mainScenicName: "", destName: "嵩山",
+      isNovelBased: true, novelName: "嵩山少林寺", hasRegionTour: false,
+    });
+    expect(plan.label).toBe("1日精华游");
+    expect(plan.allow).toHaveLength(5);
+  });
 });
 
 describe("orderStopsGeographic", () => {

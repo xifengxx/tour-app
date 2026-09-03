@@ -11,6 +11,9 @@ export type TrailStop = {
 export type TrailRoute = {
   aliases: string[];
   stops: TrailStop[];
+  // 多景区目的地（嵩山=太室山+少室山）用这个字段把已知线路分到不同景区池。
+  // 不填时站点沿用目的地核心景区，适配恒山这类单主线目的地。
+  scenicName?: string;
   notes?: string;
 };
 
@@ -90,6 +93,7 @@ export const CURATED_TRAILS: TrailRoute[] = [
   },
   {
     aliases: ["嵩山", "中岳嵩山", "太室山"],
+    scenicName: "太室山",
     stops: [
       { name: "嵩阳书院" },
       { name: "老母洞" },
@@ -100,7 +104,8 @@ export const CURATED_TRAILS: TrailRoute[] = [
     notes: "太室山经典线：嵩阳书院→老母洞→中岳行宫→三皇口→峻极峰。",
   },
   {
-    aliases: ["少室山", "三皇寨", "少林寺"],
+    aliases: ["嵩山", "少室山", "三皇寨", "少林寺"],
+    scenicName: "少室山",
     stops: [
       { name: "少林寺" },
       { name: "塔林" },
@@ -201,6 +206,25 @@ export function injectTrailSeeds(locs: any[], destName: string, coreScenicName: 
     added.push(stop.name);
   }
   return added;
+}
+
+// 嵩山这类目的地不是一条线性步道：太室山和少室山分别徒步，一天不可能混爬。
+// 这里不生成路线，只把已有真实站点归到策展景区池；路线组成仍交给 planRoutes。
+export function applyTrailGroups(locs: any[], destName: string): string[] {
+  const changed: string[] = [];
+  for (const route of CURATED_TRAILS) {
+    if (!route.scenicName || !isDestinationTrail(route, destName)) continue;
+    const { matches } = matchStops(route, locs);
+    if (matches.size < 2) continue;
+    for (const matched of matches.values()) {
+      const loc = locs.find(l => l.id === matched.id);
+      if (loc && loc.scenic !== route.scenicName) {
+        loc.scenic = route.scenicName;
+        changed.push(`${loc.name}→${route.scenicName}`);
+      }
+    }
+  }
+  return changed;
 }
 
 export function getTrailNotes(destName: string, locs: LocLike[]) {

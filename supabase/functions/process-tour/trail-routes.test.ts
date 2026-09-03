@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getTrailNotes, injectTrailSeeds, orderStopsByTrail } from "./trail-routes.ts";
+import { applyTrailGroups, getTrailNotes, injectTrailSeeds, orderStopsByTrail } from "./trail-routes.ts";
 
 const loc = (id: string, name: string, lng: number, lat: number) => ({ id, name, lng, lat });
 
@@ -45,5 +45,18 @@ describe("curated trail routes", () => {
     ];
     expect(getTrailNotes("北岳恒山", locs)).toContain("三清殿");
     expect(orderStopsByTrail(["gate", "tianfengling"], locs, null, "无名小山")).toEqual([]);
+  });
+
+  it("嵩山双山线路将少室山景点分到独立景区池，而不是混入一日爬线", () => {
+    const locs = [
+      { ...loc("songshan", "神州第一圣地", 113.024861, 34.494863), scenic: "嵩山" },
+      { ...loc("shaolin", "少林寺", 112.941373, 34.507029), scenic: "嵩山" },
+      { ...loc("talin", "塔林", 112.937188, 34.503335), scenic: "嵩山" },
+      { ...loc("sanhuangzhai", "三皇寨", 112.952063, 34.473496), scenic: "嵩山" },
+      { ...loc("taishi", "太室山", 113.042706, 34.491078), scenic: "嵩山" },
+    ];
+    const changed = applyTrailGroups(locs, "嵩山");
+    expect(changed).toHaveLength(3);
+    expect(locs.filter(l => l.scenic === "少室山").map(l => l.name)).toEqual(["少林寺", "塔林", "三皇寨"]);
   });
 });
