@@ -18,6 +18,17 @@ describe("planRoutes", () => {
     expect(plans.map(plan => plan.label)).toEqual(["1日精华游"]);
   });
 
+  it("没有第二景区时，地区景点不能拼成两日山岳徒步线", () => {
+    const locs = [
+      ...Array.from({ length: 8 }, (_, i) => point(`核心${i}`, "核心", [], 8 - i, 114.16, 27.47)),
+      point("纪念馆", "独立", ["地区景点"], 4, 113.87, 27.62),
+      point("溶洞", "独立", ["地区景点"], 3, 113.95, 27.58),
+    ];
+    const plans = planRoutes(locs, { coreScenicName: "核心", mainScenicName: "", destName: "武功山", isNovelBased: false, novelName: "", hasRegionTour: true });
+    expect(plans.map(plan => plan.label)).toEqual(["1日精华游", "主题游"]);
+    expect(plans.find(plan => plan.label === "主题游")?.allow).toContain("纪念馆");
+  });
+
   it("11 个核心点时保留完整核心动线，不再按 10 个截断", () => {
     const locs = Array.from({ length: 11 }, (_, i) => point(`核心${i}`, "核心", [], i + 1));
     const [plan] = planRoutes(locs, { coreScenicName: "核心", mainScenicName: "", destName: "目的地", isNovelBased: false, novelName: "", hasRegionTour: false });

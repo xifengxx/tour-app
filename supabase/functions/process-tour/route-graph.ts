@@ -6,6 +6,20 @@ const normalizeName = (value: unknown) =>
     .toLowerCase()
     .replace(/[，。、·—\-_\s（）()《》"]/g, "");
 
+// 高德/AI 常把交通设施并入景点名（例如“紫极宫(中庵)”对应“中庵索道”）。
+// 图节点保留资料原名，同时派生常用短别名，让显式交通边可以命中实际站点。
+function implicitNodeAliases(value: unknown) {
+  const name = String(value || "").trim();
+  const aliases = new Set<string>();
+  if (/游客服务中心/.test(name)) aliases.add(name.replace(/游客服务中心/g, "游客中心"));
+  if (/游客中心/.test(name)) aliases.add(name.replace(/游客中心/g, "游客服务中心"));
+  if (/索道/.test(name)) {
+    const shortAlias = name.replace(/索道/g, "").trim();
+    if (shortAlias) aliases.add(shortAlias);
+  }
+  return [...aliases].filter(Boolean);
+}
+
 type GraphNode = {
   key: string;
   name: string;
@@ -77,7 +91,7 @@ function ensureNode(graph: RouteGraph, name: string, stop?: { lat?: number; lng?
   }
   if (!node.lat && stop?.lat) node.lat = stop.lat;
   if (!node.lng && stop?.lng) node.lng = stop.lng;
-  for (const alias of stop?.aliases || []) {
+  for (const alias of [...(stop?.aliases || []), ...implicitNodeAliases(node.name)]) {
     const value = String(alias).trim();
     if (value && !node.aliases.includes(value)) node.aliases.push(value);
   }
@@ -158,15 +172,27 @@ function scoreNode(locName: string, node: GraphNode, loc: { lat?: number; lng?: 
 export function matchLocsToGraph(stopIds: string[], locs: any[], graph: RouteGraph) {
   const byId = new Map(locs.map(loc => [loc.id, loc]));
   const matches = new Map<string, GraphNode>();
+  const candidates: { id: string; node: GraphNode; score: number }[] = [];
   for (const id of stopIds) {
     const loc = byId.get(id);
     if (!loc) continue;
-    const candidates = [...graph.nodes.values()]
-      .map(node => ({ node, score: scoreNode(String(loc.name || ""), node, loc) }))
-      .filter((item): item is { node: GraphNode; score: NonNullable<ReturnType<typeof scoreNode>> } => !!item.score)
-      .sort((a, b) => b.score.score - a.score.score);
-    if (candidates[0]) matches.set(id, candidates[0].node);
+    for (const node of graph.nodes.values()) {
+      const score = scoreNode(String(loc.name || ""), node, loc);
+      if (score) candidates.push({ id, node, score: score.score });
+    }
   }
+  // “入口”和“入口服务点”可能都能匹配同一个图节点。若允许一对多，
+  // 辅助设施会抢走真实入口的位置，步道顺序就会被倒置。
+  const usedIds = new Set<string>();
+  const usedNodeKeys = new Set<string>();
+  candidates
+    .sort((a, b) => b.score - a.score || stopIds.indexOf(a.id) - stopIds.indexOf(b.id))
+    .forEach(candidate => {
+      if (usedIds.has(candidate.id) || usedNodeKeys.has(candidate.node.key)) return;
+      usedIds.add(candidate.id);
+      usedNodeKeys.add(candidate.node.key);
+      matches.set(candidate.id, candidate.node);
+    });
   return matches;
 }
 
@@ -174,6 +200,48 @@ function primaryZone(node: GraphNode) {
   return node.zoneIds.size ? [...node.zoneIds][0] : "";
 }
 
+// 已知步道只覆盖其中一部分站点时，不能把其余同区点按“重要性顺序”堆在末尾；
+// 那会再造出山顶→山脚→半山这类锯齿。按最小绕行增量把它们插回步道骨架。
+function integrateUnmatchedStops(
+  ordered: string[],
+  unmatched: string[],
+  byId: Map<string, any>,
+) {
+  if (!ordered.length || !unmatched.length) return [...ordered, ...unmatched];
+  const path = [...ordered];
+  for (const id of unmatched) {
+    const point = byId.get(id);
+    if (!point?.lat || !point.lng) {
+      path.push(id);
+      continue;
+    }
+    let bestIndex = path.length;
+    let bestCost = Infinity;
+    // 不插到已知步道起点之前：auto-research 的游客中心/入口常会缺坐标，
+    // 若按直线距离把半山点插到入口前，会把整条步道方向倒置。
+    for (let index = 1; index <= path.length; index++) {
+      const previous = index > 0 ? byId.get(path[index - 1]) : null;
+      const next = index < path.length ? byId.get(path[index]) : null;
+      let cost: number;
+      if (index === 0) {
+        cost = next?.lat && next.lng ? haversineM(point, next) : 0;
+      } else if (index === path.length) {
+        cost = previous?.lat && previous.lng ? haversineM(previous, point) : 0;
+      } else if (previous?.lat && previous.lng && next?.lat && next.lng) {
+        cost = haversineM(previous, point) + haversineM(point, next) - haversineM(previous, next);
+      } else {
+        continue;
+      }
+      if (cost < bestCost) {
+        bestCost = cost;
+        bestIndex = index;
+      }
+    }
+    // 超过本地绕行容忍度的点属于接驳/延伸段，保持在整个步道骨架之后。
+    path.splice(bestCost <= 8000 ? bestIndex : path.length, 0, id);
+  }
+  return path;
+}
 function trailOrderForZone(zoneId: string, ids: Set<string>, matches: Map<string, GraphNode>, knowledge: DestinationRouteKnowledge) {
   const ordered: string[] = [];
   for (const trail of knowledge.trails) {
@@ -243,13 +311,17 @@ export function routeGraphSegments(stopIds: string[], locs: any[], knowledge: De
   const segments = groupOrder.map(zoneId => groupMap.get(zoneId)!).filter(group => group.stopIds.length);
   const leftovers = stopIds.filter(id => !assigned.has(id));
   if (leftovers.length) {
-    if (segments.length) segments[segments.length - 1].stopIds.push(...leftovers);
-    else segments.push({ zoneId: "", zoneName: "未分区", trailIds: [], stopIds: leftovers });
+    segments.push({ zoneId: "", zoneName: "未分区", trailIds: [], stopIds: leftovers });
   }
   for (const segment of segments) {
     const idSet = new Set(segment.stopIds);
     const trailOrdered = trailOrderForZone(segment.zoneId, idSet, matches, knowledge);
-    segment.stopIds = [...trailOrdered, ...segment.stopIds.filter(id => !trailOrdered.includes(id))];
+    if (!trailOrdered.length) continue;
+    segment.stopIds = integrateUnmatchedStops(
+      trailOrdered,
+      segment.stopIds.filter(id => !trailOrdered.includes(id)),
+      byId,
+    );
   }
   return segments;
 }

@@ -34,11 +34,8 @@ export function planRoutes(locs: any[], ctx: { coreScenicName: string; mainSceni
   // 锚点失败时不能产出空一日线：用所有非地区景点兜底，保住“必有常规路线”的底线。
   const routeCorePool = corePool.length ? corePool : locs.filter((l: any) => !isRegion(l)).sort(byImp);
   let mainPool = ctx.mainScenicName ? locs.filter((l: any) => l.scenic === ctx.mainScenicName).sort(byImp) : [];
-  if (!mainPool.length) {
-    const clusters = clusterRegionPts(locs, corePool);
-    const big = clusters.slice().sort((a, b) => b.locs.length - a.locs.length)[0];
-    mainPool = big && big.locs.length >= 2 ? big.locs : [];
-  }
+  // 没有真实第二景区时不要用地区景点拼“两日全景”。这类 30km+ 的人文点属于主题游，
+  // 混进山岳两日线会产生“下山→纪念馆→结束”的假接驳。
   const coreCenter = corePool.reduce((acc, l) => ({ lng: acc.lng + l.lng, lat: acc.lat + l.lat }), { lng: 0, lat: 0 });
   const coreN = corePool.length || 1;
   const cc = { lng: coreCenter.lng / coreN, lat: coreCenter.lat / coreN };

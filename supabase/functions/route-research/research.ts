@@ -166,6 +166,27 @@ const stopName = (value: any) => {
   return String(name || "").trim();
 };
 
+const coordinateKey = (value: unknown) =>
+  String(value || "")
+    .toLowerCase()
+    .replace(/[，。、·—\-_\s（）()《》"]/g, "");
+
+function parseEvidenceCoords(evidence: unknown[]) {
+  const coords: { nameKey: string; lat: number; lng: number }[] = [];
+  for (const item of evidence) {
+    const text = String(item || "");
+    const re = /([^\n@]+?)@(\d+(?:\.\d+)?),(\d+(?:\.\d+)?)/g;
+    let match: RegExpExecArray | null;
+    while ((match = re.exec(text))) {
+      const nameKey = coordinateKey(match[1].replace(/^\s*\d+[.、)]\s*/, ""));
+      const lat = Number(match[2]);
+      const lng = Number(match[3]);
+      if (nameKey && Number.isFinite(lat) && Number.isFinite(lng)) coords.push({ nameKey, lat, lng });
+    }
+  }
+  return coords;
+}
+
 export function normalizeResearchResult(destination: string, raw: any, evidenceCount: number): ResearchResult | null {
   const aliases = [...new Set([destination, ...(Array.isArray(raw?.aliases) ? raw.aliases.map(String) : [])].filter(Boolean))];
   const rawZones: any[] = Array.isArray(raw?.zones) ? raw.zones : [];
@@ -180,7 +201,36 @@ export function normalizeResearchResult(destination: string, raw: any, evidenceC
   const rawTrails: any[] = Array.isArray(raw?.trails) ? raw.trails : [];
   const trails = rawTrails
     .map((t: any, i: number): ResearchResult["trails"][number] | null => {
-      const stops = (Array.isArray(t?.stops) ? t.stops : []).map(stopName).filter(Boolean).slice(0, 24);
+      const rawStops = Array.isArray(t?.stops) ? t.stops : [];
+      const evidenceCoords = parseEvidenceCoords(Array.isArray(t?.evidence) ? t.evidence : []);
+      const stops = rawStops
+        .map((stop: any): {
+          name: string;
+          aliases?: string[];
+          lat?: number;
+          lng?: number;
+          required?: boolean;
+        } | null => {
+          const name = stopName(stop);
+          if (!name) return null;
+          const nameKey = coordinateKey(name);
+          const matched = evidenceCoords.find(coord =>
+            coord.nameKey.includes(nameKey) || nameKey.includes(coord.nameKey)
+          );
+          const lat = Number(stop?.lat ?? matched?.lat);
+          const lng = Number(stop?.lng ?? matched?.lng);
+          return {
+            name,
+            aliases: Array.isArray(stop?.aliases) ? stop.aliases.map(String).filter(Boolean) : undefined,
+            lat: Number.isFinite(lat) ? lat : undefined,
+            lng: Number.isFinite(lng) ? lng : undefined,
+            // 有外部 POI 坐标的路线点可以作为确定性补全种子；
+            // 纯模型名称仍不强制注入，避免把未证实地点写进导览。
+            required: stop?.required === true || !!matched,
+          };
+        })
+        .filter((stop: ResearchResult["trails"][number]["stops"][number] | null): stop is ResearchResult["trails"][number]["stops"][number] => !!stop)
+        .slice(0, 24);
       if (stops.length < 3) return null;
       const scenicName = String(t?.scenicName || "").trim();
       return {
@@ -188,7 +238,7 @@ export function normalizeResearchResult(destination: string, raw: any, evidenceC
         aliases: [...new Set([destination, scenicName, ...(Array.isArray(t?.aliases) ? t.aliases.map(String) : [])].filter(Boolean))],
         scenicName: scenicName || undefined,
         zoneId: String(t?.zoneId || "") || undefined,
-        stops: stops.map((name: string) => ({ name })),
+        stops,
         notes: String(t?.notes || "") || undefined,
         evidence: Array.isArray(t?.evidence) ? t.evidence.map(String).filter(Boolean).slice(0, 3) : [],
       };

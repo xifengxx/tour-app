@@ -43,6 +43,23 @@ describe("route research", () => {
     expect(result?.edges[1].mode).toBe("shuttle");
   });
 
+  it("从外部 POI 证据中恢复步道坐标，并允许补全关键路线点", () => {
+    const result = normalizeResearchResult("武功山", {
+      trails: [{
+        aliases: ["武功山"],
+        stops: [{ name: "游客服务中心" }, { name: "石鼓寺" }, { name: "中庵索道" }, { name: "金顶" }],
+        evidence: [
+          "1. 武功山国家级风景名胜区游客服务中心 @27.48902,114.12944\n2. 石鼓寺 @27.46686,114.15508",
+          "中庵索道 @27.46568,114.15618",
+        ],
+      }],
+    }, 2);
+    expect(result?.trails[0].stops[0]).toMatchObject({ lat: 27.48902, lng: 114.12944, required: true });
+    expect(result?.trails[0].stops[1]).toMatchObject({ lat: 27.46686, lng: 114.15508, required: true });
+    expect(result?.trails[0].stops[2]).toMatchObject({ lat: 27.46568, lng: 114.15618, required: true });
+    expect(result?.trails[0].stops[3].required).toBe(false);
+  });
+
   it("提示词要求引用证据并限制最高置信度", () => {
     const prompt = buildResearchPrompt("北岳恒山", "山西省大同市", { lng: 113.73, lat: 39.67 }, [
       { provider: "wikipedia", title: "恒山", text: "恒山主峰天峰岭。", url: "https://example.com" },

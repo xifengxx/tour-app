@@ -107,6 +107,59 @@ describe("route graph", () => {
     expect(ordered.at(-1)).toBe("far-park");
   });
 
+  it("把同区未匹配点插回步道骨架，避免按原顺序堆在路线末尾", () => {
+    const locs = [
+      ...graphLocs,
+      loc("midway", "步道休憩点", 116.0015, 39.0015),
+    ];
+    const rawOrder = ["主峰", "midway", "入口", "中亭"];
+    const ordered = planGraphStops(rawOrder, locs, knowledge);
+    expect(ordered).toEqual(["入口", "中亭", "midway", "主峰"]);
+  });
+
+  it("未匹配点不倒插到已知步道入口之前", () => {
+    const locs = [
+      ...graphLocs,
+      loc("near-entrance", "入口服务点", 116.0002, 39.0002),
+    ];
+    const ordered = planGraphStops(["near-entrance", "中亭", "主峰", "入口"], locs, knowledge);
+    expect(ordered).toEqual(["入口", "near-entrance", "中亭", "主峰"]);
+  });
+
+  it("交通设施短别名能命中实际景点名，并保留索道衔接", () => {
+    const mountainKnowledge: DestinationRouteKnowledge = {
+      destinationName: "武功山",
+      aliases: ["武功山"],
+      zones: [{ id: "main", name: "武功山主景区" }],
+      trails: [{
+        id: "classic", zoneId: "main", aliases: ["武功山"],
+        stops: [
+          { name: "游客服务中心" },
+          { name: "石鼓寺" },
+          { name: "中庵索道" },
+          { name: "金顶" },
+        ],
+      }],
+      edges: [
+        { from: "游客服务中心", to: "石鼓寺", mode: "shuttle", duration: "15分钟" },
+        { from: "石鼓寺", to: "中庵索道", mode: "cableway", duration: "5分钟" },
+        { from: "中庵索道", to: "金顶", mode: "walk", duration: "2小时" },
+      ],
+      source: "auto-research",
+      confidence: 0.75,
+    };
+    const mountainLocs = [
+      loc("shigu", "石鼓寺", 114.155081, 27.466864),
+      loc("jinding", "武功山风景名胜区金顶", 114.178404, 27.452146),
+      loc("ziyuan", "萍乡武功山景区紫极宫(中庵)", 114.172656, 27.458630),
+    ];
+    const ordered = planGraphStops(mountainLocs.map(l => l.id), mountainLocs, mountainKnowledge);
+    expect(ordered).toEqual(["shigu", "ziyuan", "jinding"]);
+    const legs = buildRouteLegs(ordered, mountainLocs, mountainKnowledge);
+    expect(legs[0]).toMatchObject({ fromId: "shigu", toId: "ziyuan", mode: "cableway", duration: "5分钟" });
+    expect(legs[1]).toMatchObject({ fromId: "ziyuan", toId: "jinding", mode: "walk", duration: "2小时" });
+  });
+
   it("交通 leg 优先使用显式边，并按距离保守推断接驳方式", () => {
     const legs = buildRouteLegs(["中亭", "主峰", "南门"], graphLocs, knowledge);
     expect(legs[0]).toMatchObject({ fromId: "中亭", toId: "主峰", mode: "walk" });
