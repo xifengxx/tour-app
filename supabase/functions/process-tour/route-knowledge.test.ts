@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { selectRouteKnowledge } from "./route-knowledge.ts";
+import { researchedToKnowledge, selectRouteKnowledge } from "./route-knowledge.ts";
 
 describe("destination route knowledge", () => {
   const row = {
@@ -31,5 +31,19 @@ describe("destination route knowledge", () => {
   it("数据库未命中或模型无效时回退内置策展数据", () => {
     expect(selectRouteKnowledge([], "未知山").source).toBe("builtin");
     expect(selectRouteKnowledge([{ destination_name: "无效", model: {} }], "未知山").source).toBe("builtin");
+  });
+
+  it("自动研究结果进入低置信数据层", () => {
+    const knowledge = researchedToKnowledge({
+      destination_name: "未知山",
+      aliases: ["未知山"],
+      zones: [],
+      trails: [{ id: "auto-1", aliases: ["未知山"], stops: [{ name: "入口" }, { name: "中亭" }, { name: "主峰" }] }],
+      edges: [],
+      confidence: 0.75,
+    });
+    expect(knowledge.source).toBe("auto-research");
+    expect(knowledge.confidence).toBeLessThanOrEqual(0.8);
+    expect(knowledge.trails[0].stops).toHaveLength(3);
   });
 });

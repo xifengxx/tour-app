@@ -34,6 +34,8 @@
 | `supabase/functions/process-tour/index.ts` | Supabase Edge Function：AI 处理核心逻辑 |
 | `supabase/functions/process-tour/trail-routes.ts` | 知名山岳步道知识层：补关键步道点、确定站序、提供换乘提示 |
 | `supabase/functions/process-tour/route-knowledge.ts` | 目的地路线知识读取层：数据库优先，内置策展数据兜底 |
+| `supabase/functions/route-research/research.ts` | 自动路线研究：抓取外部证据并让 AI 抽取结构化路线 |
+| `supabase/functions/route-research/index.ts` | 手动研究入口：按目的地/tourId 研究并写入路线知识表 |
 | `supabase/route-knowledge.sql` | `destination_route_knowledge` 表与初始策展种子数据 |
 
 ## 数据库配置
@@ -99,6 +101,8 @@ npx supabase functions deploy process-tour --project-ref qxunedraoviaonjdanag --
 |-----|------|
 | `SB_SERVICE_ROLE_KEY` | Supabase service_role key（绕过 RLS 写数据） |
 | `DEEPSEEK_API_KEY` | DeepSeek API key（AI 内容生成） |
+| `GAODE_KEY` | 高德 Web API key（坐标、周边景点） |
+| `ROUTE_RESEARCH_SECRET` | `route-research` 手动接口访问密钥 |
 
 ### 函数地址
 
@@ -134,6 +138,7 @@ npx supabase functions deploy process-tour --project-ref qxunedraoviaonjdanag --
 | v70.4 | 文学巡礼线 dedup 豁免：route 标记 `_free`（自由选点），stops-set 去重跳过 → 修黄山文学巡礼线与 1 日线同站点集合被误删（routes 3→4）；`process_report` 埋点 `plans`/`corePool`/`📖 resolve N 站` warning 辅助诊断 |
 | 2026-09-03 | 新增知名山岳策展步道层：先按已知步道补关键点，再按真实动线固定站序；AI 只负责 narrative 和换乘描述，不能改站点集合/顺序 |
 | 2026-09-03 v78 | 新增 `destination_route_knowledge` 结构化路线知识层：`zones/trails/edges` 存数据库，`process-tour` 启动时按目的地别名加载；命中高置信数据时用数据库路线，未命中回退内置 `CURATED_TRAILS`。处理报告记录 `routeKnowledge.source/confidence/destination`。这是后续自动搜索和 route-research 写入的落库地基。 |
+| 2026-09-03 v79 | 新增自动路线研究：山岳目的地缺少数据库知识时，先抓取 Wikipedia/OSM/高德证据，再抽取 `zones/trails/edges` 并以 `auto-research` 写入。自动研究置信度上限 0.80，不会覆盖人工策展的 0.90+ 数据；研究失败仍回退内置数据。 |
 
 ## 测试记录
 
@@ -220,3 +225,45 @@ curl -s "https://qxunedraoviaonjdanag.supabase.co/rest/v1/locations?tour_id=eq.<
 ```bash
 supabase db query --linked --project-ref qxunedraoviaonjdanag --file supabase/route-knowledge.sql
 ```
+
+### 自动路线研究（route-research）
+
+`process-tour` 处理山岳目的地时的顺序是：
+
+1. 读取 `destination_route_knowledge`；
+2. 命中数据库知识 → 直接使用；
+3. 未命中且 `destination.type === "mountain"` → 抓取 Wikipedia、OpenStreetMap、高德周边 POI；
+4. DeepSeek 只做结构化抽取，输出 `zones/trails/edges/evidence`；
+5. 结果以 `source="auto-research"`、`confidence <= 0.80` 写入路线知识表，供本次和后续处理复用；
+6. 抽取失败时回退 `CURATED_TRAILS`，处理不中断。
+
+也可以手动预热某个目的地：
+
+```bash
+supabase secrets set ROUTE_RESEARCH_SECRET=<random-secret> \
+  --project-ref qxunedraoviaonjdanag
+
+curl -X POST 'https://qxunedraoviaonjdanag.supabase.co/functions/v1/route-research' \
+  -H 'Content-Type: application/json' \
+  -H 'Authorization: Bearer <random-secret>' \
+  -d '{"destination":"北岳恒山","region":"山西省大同市"}'
+```
+
+返回示例：
+
+```json
+{
+  "success": true,
+  "destination": "北岳恒山",
+  "confidence": 0.75,
+  "trails": 1,
+  "stops": 4,
+  "evidence": [
+    { "provider": "wikipedia", "title": "恒山" },
+    { "provider": "openstreetmap", "title": "12km POI" },
+    { "provider": "amap", "title": "周边景点" }
+  ]
+}
+```
+
+自动研究当前定位是“低置信兜底 + 新目的地冷启动”，不是人工策展的替代。来源证据不足时，抽取的路线可能偏短；人工策展数据仍会优先。

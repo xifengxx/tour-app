@@ -11,7 +11,7 @@ import { AMUSE_RE, FACILITY_RE, gaode, gaodeRegionScenics } from "./gaode-search
 import { haversineM } from "./geo.ts";
 import { orderStopsGeographic, planRoutes as planRoutesModule } from "./routes.ts";
 import { applyTrailGroups, getPrimaryTrailScenicName, getTrailNotes, injectTrailSeeds, orderStopsByTrail } from "./trail-routes.ts";
-import { loadRouteKnowledge } from "./route-knowledge.ts";
+import { loadOrResearchRouteKnowledge } from "./route-knowledge.ts";
 import { attachScenicTags as attachScenicTagsModule, buildAnchors as buildAnchorsModule, scanAnchorSubs as scanAnchorSubsModule } from "./anchors.ts";
 import { REGION_RADIUS, SUB_DEDUP_M, SUB_TOTAL_CAP } from "./anchors.ts";
 
@@ -150,7 +150,7 @@ Deno.serve(async (req: Request) => {
     const destName = tour.destination?.name || "";
     const destRegion = tour.destination?.region || "";
     const src = tour.source?.rawText || "";
-    const routeKnowledge = await loadRouteKnowledge(destName);
+    const routeKnowledge = await loadOrResearchRouteKnowledge(destName, destRegion, tour.destination?.type);
     console.log(`Processing: ${tour.title}, ${src.length} chars`);
 
     // 目的地坐标：作所有高德搜索的 location 位置偏置。目的地地区是裸省名（如"四川"）时，
