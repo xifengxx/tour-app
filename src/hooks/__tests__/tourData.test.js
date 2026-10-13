@@ -11,7 +11,10 @@ describe('normalizeTour', () => {
       destination: { name: '测试山', bounds: [[10, 100], [20, 110]] },
       content_layers: [{ layer_key: 'novel', name: '小说场景', icon: '📖', color: '#c0392b' }],
       locations: [{ id: 'l1', name: '甲峰', lat: 28, lng: 118, importance: 5, layers: { novel: { text: 'x' } } }],
-      routes: [{ id: 'r1', day_label: '第1天', title: '线路', stops: ['l1'], narrative: 'n' }],
+      routes: [{
+        id: 'r1', day_label: '第1天', title: '线路', stops: ['l1'], narrative: 'n',
+        prof: [{ km: 0, m: 1000 }, { km: 1, m: 1100 }],
+      }],
       tips: [{ text: '提示' }],
     };
     const t = normalizeTour(row);
@@ -20,6 +23,7 @@ describe('normalizeTour', () => {
     expect(t.contentLayers[0]).toEqual({ id: 'novel', name: '小说场景', icon: '📖', color: '#c0392b' });
     expect(t.locations[0]).toMatchObject({ id: 'l1', name: '甲峰' });
     expect(t.routes[0].day).toBe('第1天'); // day_label → day
+    expect(t.routes[0].prof).toEqual([[0, 1000], [1, 1100]]);
     expect(t.tips).toEqual([{ text: '提示' }]);
   });
 

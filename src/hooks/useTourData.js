@@ -96,7 +96,8 @@ export function normalizeTour(row) {
     title: r.title,
     stops: r.stops,
     legs: r.legs || [],
-    prof: r.prof || [],
+    prof: (r.prof || []).map(p => Array.isArray(p) ? p : [p?.km, p?.m])
+      .filter(p => Number.isFinite(p[0]) && Number.isFinite(p[1])),
     narrative: r.narrative,
   }));
 
