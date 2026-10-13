@@ -506,10 +506,16 @@ Deno.serve(async (req: Request) => {
     const isNovelBased = !!(tour.source?.title || tour.source?.novelTitle);
     const novelName = String(tour.source?.title || tour.source?.novelTitle || '');
     const corePoolSize = locs.filter(l => !(l.tags || []).includes("地区景点") && l.scenic === coreScenicName).length;
-    const plans = planRoutesModule(locs, { coreScenicName, mainScenicName, destName, destLoc, isNovelBased, novelName, hasRegionTour });
+    const plans = planRoutesModule(locs, { coreScenicName, mainScenicName, destName, destLoc, isNovelBased, novelName, hasRegionTour, zones: routeKnowledge.zones });
     // 站内顺序在调 AI 前排定，planText 即最终动线，AI 的 narrative 按此顺序展开
     for (const p of plans) {
-      if (p.allow) p.allow = orderStops(p.allow, locs);
+      if (!p.allow) continue;
+      if (p.preordered && p.dayPlan) {
+        for (const day of p.dayPlan) day.allow = orderStops(day.allow, locs);
+        p.allow = p.dayPlan.flatMap(day => day.allow);
+      } else {
+        p.allow = orderStops(p.allow, locs);
+      }
     }
     // 每条路线单独生成交通 legs：1日/2日只描述本线衔接，主题游的长距离接驳不污染普通徒步线。
     const routeTrafficHints = new Map(plans.map(plan => [plan.label, plan.allow ? routeLegsText(buildRouteLegs(plan.allow, locs, routeKnowledge)) : ""]));
@@ -520,7 +526,11 @@ Deno.serve(async (req: Request) => {
         ? p.allow.map(id => { const l = locs.find(x => x.id === id); return l ? `${id}: ${l.name}` : id; }).join(", ")
         : "（文学巡礼线：自由选点）";
       const traffic = routeTrafficHints.get(p.label);
-      return `${i + 1}. ${p.label}「${p.title}」 — 指定站点: ${stopsTxt}${traffic ? `\n   交通衔接（narrative 必须按此执行）: ${traffic}` : ""}`;
+      const dayText = p.dayPlan?.map(day => {
+        const dayStops = day.allow.map(id => { const l = locs.find(x => x.id === id); return l ? `${id}: ${l.name}` : id; }).join(", ");
+        return `${day.label}「${day.title}」 — 指定站点: ${dayStops}`;
+      }).join("\n   ");
+      return `${i + 1}. ${p.label}「${p.title}」 — 指定站点: ${stopsTxt}${dayText ? `\n   按日分组（必须严格执行）:\n   ${dayText}` : ""}${traffic ? `\n   交通衔接（narrative 必须按此执行）: ${traffic}` : ""}`;
     }).join("\n");
 
     const [contentById, routes] = await Promise.all([
@@ -622,7 +632,8 @@ Deno.serve(async (req: Request) => {
               }
               // v71：站点集合仍由代码确定（keep ∪ allowDb，Set 兜底去重——天门山 1日 AI 曾把
               // 入口/出口重复），顺序以地理最近邻为准，AI 顺序不再参与
-              stops = orderStops([...new Set([...keep, ...allowDb])], dbLocs);
+              // 分区计划已经按“第1天/第2天”排好；routeGraphStops 若再全局排序会把日界打散。
+              stops = plan.preordered ? [...allowDb] : orderStops([...new Set([...keep, ...allowDb])], dbLocs);
             } else {
               stops = resolved; // 文学巡礼线：AI 自由选点
               // v70.3 诊断：文学巡礼线选点结果总是记进报告（线上 3/4 路线问题定位用）

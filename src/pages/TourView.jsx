@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useTourData } from '../hooks/useTourData';
 import { supabase } from '../lib/supabase';
@@ -56,6 +55,49 @@ const animateDraw = (rp, fullPath, duration = 900) => {
   requestAnimationFrame(tick);
 };
 
+const havKm = (a, b) => {
+  const dLat = (b.lat - a.lat) * Math.PI / 180;
+  const dLng = (b.lng - a.lng) * Math.PI / 180;
+  const h = Math.sin(dLat / 2) ** 2
+    + Math.cos(a.lat * Math.PI / 180) * Math.cos(b.lat * Math.PI / 180) * Math.sin(dLng / 2) ** 2;
+  return 2 * 6371 * Math.asin(Math.sqrt(h));
+};
+
+// 剖面和地图共用同一套“站点折线累计里程”，避免两个时间轴错位。
+const routePathAtKm = (path, km) => {
+  if (!path?.length) return null;
+  if (path.length === 1) return path[0];
+  let total = 0;
+  const distances = [0];
+  for (let i = 1; i < path.length; i++) {
+    total += havKm(path[i - 1], path[i]);
+    distances.push(total);
+  }
+  const target = Math.max(0, Math.min(km, total));
+  if (target >= total) return path[path.length - 1];
+  let index = 0;
+  while (index < distances.length - 2 && distances[index + 1] < target) index++;
+  const segment = Math.max(distances[index + 1] - distances[index], 0.0001);
+  const t = (target - distances[index]) / segment;
+  return [
+    path[index][0] + (path[index + 1][0] - path[index][0]) * t,
+    path[index][1] + (path[index + 1][1] - path[index][1]) * t,
+  ];
+};
+
+const routeTotalKm = route => Number(route?.prof?.at(-1)?.[0]) || 0;
+
+const stopKmInRoute = (route, stopId, locById) => {
+  if (!route || !stopId) return 0;
+  const idx = route.stops.indexOf(stopId);
+  if (idx <= 0) return 0;
+  const stopLocs = route.stops.map(id => locById[id]).filter(Boolean);
+  if (stopLocs.length < 2) return 0;
+  let km = 0;
+  for (let i = 1; i <= idx && i < stopLocs.length; i++) km += havKm(stopLocs[i - 1], stopLocs[i]);
+  return Math.round(km * 100) / 100;
+};
+
 export default function TourView() {
   const { tourId } = useParams();
   const navigate = useNavigate();
@@ -68,6 +110,8 @@ export default function TourView() {
   const clustererRef = useRef(null);
   const currentLocRef = useRef(null);
   const firstLayerIdRef = useRef('novel'); // 导览第一个内容层 id（泰山等自定义层导览没有 novel）
+  const routeProgressMarkerRef = useRef(null);
+  const routeProgressTokenRef = useRef(0);
 
   const [currentLoc, setCurrentLoc] = useState(null);
   const [currentLayer, setCurrentLayer] = useState('novel');
@@ -81,10 +125,40 @@ export default function TourView() {
   const [mapError, setMapError] = useState('');
   const [routeConfirmations, setRouteConfirmations] = useState([]);
   const [confirmingRouteId, setConfirmingRouteId] = useState(null);
+  const [routeProgressKm, setRouteProgressKm] = useState(0);
 
   const { tour, loading } = useTourData(tourId);
 
   currentLocRef.current = currentLoc; // 供 renderMarker 闭包读取最新选中态
+
+  const cancelRouteProgressAnimation = useCallback(() => {
+    routeProgressTokenRef.current += 1;
+  }, []);
+
+  const handleRouteProgressChange = useCallback((km) => {
+    cancelRouteProgressAnimation();
+    setRouteProgressKm(km);
+  }, [cancelRouteProgressAnimation]);
+
+  // 路线选中时从起点播放到终点；拖动剖面会打断动画并接管进度。
+  const animateRouteProgress = useCallback((route, fromKm, toKm, duration = 1200) => {
+    if (!route?.prof?.length) return;
+    cancelRouteProgressAnimation();
+    const token = routeProgressTokenRef.current;
+    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
+      setRouteProgressKm(toKm);
+      return;
+    }
+    const start = performance.now();
+    const tick = now => {
+      if (routeProgressTokenRef.current !== token) return;
+      const t = Math.min((now - start) / duration, 1);
+      const eased = 1 - (1 - t) ** 3;
+      setRouteProgressKm(fromKm + (toKm - fromKm) * eased);
+      if (t < 1) requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  }, [cancelRouteProgressAnimation]);
 
   // 记录导览第一个内容层 id：泰山等自定义层(无 novel)时选中地点默认落到第一个层
   useEffect(() => {
@@ -107,6 +181,11 @@ export default function TourView() {
   }, [user, tourId]);
 
   const selectLoc = useCallback((loc) => {
+    if (currentRouteId) {
+      const activeRoute = tour?.routes?.find(route => route.id === currentRouteId);
+      cancelRouteProgressAnimation();
+      setRouteProgressKm(stopKmInRoute(activeRoute, loc.id, locByIdRef.current));
+    }
     setCurrentLoc(loc);
     setCurrentLayer(firstLayerIdRef.current);
     setShowCard(true);
@@ -116,7 +195,7 @@ export default function TourView() {
       else map.setCenter([loc.lng, loc.lat]);
       map.setZoom(16);
     }
-  }, []);
+  }, [currentRouteId, tour, cancelRouteProgressAnimation]);
 
   const toggleFav = async () => {
     if (!user) { navigate('/login'); return; }
@@ -288,6 +367,15 @@ export default function TourView() {
         }
       });
 
+      routeProgressMarkerRef.current = new window.AMap.Marker({
+        position: tour.locations[0] ? [tour.locations[0].lng, tour.locations[0].lat] : [104, 35],
+        map,
+        offset: new window.AMap.Pixel(-7, -7),
+        content: '<div style="width:14px;height:14px;border-radius:50%;background:#c2402a;border:3px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.25)"></div>',
+        zIndex: 600,
+      });
+      routeProgressMarkerRef.current.hide();
+
       // 标记由 MarkerCluster 托管，setFitView 未必生效——直接从地点坐标算边界
       const lngs = tour.locations.map(l => l.lng);
       const lats = tour.locations.map(l => l.lat);
@@ -310,6 +398,8 @@ export default function TourView() {
       }
       markersRef.current = [];
       routePolylinesRef.current = {};
+      routeProgressMarkerRef.current = null;
+      routeProgressTokenRef.current += 1;
     };
   }, [tour, selectLoc]);
 
@@ -363,6 +453,9 @@ export default function TourView() {
       // 运笔渐绘：选中的路线从第一站画出
       const rp = routePolylinesRef.current[newId];
       if (rp?.path) animateDraw(rp, rp.path);
+      // 海拔剖面联动：路线选中后红色圆点从起点播到终点
+      routeProgressMarkerRef.current?.show();
+      animateRouteProgress(route, 0, routeTotalKm(route));
       const map = mapInstance.current;
       if (!map) return;
       const firstLoc = locByIdRef.current[route.stops[0]];
@@ -371,13 +464,15 @@ export default function TourView() {
       }
     } else {
       markersRef.current.forEach(m => m.setOptions({ opacity: 1 }));
+      routeProgressMarkerRef.current?.hide();
+      setRouteProgressKm(0);
       Object.values(routePolylinesRef.current).forEach(rp => {
         rp.animToken = (rp.animToken || 0) + 1;
         if (rp.path) rp.polyline.setPath(rp.path);
       });
       if (mapInstance.current) mapInstance.current.setFitView();
     }
-  }, [currentRouteId]);
+  }, [currentRouteId, animateRouteProgress]);
 
   // ── Computed ──
   const filteredLocations = currentRouteId
@@ -386,22 +481,14 @@ export default function TourView() {
     : (tour?.locations || []);
   const activeRoute = currentRouteId ? (tour?.routes || []).find(r => r.id === currentRouteId) : null;
 
-  // v86a: 当前选中站点在沿线累积里程（km），用于海拔剖面高亮。
-  const activeStopKm = useMemo(() => {
-    if (!activeRoute || !currentLoc) return undefined;
-    const idx = activeRoute.stops.indexOf(currentLoc.id);
-    if (idx < 0) return undefined;
-    const stopLocs = activeRoute.stops.map(id => locByIdRef.current[id]).filter(Boolean);
-    if (stopLocs.length < 2) return undefined;
-    const havKm = (a, b) => {
-      const dLat = (b.lat - a.lat) * Math.PI / 180, dLng = (b.lng - a.lng) * Math.PI / 180;
-      const h = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * Math.PI / 180) * Math.cos(b.lat * Math.PI / 180) * Math.sin(dLng / 2) ** 2;
-      return 2 * 6371 * Math.asin(Math.sqrt(h));
-    };
-    let km = 0;
-    for (let i = 1; i <= idx && i < stopLocs.length; i++) km += havKm(stopLocs[i - 1], stopLocs[i]);
-    return Math.round(km * 100) / 100;
-  }, [activeRoute, currentLoc]);
+  // 红色进度圆点位置随 routeProgressKm 同步到地图路线
+  useEffect(() => {
+    if (!activeRoute) return;
+    const path = routePolylinesRef.current[activeRoute.id]?.path;
+    if (!path) return;
+    const pos = routePathAtKm(path, routeProgressKm);
+    routeProgressMarkerRef.current?.setPosition(pos);
+  }, [routeProgressKm, activeRoute]);
 
   const activeRouteConfirmed = activeRoute
     && routeConfirmations.some(row => (
@@ -448,6 +535,16 @@ export default function TourView() {
       {/* Map */}
       <div className="relative flex-1 min-h-0">
         <div ref={mapRef} className="absolute inset-0 h-full w-full" />
+        {activeRoute?.prof?.length > 1 && (
+          <div className="absolute bottom-0 left-0 right-0 z-10 pointer-events-auto">
+            <ElevationProfile
+              prof={activeRoute.prof}
+              activeKm={routeProgressKm}
+              onProgressChange={handleRouteProgressChange}
+              stops={(activeRoute.stops || []).map(id => locByIdRef.current[id]).filter(Boolean).map(l => [l.lng, l.lat])}
+            />
+          </div>
+        )}
         {mapError && (
           <div role="alert" className="absolute inset-0 flex items-center justify-center bg-background/85 px-6 text-center text-sm text-primary">
             {mapError}
@@ -471,15 +568,6 @@ export default function TourView() {
             {activeRoute?.narrative && (
               <div className="px-4 pb-2">
                 <p className="font-kai text-xs text-muted-foreground leading-relaxed bg-background rounded-lg p-3 border-l-2 border-dai max-h-24 overflow-y-auto">{activeRoute.narrative}</p>
-              </div>
-            )}
-            {activeRoute?.prof?.length > 1 && (
-              <div className="px-4 pb-2">
-                <ElevationProfile
-                  prof={activeRoute.prof}
-                  activeKm={activeStopKm}
-                  stops={(activeRoute.stops || []).map(id => locByIdRef.current[id]).filter(Boolean).map(l => [l.lng, l.lat])}
-                />
               </div>
             )}
             {activeRoute?.legs?.length > 0 && (

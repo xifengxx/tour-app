@@ -52,6 +52,51 @@ describe("route graph", () => {
     expect(graph.edges.get("入口|中亭")).toMatchObject({ mode: "cableway", duration: "8分钟" });
   });
 
+  it("显式索道边也覆盖反向，不留下默认徒步边", () => {
+    const graph = buildRouteGraph({
+      ...knowledge,
+      edges: [{ from: "入口", to: "中亭", mode: "cableway", duration: "8分钟" }],
+    });
+    expect(graph.edges.get("入口|中亭")).toMatchObject({ mode: "cableway" });
+    expect(graph.edges.get("中亭|入口")).toMatchObject({ mode: "cableway" });
+  });
+
+  it("原路返回的索道终点转去其他分区时保持索道下撤", () => {
+    const roundTripKnowledge: DestinationRouteKnowledge = {
+      destinationName: "玉龙雪山",
+      aliases: ["玉龙雪山"],
+      zones: [{ id: "glacier_park", name: "冰川公园" }, { id: "yak_meadow", name: "牦牛坪" }],
+      trails: [{
+        id: "glacier-trail",
+        zoneId: "glacier_park",
+        scenicName: "冰川公园",
+        aliases: ["玉龙雪山"],
+        notes: "从游客中心乘索道至冰川公园，原路返回。",
+        stops: [
+          { name: "玉龙雪山国家级风景名胜区游客服务中心" },
+          { name: "索道候车厅" },
+          { name: "冰川公园", aliases: ["玉龙雪山冰川公园"] },
+        ],
+      }],
+      edges: [
+        { from: "玉龙雪山国家级风景名胜区游客服务中心", to: "索道候车厅", mode: "cableway", duration: "10分钟" },
+        { from: "索道候车厅", to: "冰川公园", mode: "cableway", duration: "10分钟" },
+      ],
+      source: "auto-research",
+      confidence: 0.75,
+    };
+    const locs = [
+      loc("glacier", "玉龙雪山冰川公园栈道", 100.2596, 27.0985),
+      loc("yak", "牦牛坪", 100.2445, 27.1660),
+    ];
+    const legs = buildRouteLegs(["glacier", "yak"], locs, roundTripKnowledge);
+    expect(legs[0]).toMatchObject({
+      fromId: "glacier",
+      mode: "cableway",
+      note: expect.stringContaining("先乘索道下至索道候车厅"),
+    });
+  });
+
   it("发现同一条步道中的顺序回退", () => {
     const issues = routeGraphIssues(["主峰", "入口", "中亭"], graphLocs, knowledge);
     expect(issues).toEqual(expect.arrayContaining([

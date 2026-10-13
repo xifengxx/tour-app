@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import ElevationProfile from '../ElevationProfile';
 
 describe('ElevationProfile', () => {
@@ -16,10 +16,14 @@ describe('ElevationProfile', () => {
       stroke: vi.fn(),
       arc: vi.fn(),
       fillText: vi.fn(),
+      measureText: vi.fn(() => ({ width: 80 })),
+      fillRect: vi.fn(),
+      strokeRect: vi.fn(),
+      setLineDash: vi.fn(),
       createLinearGradient: vi.fn(() => ({ addColorStop: vi.fn() })),
     });
 
-    render(
+    const { container } = render(
       <ElevationProfile
         prof={[[0, 1000], [5, 1200], [10, 1300]]}
         activeKm={5}
@@ -28,7 +32,11 @@ describe('ElevationProfile', () => {
     );
 
     expect(screen.getByText('海拔剖面')).toBeInTheDocument();
-    expect(screen.getByText(/1000–1300m/)).toBeInTheDocument();
+    expect(screen.getByText(/1,000–1,300m/)).toBeInTheDocument();
     expect(screen.getByText(/爬升 300m/)).toBeInTheDocument();
+
+    const canvas = container.querySelector('canvas');
+    expect(canvas).not.toBeNull();
+    expect(() => fireEvent.pointerMove(canvas, { clientX: 60 })).not.toThrow();
   });
 });

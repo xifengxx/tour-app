@@ -1,6 +1,7 @@
 import { haversineM } from "./geo.ts";
 import { isDestinationUmbrella, JUNK_RE } from "./gaode-scan.ts";
 import { REGION_RADIUS } from "./anchors.ts";
+import type { RouteZone } from "./route-knowledge-types.ts";
 
 const CLUSTER_R = 8000;
 const SUB_DEDUP_M = 300;
@@ -10,6 +11,108 @@ const CORE_ROUTE_MAX_STOPS = 10;
 // 目的地定位点为空间锚，防止“玉龙雪山”混入丽江古城或虎跳峡。
 const CORE_ROUTE_RADIUS_M = 15000;
 const ROAD_RE = /公路$|大道$|路$|街$|巷$/;
+
+type RoutePlan = {
+  label: string;
+  title: string;
+  allow: string[] | null;
+  preordered?: boolean;
+  dayPlan?: { label: string; title: string; allow: string[] }[];
+};
+
+const normalizeText = (value: unknown) =>
+  String(value || "").toLowerCase().replace(/[，。、·—\-_\s（）()《》"]/g, "");
+
+// 山岳景区常有“同属一个目的地，但必须分别乘索道/换乘”的分区。用知识层分区
+// 把 1 日和 2 日拆开，比“核心池前 N 个 + 主景区后 N 个”更符合实际容量。
+function zonePools(pool: any[], zones: RouteZone[]) {
+  const pools = zones.map(zone => ({ zone, items: [] as any[] }));
+  const directPools = zones.map(zone => ({ zone, items: [] as any[] }));
+  const outside: any[] = [];
+  for (const loc of pool) {
+    const locName = normalizeText(loc.name);
+    let best: { index: number; score: number } | null = null;
+    for (let index = 0; index < zones.length; index++) {
+      const zone = zones[index];
+      for (const keyword of [zone.name, ...(zone.aliases || [])]) {
+        const value = normalizeText(keyword);
+        if (!value || !locName.includes(value)) continue;
+        if (!best || value.length > best.score) best = { index, score: value.length };
+      }
+    }
+    if (best) {
+      pools[best.index].items.push(loc);
+      directPools[best.index].items.push(loc);
+    }
+    else outside.push(loc);
+  }
+
+  // 白水河这类子景点不一定带分区名。若它贴近某个已识别分区，就归入该分区；
+  // 归不进去的山麓文化点保留给第二天的外围段。
+  for (const loc of outside.slice()) {
+    if (!loc.lat || !loc.lng) continue;
+    let best: { index: number; distance: number } | null = null;
+    for (let index = 0; index < pools.length; index++) {
+      const entry = directPools[index];
+      for (const anchor of entry.items) {
+        if (!anchor.lat || !anchor.lng) continue;
+        const distance = haversineM(anchor, loc);
+        if (distance <= 6000 && (!best || distance < best.distance)) {
+          best = { index, distance };
+        }
+      }
+    }
+    if (best) {
+      pools[best.index].items.push(loc);
+      outside.splice(outside.indexOf(loc), 1);
+    }
+  }
+
+  const byImp = (a: any, b: any) => (b.importance || 3) - (a.importance || 3);
+  return {
+    pools: pools.filter(entry => entry.items.length).map(entry => ({
+      zone: entry.zone,
+      items: entry.items.sort(byImp),
+    })),
+    outside: outside.sort(byImp),
+  };
+}
+
+function zoneTitles(names: string[]) {
+  const values = names.filter(Boolean);
+  return values.join(" · ") || "景区游览";
+}
+
+function zoneSplitPlans(
+  routeCorePool: any[],
+  zones: RouteZone[],
+  mainPool: any[],
+  destName: string,
+): RoutePlan[] {
+  const { pools, outside } = zonePools(routeCorePool, zones);
+  if (pools.length < 2) return [];
+  const firstDay = [...pools[0].items.slice(0, 2), ...pools[1].items.slice(0, 3)].slice(0, 5).map(l => l.id);
+  const secondDay = [
+    ...pools.slice(2).flatMap(entry => entry.items.slice(0, 2)),
+    ...outside.slice(0, 4),
+    ...(mainPool.length ? mainPool.slice(0, 2) : []),
+  ].slice(0, 6).map(l => l.id);
+  if (secondDay.length < 2) return [];
+
+  const dayPlan = [
+    { label: "第1天", title: zoneTitles(pools.slice(0, 2).map(entry => entry.zone.name)), allow: firstDay },
+    { label: "第2天", title: zoneTitles([...pools.slice(2).map(entry => entry.zone.name), "山麓延伸"]), allow: secondDay },
+  ].filter(day => day.allow.length > 0);
+  if (dayPlan.length < 2) return [];
+
+  return [{
+    label: "2日全景游",
+    title: `${destName}两日全景游`,
+    allow: dayPlan.flatMap(day => day.allow),
+    preordered: true,
+    dayPlan,
+  }];
+}
 
 function clusterRegionPts(locs: any[], corePool: any[]) {
   const pts = locs.filter((l: any) => (l.tags || []).includes("地区景点") && !(l.tags || []).includes("景区泛指"))
@@ -32,7 +135,7 @@ function pickRep(cluster: { locs: any[] }, destName: string): any {
   )[0];
 }
 
-export function planRoutes(locs: any[], ctx: { coreScenicName: string; mainScenicName: string; destName: string; destLoc?: { lng: number; lat: number } | null; isNovelBased: boolean; novelName: string; hasRegionTour: boolean }) {
+export function planRoutes(locs: any[], ctx: { coreScenicName: string; mainScenicName: string; destName: string; destLoc?: { lng: number; lat: number } | null; isNovelBased: boolean; novelName: string; hasRegionTour: boolean; zones?: RouteZone[] }) {
   const canRoute = (l: any) => !(l.tags || []).includes("景区泛指") && !isDestinationUmbrella(l.name, ctx.destName);
   const isRouteSite = (l: any) => canRoute(l) && !JUNK_RE.test(String(l.name || "")) && !ROAD_RE.test(String(l.name || ""));
   const isRegion = (l: any) => (l.tags || []).includes("地区景点");
@@ -58,9 +161,19 @@ export function planRoutes(locs: any[], ctx: { coreScenicName: string; mainSceni
   // 主题游的覆盖半径应与地区景点合并半径一致（60km）。此前只取 40km，
   // 会出现地点已入库（如应县木塔 47km、华严寺 60km）但没有任何路线引用的“孤岛地点”。
   const unifiedRegion60 = clusterRegionPts(locs, corePool).map((c) => pickRep(c, ctx.destName)).filter((l: any) => isRouteSite(l) && nearCore(l, REGION_RADIUS));
-  const plans: { label: string; title: string; allow: string[] | null }[] = [];
-  plans.push({ label: "1日精华游", title: `${ctx.destName}一日精华游`, allow: routeCorePool.slice(0, CORE_ROUTE_MAX_STOPS).map((l) => l.id) });
-  if (mainPool.length) {
+  const plans: RoutePlan[] = [];
+  if (ctx.zones?.length) {
+    const { pools } = zonePools(routeCorePool, ctx.zones);
+    const oneDay = pools.length >= 2
+      ? [...pools[0].items.slice(0, 2), ...pools[1].items.slice(0, 3)].slice(0, 5)
+      : routeCorePool.slice(0, 5);
+    plans.push({ label: "1日精华游", title: `${ctx.destName}一日精华游`, allow: oneDay.map((l) => l.id) });
+  } else {
+    plans.push({ label: "1日精华游", title: `${ctx.destName}一日精华游`, allow: routeCorePool.slice(0, CORE_ROUTE_MAX_STOPS).map((l) => l.id) });
+  }
+  if (ctx.zones?.length) {
+    plans.push(...zoneSplitPlans(routeCorePool, ctx.zones, mainPool, ctx.destName));
+  } else if (mainPool.length) {
     plans.push({ label: "2日全景游", title: `${ctx.destName}两日全景游`, allow: [...routeCorePool.slice(0, CORE_ROUTE_MAX_STOPS).map((l) => l.id), ...mainPool.slice(0, 8).map((l) => l.id)] });
   }
   if (ctx.hasRegionTour && unifiedRegion60.length) {

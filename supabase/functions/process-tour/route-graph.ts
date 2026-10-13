@@ -104,8 +104,11 @@ function addEdge(graph: RouteGraph, from: string, to: string, edge: RouteEdge, f
   if (force || !graph.edges.has(key)) graph.edges.set(key, edge);
   // 山地资料里的步道经常只写单向后检索时需要反查；真实方向由 trail 顺序保留。
   const reverseKey = `${to}|${from}`;
-  if (!graph.edges.has(reverseKey)) {
-    graph.edges.set(reverseKey, { ...edge, from: edge.to, to: edge.from });
+  const reverseEdge = { ...edge, from: edge.to, to: edge.from };
+  // 显式索道/观光车边必须同时覆盖正向和反向，否则“索道上站→下站”的
+  // 反向边会残留 trail 的默认 walk，最后生成“缆车上、徒步下”的错误叙述。
+  if (force || !graph.edges.has(reverseKey)) {
+    graph.edges.set(reverseKey, reverseEdge);
   }
 }
 
@@ -122,6 +125,11 @@ export function buildRouteGraph(knowledge: DestinationRouteKnowledge): RouteGrap
       if (node) {
         node.trailIds.add(trailId);
         for (const zone of zoneIds) node.zoneIds.add(zone);
+        // “蓝月谷导览驿站”这类站点不能只匹配完整站名；同一景区内的实际 POI
+        // 常叫“蓝月谷”。把短景区名作为节点别名，但游客中心这类跨区设施不扩大别名。
+        if (trail.scenicName && node.name.includes(trail.scenicName) && node.name !== trail.scenicName) {
+          node.aliases.push(trail.scenicName);
+        }
       }
       return key;
     });
@@ -198,6 +206,69 @@ export function matchLocsToGraph(stopIds: string[], locs: any[], graph: RouteGra
 
 function primaryZone(node: GraphNode) {
   return node.zoneIds.size ? [...node.zoneIds][0] : "";
+}
+
+// 研究资料里“原路返回”的索道线（例如冰川公园）表示山顶点必须索道往返。
+// 若下一段去往其他分区，不能因缺少直达边就回退为徒步。
+function roundTripTransfer(
+  graph: RouteGraph,
+  knowledge: DestinationRouteKnowledge,
+  fromKey: string,
+  toKey: string,
+) {
+  for (const trail of knowledge.trails) {
+    if (!trail.notes || !trail.stops.length || !/原路返回/.test(trail.notes)) continue;
+    const terminal = trail.stops.at(-1)!;
+    const terminalKey = normalizeName(terminal.name);
+    if (terminalKey !== fromKey) continue;
+    const previous = trail.stops.at(-2);
+    if (!previous) continue;
+    const inboundEdge = graph.edges.get(`${terminalKey}|${normalizeName(previous.name)}`);
+    if (inboundEdge?.mode !== "cableway") continue;
+    const directEdge = graph.edges.get(`${fromKey}|${toKey}`);
+    if (directEdge && directEdge.mode !== "walk") continue;
+    return `先乘索道下至${previous.name}，再换乘观光车/接驳前往目的地`;
+  }
+  return null;
+}
+
+function directZoneForLoc(loc: { name?: string }, zones: DestinationRouteKnowledge["zones"]) {
+  const locName = normalizeName(loc.name);
+  for (const zone of zones) {
+    for (const keyword of [zone.name, ...(zone.aliases || [])]) {
+      const value = normalizeName(keyword);
+      if (value && locName.includes(value)) return zone.id;
+    }
+  }
+  return "";
+}
+
+function zoneMapForStops(stopIds: string[], byId: Map<string, any>, knowledge: DestinationRouteKnowledge) {
+  const zoneByLocId = new Map<string, string>();
+  const directZoneByLocId = new Map<string, string>();
+  for (const id of stopIds) {
+    const loc = byId.get(id);
+    if (!loc) continue;
+    const zoneId = directZoneForLoc(loc, knowledge.zones);
+    if (zoneId) {
+      zoneByLocId.set(id, zoneId);
+      directZoneByLocId.set(id, zoneId);
+    }
+  }
+  for (const id of stopIds) {
+    if (zoneByLocId.has(id)) continue;
+    const loc = byId.get(id);
+    if (!loc?.lat || !loc.lng) continue;
+    let best: { zoneId: string; distance: number } | null = null;
+    for (const [anchorId, zoneId] of directZoneByLocId) {
+      const anchor = byId.get(anchorId);
+      if (!anchor?.lat || !anchor.lng) continue;
+      const distance = haversineM(anchor, loc);
+      if (distance <= 6000 && (!best || distance < best.distance)) best = { zoneId, distance };
+    }
+    if (best) zoneByLocId.set(id, best.zoneId);
+  }
+  return zoneByLocId;
 }
 
 // 已知步道只覆盖其中一部分站点时，不能把其余同区点按“重要性顺序”堆在末尾；
@@ -467,6 +538,7 @@ export function buildRouteLegs(stopIds: string[], locs: any[], knowledge: Destin
   const graph = buildRouteGraph(knowledge);
   const matches = matchLocsToGraph(stopIds, locs, graph);
   const byId = new Map(locs.map(loc => [loc.id, loc]));
+  const zoneByLocId = zoneMapForStops(stopIds, byId, knowledge);
   const legs: RouteLeg[] = [];
   for (let i = 0; i < stopIds.length - 1; i++) {
     const from = byId.get(stopIds[i]);
@@ -476,10 +548,29 @@ export function buildRouteLegs(stopIds: string[], locs: any[], knowledge: Destin
     const toKey = matches.get(to.id)?.key;
     const edge = fromKey && toKey ? graph.edges.get(`${fromKey}|${toKey}`) : undefined;
     const distanceM = from.lat && from.lng && to.lat && to.lng ? Math.round(haversineM(from, to)) : undefined;
+    const transfer = fromKey ? roundTripTransfer(graph, knowledge, fromKey, toKey || "") : null;
     let mode: RouteEdge["mode"] = "walk";
-    if (edge) mode = edge.mode;
-    else if (distanceM != null && distanceM > 60000) mode = "car";
-    else if (distanceM != null && distanceM > 8000) mode = "shuttle";
+    let note: string | undefined = transfer || undefined;
+    if (transfer) {
+      mode = "cableway";
+    } else if (edge) {
+      mode = edge.mode;
+      note = edge.note;
+    } else if (
+      (fromKey && toKey && primaryZone(graph.nodes.get(fromKey)!) !== primaryZone(graph.nodes.get(toKey)!))
+      || (zoneByLocId.get(from.id) && zoneByLocId.get(to.id) && zoneByLocId.get(from.id) !== zoneByLocId.get(to.id))
+    ) {
+      mode = "shuttle";
+      note = "不同徒步/索道分区，需换乘观光车或接驳车";
+    } else if (distanceM != null && distanceM > 60000) {
+      mode = "car";
+    } else if (distanceM != null && distanceM > 3000) {
+      mode = "shuttle";
+    }
+    if (!note) {
+      if (distanceM != null && distanceM > 8000) note = `直线约 ${Math.round(distanceM / 1000)}km，需接驳`;
+      else if (distanceM != null && distanceM > 3000 && mode === "shuttle") note = `直线约 ${Math.round(distanceM / 1000)}km，建议乘坐景区观光车`;
+    }
     legs.push({
       fromId: from.id,
       toId: to.id,
@@ -487,7 +578,7 @@ export function buildRouteLegs(stopIds: string[], locs: any[], knowledge: Destin
       toName: String(to.name || ""),
       mode,
       duration: edge?.duration,
-      note: edge?.note || (distanceM != null && distanceM > 8000 ? `直线约 ${Math.round(distanceM / 1000)}km，需接驳` : undefined),
+      note,
       distanceM,
     });
   }

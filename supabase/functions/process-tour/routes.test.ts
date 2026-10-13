@@ -59,6 +59,43 @@ describe("planRoutes", () => {
     expect(oneDay?.allow).not.toContain("虎跳峡");
   });
 
+  it("索道分区景区把一日容量压到核心区，并把两天拆成不同分区", () => {
+    const yulongZones = [
+      { id: "glacier_park", name: "冰川公园" },
+      { id: "blue_moon_valley", name: "蓝月谷", aliases: ["白水河蓝月谷"] },
+      { id: "spruce_meadow", name: "云杉坪" },
+      { id: "yak_meadow", name: "牦牛坪" },
+    ];
+    const namedPoint = (id: string, name: string, importance: number, lng: number, lat: number) =>
+      ({ id, name, scenic: "玉龙雪山", tags: [], importance, lng, lat });
+    const locs = [
+      namedPoint("glacier", "玉龙雪山冰川公园栈道", 5, 100.259, 27.098),
+      namedPoint("blue-valley", "玉龙雪山国家级风景名胜区蓝月谷", 5, 100.245, 27.124),
+      namedPoint("white-river", "白水河", 5, 100.242, 27.126),
+      namedPoint("ganhaizi", "甘海子", 4, 100.258, 27.091),
+      namedPoint("spruce", "云杉坪索道上部站", 4, 100.240, 27.135),
+      namedPoint("yak", "牦牛坪", 4, 100.244, 27.166),
+      namedPoint("jade-water", "丽江玉水寨", 4, 100.202, 27.000),
+      namedPoint("temple", "玉峰寺", 4, 100.197, 26.991),
+    ];
+    const plans = planRoutes(locs, {
+      coreScenicName: "玉龙雪山", mainScenicName: "", destName: "玉龙雪山",
+      destLoc: { lng: 100.245, lat: 27.100 }, isNovelBased: false, novelName: "",
+      hasRegionTour: true, zones: yulongZones,
+    });
+    const oneDay = plans.find(plan => plan.label === "1日精华游");
+    const twoDay = plans.find(plan => plan.label === "2日全景游");
+    expect(oneDay?.allow).toHaveLength(4);
+    expect(oneDay?.allow).not.toContain("spruce");
+    expect(oneDay?.allow).not.toContain("yak");
+    expect(oneDay?.allow).not.toContain("jade-water");
+    expect(twoDay?.dayPlan?.[0]?.label).toBe("第1天");
+    expect(twoDay?.dayPlan?.[0]?.allow).not.toContain("spruce");
+    expect(twoDay?.dayPlan?.[1]?.allow).toContain("spruce");
+    expect(twoDay?.dayPlan?.[1]?.allow).toContain("yak");
+    expect(twoDay?.dayPlan?.[1]?.allow).not.toContain("glacier");
+  });
+
   it("文学导览追加文学巡礼线", () => {
     const locs = Array.from({ length: 8 }, (_, i) => point(`核心${i}`, "核心", [], 3));
     const plans = planRoutes(locs, { coreScenicName: "核心", mainScenicName: "", destName: "目的地", isNovelBased: true, novelName: "山行", hasRegionTour: false });
