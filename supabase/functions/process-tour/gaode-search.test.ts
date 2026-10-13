@@ -23,6 +23,7 @@ describe("gaode 限流处理", () => {
   it("限流后按延迟重试并成功", async () => {
     vi.useFakeTimers();
     const fetchMock = vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(new Response(JSON.stringify({ geocodes: [] }))) // v86a geocode 首查（非行政区→空，走 POI）
       .mockResolvedValueOnce(limited())
       .mockResolvedValueOnce(new Response(JSON.stringify({
         pois: [{ name: "光明顶", location: "118.15,30.12", type: "风景名胜" }],
@@ -30,7 +31,7 @@ describe("gaode 限流处理", () => {
     const pending = gaode("光明顶", "安徽省黄山市");
     await vi.advanceTimersByTimeAsync(1000);
     expect(await pending).toEqual({ lng: 118.15, lat: 30.12, name: "光明顶" });
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 
   it("持续限流时耗尽重试并放弃", async () => {
@@ -39,6 +40,6 @@ describe("gaode 限流处理", () => {
     const pending = gaode("黄山", "安徽省");
     await vi.advanceTimersByTimeAsync(20000);
     expect(await pending).toBeNull();
-    expect(fetchMock).toHaveBeenCalledTimes(8);
+    expect(fetchMock).toHaveBeenCalledTimes(9); // 1 geocode + 4 retries × 2 queries
   });
 });

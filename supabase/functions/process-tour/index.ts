@@ -13,6 +13,7 @@ import { orderStopsGeographic, planRoutes as planRoutesModule } from "./routes.t
 import { applyTrailGroups, getPrimaryTrailScenicName, getTrailNotes, injectTrailSeeds, orderStopsByTrail } from "./trail-routes.ts";
 import { loadOrResearchRouteKnowledge } from "./route-knowledge.ts";
 import { buildRouteLegs, estimateRouteDuration, planGraphStops, routeGraphIssues, routeGraphNotes, routeLegsText } from "./route-graph.ts";
+import { elevationProfile } from "./elevation.ts";
 import { attachScenicTags as attachScenicTagsModule, buildAnchors as buildAnchorsModule, scanAnchorSubs as scanAnchorSubsModule } from "./anchors.ts";
 import { REGION_RADIUS, SUB_DEDUP_M, SUB_TOTAL_CAP } from "./anchors.ts";
 
@@ -697,7 +698,18 @@ Deno.serve(async (req: Request) => {
       { layer_key: "folklore", name: "民间传说", icon: "🐉", color: "#27ae60", sort_order: 2 },
       { layer_key: "customs", name: "地域文化", icon: "🎭", color: "#2980b9", sort_order: 3 },
     ].map(ly => ({ ...ly, tour_id: tourId })));
-    await postRows("routes", routes.map(r => ({ id: r.id, tour_id: tourId, day_label: r.day_label, title: r.title, stops: r.stops, legs: r.legs || [], narrative: r.narrative, sort_order: r.sort_order })));
+    // v86a: 路线海拔剖面。每条路线一次 OpenTopoData 采样，失败静默跳过。
+    const routeProfiles = new Map<string, any[]>();
+    await Promise.all(routes.map(async (route) => {
+      const stopCoords = (route.stops || [])
+        .map((sid: string) => { const l = locs.find((x: any) => x.id === sid); return l?.lat && l?.lng ? { lng: l.lng, lat: l.lat } : null; })
+        .filter(Boolean);
+      if (stopCoords.length >= 2) {
+        const prof = await elevationProfile(stopCoords as { lng: number; lat: number }[], 80);
+        if (prof) routeProfiles.set(route.id, prof);
+      }
+    }));
+    await postRows("routes", routes.map(r => ({ id: r.id, tour_id: tourId, day_label: r.day_label, title: r.title, stops: r.stops, legs: r.legs || [], prof: routeProfiles.get(r.id) || [], narrative: r.narrative, sort_order: r.sort_order })));
 
     // Quality report
     const report = {

@@ -96,6 +96,7 @@ export function normalizeTour(row) {
     title: r.title,
     stops: r.stops,
     legs: r.legs || [],
+    prof: r.prof || [],
     narrative: r.narrative,
   }));
 

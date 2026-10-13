@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useTourData } from '../hooks/useTourData';
 import { supabase } from '../lib/supabase';
@@ -9,6 +10,7 @@ import NavBar from '../components/NavBar';
 import { Button } from '@/components/ui/button';
 import RouteBar from '../components/RouteBar';
 import ContentCard from '../components/ContentCard';
+import ElevationProfile from '../components/ElevationProfile';
 import DetailModal from '../components/DetailModal';
 import ShareModal from '../components/ShareModal';
 import CommentsModal from '../components/CommentsModal';
@@ -383,6 +385,24 @@ export default function TourView() {
         .map(id => locByIdRef.current[id]).filter(Boolean)
     : (tour?.locations || []);
   const activeRoute = currentRouteId ? (tour?.routes || []).find(r => r.id === currentRouteId) : null;
+
+  // v86a: 当前选中站点在沿线累积里程（km），用于海拔剖面高亮。
+  const activeStopKm = useMemo(() => {
+    if (!activeRoute || !currentLoc) return undefined;
+    const idx = activeRoute.stops.indexOf(currentLoc.id);
+    if (idx < 0) return undefined;
+    const stopLocs = activeRoute.stops.map(id => locByIdRef.current[id]).filter(Boolean);
+    if (stopLocs.length < 2) return undefined;
+    const havKm = (a, b) => {
+      const dLat = (b.lat - a.lat) * Math.PI / 180, dLng = (b.lng - a.lng) * Math.PI / 180;
+      const h = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * Math.PI / 180) * Math.cos(b.lat * Math.PI / 180) * Math.sin(dLng / 2) ** 2;
+      return 2 * 6371 * Math.asin(Math.sqrt(h));
+    };
+    let km = 0;
+    for (let i = 1; i <= idx && i < stopLocs.length; i++) km += havKm(stopLocs[i - 1], stopLocs[i]);
+    return Math.round(km * 100) / 100;
+  }, [activeRoute, currentLoc]);
+
   const activeRouteConfirmed = activeRoute
     && routeConfirmations.some(row => (
       row.route_id === activeRoute.id
@@ -451,6 +471,15 @@ export default function TourView() {
             {activeRoute?.narrative && (
               <div className="px-4 pb-2">
                 <p className="font-kai text-xs text-muted-foreground leading-relaxed bg-background rounded-lg p-3 border-l-2 border-dai max-h-24 overflow-y-auto">{activeRoute.narrative}</p>
+              </div>
+            )}
+            {activeRoute?.prof?.length > 1 && (
+              <div className="px-4 pb-2">
+                <ElevationProfile
+                  prof={activeRoute.prof}
+                  activeKm={activeStopKm}
+                  stops={(activeRoute.stops || []).map(id => locByIdRef.current[id]).filter(Boolean).map(l => [l.lng, l.lat])}
+                />
               </div>
             )}
             {activeRoute?.legs?.length > 0 && (
