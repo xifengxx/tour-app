@@ -13,6 +13,7 @@ import { orderStopsGeographic, planRoutes as planRoutesModule } from "./routes.t
 import { applyTrailGroups, getPrimaryTrailScenicName, getTrailNotes, injectTrailSeeds, orderStopsByTrail } from "./trail-routes.ts";
 import { loadOrResearchRouteKnowledge } from "./route-knowledge.ts";
 import { buildRouteLegs, estimateRouteDuration, planGraphStops, routeGraphIssues, routeGraphNotes, routeLegsText } from "./route-graph.ts";
+import { resolveCoreDestination } from "./destination.ts";
 import { elevationProfile } from "./elevation.ts";
 import { attachScenicTags as attachScenicTagsModule, buildAnchors as buildAnchorsModule, scanAnchorSubs as scanAnchorSubsModule } from "./anchors.ts";
 import { REGION_RADIUS, SUB_DEDUP_M, SUB_TOTAL_CAP } from "./anchors.ts";
@@ -149,7 +150,7 @@ Deno.serve(async (req: Request) => {
     // 注意：此处不能再 setStatus("processing") —— 导览已由 INSERT/UPDATE 触发器置为 processing，
     // 再设一次会触发 UPDATE 触发器 → 函数被并发调用两次（双重写导致数据错乱）。
 
-    const destName = tour.destination?.name || "";
+    const destName = resolveCoreDestination(tour, tour.destination?.name || "");
     const destRegion = tour.destination?.region || "";
     const src = tour.source?.rawText || "";
     const routeKnowledge = await loadOrResearchRouteKnowledge(destName, destRegion, tour.destination?.type);
@@ -702,7 +703,7 @@ Deno.serve(async (req: Request) => {
     const routeProfiles = new Map<string, any[]>();
     await Promise.all(routes.map(async (route) => {
       const stopCoords = (route.stops || [])
-        .map((sid: string) => { const l = locs.find((x: any) => x.id === sid); return l?.lat && l?.lng ? { lng: l.lng, lat: l.lat } : null; })
+        .map((sid: string) => { const l = dbLocs.find((x: any) => x.id === sid); return l?.lat && l?.lng ? { lng: l.lng, lat: l.lat } : null; })
         .filter(Boolean);
       if (stopCoords.length >= 2) {
         const prof = await elevationProfile(stopCoords as { lng: number; lat: number }[], 80);

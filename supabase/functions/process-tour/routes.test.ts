@@ -29,17 +29,17 @@ describe("planRoutes", () => {
     expect(plans.find(plan => plan.label === "主题游")?.allow).toContain("纪念馆");
   });
 
-  it("11 个核心点时保留完整核心动线，不再按 10 个截断", () => {
+  it("11 个核心点时按一日容量截到 10 站", () => {
     const locs = Array.from({ length: 11 }, (_, i) => point(`核心${i}`, "核心", [], i + 1));
     const [plan] = planRoutes(locs, { coreScenicName: "核心", mainScenicName: "", destName: "目的地", isNovelBased: false, novelName: "", hasRegionTour: false });
-    expect(plan.allow).toHaveLength(11);
+    expect(plan.allow).toHaveLength(10);
   });
 
-  it("一日游核心点最多保留 20 站", () => {
+  it("一日游核心点最多保留 10 站", () => {
     const locs = Array.from({ length: 25 }, (_, i) => point(`核心${i}`, "核心", [], i + 1));
     const plans = planRoutes(locs, { coreScenicName: "核心", mainScenicName: "", destName: "目的地", isNovelBased: false, novelName: "", hasRegionTour: false });
     const oneDay = plans.find(plan => plan.label === "1日精华游");
-    expect(oneDay?.allow).toHaveLength(20);
+    expect(oneDay?.allow).toHaveLength(10);
     expect(oneDay?.allow?.[0]).toBe("核心24");
   });
 

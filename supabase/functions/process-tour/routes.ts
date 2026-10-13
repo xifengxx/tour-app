@@ -4,8 +4,8 @@ import { REGION_RADIUS } from "./anchors.ts";
 
 const CLUSTER_R = 8000;
 const SUB_DEDUP_M = 300;
-// 主景点数量不固定：少于上限时全保留，多于上限时按重要性取前 20 个。
-const CORE_ROUTE_MAX_STOPS = 20;
+// 主景点数量不固定：少于上限时全保留，多于上限时按一日容量取前 10 个。
+const CORE_ROUTE_MAX_STOPS = 10;
 const ROAD_RE = /公路$|大道$|路$|街$|巷$/;
 
 function clusterRegionPts(locs: any[], corePool: any[]) {
