@@ -43,6 +43,22 @@ describe("planRoutes", () => {
     expect(oneDay?.allow?.[0]).toBe("核心24");
   });
 
+  it("核心标签下的远处独立景点不进入一日线", () => {
+    const locs = [
+      ...Array.from({ length: 6 }, (_, i) => point(`核心${i}`, "核心", [], 5 - i, 100.18, 27.10)),
+      point("丽江古城", "核心", [], 4, 100.233, 26.872),
+      point("虎跳峡", "核心", [], 3, 100.10, 27.35),
+    ];
+    const plans = planRoutes(locs, {
+      coreScenicName: "冰川公园", mainScenicName: "", destName: "玉龙雪山",
+      destLoc: { lng: 100.18, lat: 27.10 }, isNovelBased: false, novelName: "", hasRegionTour: true,
+    });
+    const oneDay = plans.find(plan => plan.label === "1日精华游");
+    expect(oneDay?.allow).toHaveLength(6);
+    expect(oneDay?.allow).not.toContain("丽江古城");
+    expect(oneDay?.allow).not.toContain("虎跳峡");
+  });
+
   it("文学导览追加文学巡礼线", () => {
     const locs = Array.from({ length: 8 }, (_, i) => point(`核心${i}`, "核心", [], 3));
     const plans = planRoutes(locs, { coreScenicName: "核心", mainScenicName: "", destName: "目的地", isNovelBased: true, novelName: "山行", hasRegionTour: false });

@@ -506,7 +506,7 @@ Deno.serve(async (req: Request) => {
     const isNovelBased = !!(tour.source?.title || tour.source?.novelTitle);
     const novelName = String(tour.source?.title || tour.source?.novelTitle || '');
     const corePoolSize = locs.filter(l => !(l.tags || []).includes("地区景点") && l.scenic === coreScenicName).length;
-    const plans = planRoutesModule(locs, { coreScenicName, mainScenicName, destName, isNovelBased, novelName, hasRegionTour });
+    const plans = planRoutesModule(locs, { coreScenicName, mainScenicName, destName, destLoc, isNovelBased, novelName, hasRegionTour });
     // 站内顺序在调 AI 前排定，planText 即最终动线，AI 的 narrative 按此顺序展开
     for (const p of plans) {
       if (p.allow) p.allow = orderStops(p.allow, locs);

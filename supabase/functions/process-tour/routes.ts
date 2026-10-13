@@ -6,6 +6,9 @@ const CLUSTER_R = 8000;
 const SUB_DEDUP_M = 300;
 // 主景点数量不固定：少于上限时全保留，多于上限时按一日容量取前 10 个。
 const CORE_ROUTE_MAX_STOPS = 10;
+// 自动路线研究可能把同一核心标签扩散到远处的独立景点。常规徒步线必须以
+// 目的地定位点为空间锚，防止“玉龙雪山”混入丽江古城或虎跳峡。
+const CORE_ROUTE_RADIUS_M = 15000;
 const ROAD_RE = /公路$|大道$|路$|街$|巷$/;
 
 function clusterRegionPts(locs: any[], corePool: any[]) {
@@ -29,14 +32,14 @@ function pickRep(cluster: { locs: any[] }, destName: string): any {
   )[0];
 }
 
-export function planRoutes(locs: any[], ctx: { coreScenicName: string; mainScenicName: string; destName: string; isNovelBased: boolean; novelName: string; hasRegionTour: boolean }) {
+export function planRoutes(locs: any[], ctx: { coreScenicName: string; mainScenicName: string; destName: string; destLoc?: { lng: number; lat: number } | null; isNovelBased: boolean; novelName: string; hasRegionTour: boolean }) {
   const canRoute = (l: any) => !(l.tags || []).includes("景区泛指") && !isDestinationUmbrella(l.name, ctx.destName);
   const isRouteSite = (l: any) => canRoute(l) && !JUNK_RE.test(String(l.name || "")) && !ROAD_RE.test(String(l.name || ""));
   const isRegion = (l: any) => (l.tags || []).includes("地区景点");
   const byImp = (a: any, b: any) => (b.importance || 3) - (a.importance || 3);
   const corePool = locs.filter((l: any) => !isRegion(l) && l.scenic === ctx.coreScenicName).sort(byImp);
   // 锚点失败时不能产出空一日线：用所有非地区景点兜底，保住“必有常规路线”的底线。
-  const routeCorePool = (corePool.length ? corePool : locs.filter((l: any) => !isRegion(l)).sort(byImp)).filter(isRouteSite);
+  const rawCorePool = (corePool.length ? corePool : locs.filter((l: any) => !isRegion(l)).sort(byImp)).filter(isRouteSite);
   let mainPool = ctx.mainScenicName ? locs.filter((l: any) => l.scenic === ctx.mainScenicName).sort(byImp) : [];
   // 没有真实第二景区时不要用地区景点拼“两日全景”。这类 30km+ 的人文点属于主题游，
   // 混进山岳两日线会产生“下山→纪念馆→结束”的假接驳。
@@ -46,6 +49,10 @@ export function planRoutes(locs: any[], ctx: { coreScenicName: string; mainSceni
   const coreCenter = centerPool.reduce((acc, l) => ({ lng: acc.lng + l.lng, lat: acc.lat + l.lat }), { lng: 0, lat: 0 });
   const coreN = centerPool.length || 1;
   const cc = { lng: coreCenter.lng / coreN, lat: coreCenter.lat / coreN };
+  const routeCenter = ctx.destLoc || cc;
+  const coherentCorePool = rawCorePool.filter(l => haversineM(routeCenter, l) <= CORE_ROUTE_RADIUS_M);
+  // 小景区可能只有 1-2 个坐标点；为避免过滤层反而清空常规路线，保留原兜底。
+  const routeCorePool = coherentCorePool.length >= 3 ? coherentCorePool : rawCorePool;
   const nearCore = (l: any, maxM: number) => haversineM(cc, l) <= maxM;
   if (mainPool.length) mainPool = mainPool.filter(l => isRouteSite(l) && nearCore(l, 35000));
   // 主题游的覆盖半径应与地区景点合并半径一致（60km）。此前只取 40km，
