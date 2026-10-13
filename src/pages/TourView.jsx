@@ -67,10 +67,17 @@ const havKm = (a, b) => {
 const routePathAtKm = (path, km) => {
   if (!path?.length) return null;
   if (path.length === 1) return path[0];
+  const havKmPath = (a, b) => {
+    const dLat = (b[1] - a[1]) * Math.PI / 180;
+    const dLng = (b[0] - a[0]) * Math.PI / 180;
+    const h = Math.sin(dLat / 2) ** 2
+      + Math.cos(a[1] * Math.PI / 180) * Math.cos(b[1] * Math.PI / 180) * Math.sin(dLng / 2) ** 2;
+    return 2 * 6371 * Math.asin(Math.sqrt(h));
+  };
   let total = 0;
   const distances = [0];
   for (let i = 1; i < path.length; i++) {
-    total += havKm(path[i - 1], path[i]);
+    total += havKmPath(path[i - 1], path[i]);
     distances.push(total);
   }
   const target = Math.max(0, Math.min(km, total));
@@ -110,12 +117,14 @@ export default function TourView() {
   const clustererRef = useRef(null);
   const currentLocRef = useRef(null);
   const firstLayerIdRef = useRef('novel'); // 导览第一个内容层 id（泰山等自定义层导览没有 novel）
+  const currentRouteIdRef = useRef(null);
   const routeProgressMarkerRef = useRef(null);
   const routeProgressTokenRef = useRef(0);
 
   const [currentLoc, setCurrentLoc] = useState(null);
   const [currentLayer, setCurrentLayer] = useState('novel');
   const [currentRouteId, setCurrentRouteId] = useState(null);
+  currentRouteIdRef.current = currentRouteId;
   const [showCard, setShowCard] = useState(true);
   const [showDetail, setShowDetail] = useState(false);
   const [showShare, setShowShare] = useState(false);
@@ -181,8 +190,8 @@ export default function TourView() {
   }, [user, tourId]);
 
   const selectLoc = useCallback((loc) => {
-    if (currentRouteId) {
-      const activeRoute = tour?.routes?.find(route => route.id === currentRouteId);
+    if (currentRouteIdRef.current) {
+      const activeRoute = tour?.routes?.find(route => route.id === currentRouteIdRef.current);
       cancelRouteProgressAnimation();
       setRouteProgressKm(stopKmInRoute(activeRoute, loc.id, locByIdRef.current));
     }
@@ -195,7 +204,7 @@ export default function TourView() {
       else map.setCenter([loc.lng, loc.lat]);
       map.setZoom(16);
     }
-  }, [currentRouteId, tour, cancelRouteProgressAnimation]);
+  }, [tour, cancelRouteProgressAnimation]);
 
   const toggleFav = async () => {
     if (!user) { navigate('/login'); return; }
@@ -314,6 +323,7 @@ export default function TourView() {
       locByIdRef.current = {};
       tour.locations.forEach(l => { locByIdRef.current[l.id] = l; });
       window.AMap.plugin('AMap.MarkerCluster', () => {
+        if (cancelled) return;
         const points = tour.locations.map(l => ({ lnglat: [l.lng, l.lat], extData: l }));
         const clusterer = new window.AMap.MarkerCluster(map, points, {
           gridSize: 60,
@@ -487,6 +497,7 @@ export default function TourView() {
     const path = routePolylinesRef.current[activeRoute.id]?.path;
     if (!path) return;
     const pos = routePathAtKm(path, routeProgressKm);
+    if (!pos || Number.isNaN(pos[0]) || Number.isNaN(pos[1])) return;
     routeProgressMarkerRef.current?.setPosition(pos);
   }, [routeProgressKm, activeRoute]);
 
