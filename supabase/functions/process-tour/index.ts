@@ -419,12 +419,16 @@ Deno.serve(async (req: Request) => {
     const anchors = buildAnchorsModule(locs, destName);
     // 山岳目的地可能提取不到带“景区/风景名胜区”后缀的伞形锚点（嵩山实测只有神州第一圣地/少林寺等），
     // 但目的地坐标本身是高德稳定返回的核心点。此时不能让全部点落到“独立”→ corePool=0 → 一日线消失。
-    if (!anchors.length && destLoc && tour.destination?.type === "mountain") {
+    // v96.3：锚点非空但**没有一个匹配目的地名**同样要兜底。恒山重跑实测：地区合并进来
+    // “大同火山群国家地质公园”等成了锚点，核心锚被 anchors[0] 顶成火山群，
+    // 一日精华游只剩 1 站——"有锚点"不等于"认出了目的地本身"。
+    const anchorsMatchDest = anchors.some(a => destName && (a.name === destName || a.scenicName === destName || a.name.includes(destName) || destName.includes(a.name)));
+    if (!anchorsMatchDest && destLoc && tour.destination?.type === "mountain") {
       anchors.push({
         id: "destination-core", name: destName, scenicName: destName, lat: destLoc.lat, lng: destLoc.lng,
         elevation: "", importance: 5, tags: [], weight: 99, mergedNames: [], subPoints: [],
       });
-      warnings.push(`⛰ 未识别出景区锚点，已用目的地坐标「${destName}」作为核心锚点`);
+      warnings.push(`⛰ 未识别出属于「${destName}」的景区锚点，已用目的地坐标兜底为核心锚点`);
     }
     try {
       // 只扫描非核心伞形/景区锚点（核心景区子景点已由 AI 提取覆盖；省 API 调用与时间）

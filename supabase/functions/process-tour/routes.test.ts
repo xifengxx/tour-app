@@ -199,6 +199,29 @@ describe("orderStopsGeographic", () => {
     expect(ordered).toContain("gate");
   });
 });
+describe("主题游簇代表身份一致（v96.3 东湖回归）", () => {
+  it("簇的代表点按景区名后缀分层，且资格过滤与分区用的是同一个代表", () => {
+    // 线上实测：市区簇最先入簇的点是"龟山"（tier 0），pickRep 按重要性平票后
+    // 选了"黄鹤楼公园"，但 themeClusters 却拿"龟山"去比对 eligible 集合，
+    // 两个"代表"不相等 → 整个市区簇被静默丢弃。
+    const locs = [
+      ...Array.from({ length: 6 }, (_, i) => point(`核心${i}`, "东湖", [], 6 - i, 114.41, 30.55)),
+      point("龟山", "独立", ["地区景点"], 3, 114.288, 30.551),      // 与黄鹤楼 3km 内，同簇、最先建簇
+      point("黄鹤楼公园", "独立", ["地区景点"], 3, 114.303, 30.544),
+      point("昙华林", "独立", ["地区景点"], 3, 114.31, 30.549),
+    ];
+    const plans = planRoutes(locs, {
+      coreScenicName: "东湖", mainScenicName: "", destName: "东湖", isNovelBased: false,
+      novelName: "", hasRegionTour: true,
+    });
+    const theme = plans.find(p => p.label === "主题游");
+    expect(theme).toBeTruthy();
+    const area = theme!.sections!.find(s => s.kind === "周边景点");
+    expect(area!.name).toBe("黄鹤楼公园"); // 后缀分层代表，不是"龟山"也不是最短名
+    expect(area!.allow.length).toBe(3);
+  });
+});
+
 describe("planRoutes 能力授权（v89 分层）", () => {
   const zoneA = { id: "zA", name: "A区" };
   const zoneB = { id: "zB", name: "B区" };

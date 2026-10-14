@@ -146,12 +146,22 @@ function clusterRegionPts(locs: any[], corePool: any[]) {
   return clusters;
 }
 
+/** 簇代表点名能否代表"一个景区"。地区景点合并后 importance 全是 3，
+ * 单靠重要性无法区分，中文景区名后缀是最可靠的可读性信号。 */
+function repTier(name: string): number {
+  if (/风景名胜区$|景区$/.test(name)) return 3;
+  if (/公园$|古镇$|古城$/.test(name)) return 2;
+  if (/寺$|塔$|楼$|窟$|峡$|湖$/.test(name)) return 1;
+  return 0;
+}
+
 function pickRep(cluster: { locs: any[] }, destName: string): any {
   const d2 = destName.slice(0, 2);
   return cluster.locs.slice().sort((a: any, b: any) =>
     (b.importance || 3) - (a.importance || 3)
+    || repTier(String(b.name)) - repTier(String(a.name))
     || ((b.name.startsWith(d2) ? 1 : 0) - (a.name.startsWith(d2) ? 1 : 0))
-    || (a.name.length - b.name.length)
+    || (b.name.length - a.name.length)
   )[0];
 }
 
@@ -251,7 +261,12 @@ export function planRoutes(locs: any[], ctx: PlanRoutesContext) {
   // 主题游的覆盖半径应与地区景点合并半径一致（60km）。此前只取 40km，
   // 会出现地点已入库（如应县木塔 47km、华严寺 60km）但没有任何路线引用的“孤岛地点”。
   const regionClusters = clusterRegionPts(locs, corePool);
-  const unifiedRegion60 = regionClusters.map((c) => pickRep(c, ctx.destName)).filter((l: any) => isRouteSite(l) && nearCore(l, REGION_RADIUS));
+  // 代表点只算一次并复用。此前 unifiedRegion60 用 pickRep(c)（按重要性挑簇代表），
+  // 而 themeClusters 却拿 c.rep（建簇时最先插入的点）过滤——两个"代表"不是同一个点，
+  // 东湖线上实测整个"黄鹤楼公园/昙华林/龟山/归元禅寺"市区簇静默消失，
+  // 主题游只剩远郊木兰/园博园。身份必须一致。
+  const clusterReps = regionClusters.map((c) => ({ c, rep: pickRep(c, ctx.destName) }));
+  const unifiedRegion60 = clusterReps.map((x) => x.rep).filter((l: any) => isRouteSite(l) && nearCore(l, REGION_RADIUS));
   const plans: RoutePlan[] = [];
   if (ctx.zones?.length && caps.zoneDriven) {
     const { pools } = zonePools(routeCorePool, ctx.zones);
@@ -287,7 +302,7 @@ export function planRoutes(locs: any[], ctx: PlanRoutesContext) {
     // unifiedRegion60 仍决定哪些簇够格进主题游（已按目的地半径与可游览性过滤），
     // 这里把每簇的成员一并带上，形成 主题 → 景区 → 具体点 的两层结构。
     const eligible = new Set(unifiedRegion60.map((l: any) => l.id));
-    const themeClusters = regionClusters.filter(c => eligible.has(c.rep.id));
+    const themeClusters = clusterReps.filter(x => eligible.has(x.rep.id)).map(x => ({ ...x.c, rep: x.rep }));
     const sections = buildThemeSections(locs, { destName: ctx.destName, coreScenicName: ctx.coreScenicName }, routeCorePool, themeClusters);
     const flat = sections.flatMap(sec => sec.allow);
     if (flat.length) {

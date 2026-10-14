@@ -2,6 +2,23 @@ import { describe, expect, it } from "vitest";
 import { INFRA_RE, NON_SIGHT_RE, isNonSiteLocation, isNonSitePOI, isTransferPOI, rejectReasonForPOI } from "./poi-filter.ts";
 
 // 全部取样自线上 locations 表里真实混进来的非游览点。
+import { ADMIN_REGION_RE } from "./poi-filter.ts";
+
+describe("行政区名（v96.3）", () => {
+  it("纯行政链条拒绝，真实景区名保留", () => {
+    for (const bad of ["湖北省武汉市", "四川省成都市都江堰市", "山西省大同市浑源县", "都江堰市"]) {
+      expect(isNonSitePOI(bad)).toBe(true);
+    }
+    for (const good of ["都江堰景区", "黄陂木兰文化生态旅游区", "湖北省博物馆-盘龙城展厅", "黄鹤楼公园", "海合安武汉极地海洋度假区", "浑源古城"]) {
+      expect(isNonSitePOI(good)).toBe(false);
+    }
+  });
+  it("ADMIN_REGION_RE 只认省市链条", () => {
+    expect(ADMIN_REGION_RE.test("湖北省武汉市洪山区梨园街道")).toBe(true);
+    expect(ADMIN_REGION_RE.test("武汉木兰草原")).toBe(false);
+  });
+});
+
 describe("poi-filter", () => {
   it("拒绝被当成景点排进动线的公交站（武当山线上实况）", () => {
     expect(isNonSitePOI("玄岳门(公交站)")).toBe(true);

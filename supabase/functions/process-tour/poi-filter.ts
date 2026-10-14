@@ -30,6 +30,16 @@ export function isTransferPOI(name: unknown): boolean {
   return TRANSFER_POI_RE.test(String(name || ""));
 }
 
+/**
+ * 行政区名：纯行政链条（"湖北省武汉市""四川省成都市都江堰市"）不是景点。
+ * 线上实测两条泄漏路径：AI 提取把源文本里的"湖北省武汉市"当地点，
+ * 高德地区列表（裸省名检索）把"四川省成都市都江堰市"当景区——
+ * 后者挤掉了真正的"都江堰景区"，导致青城山主题游只剩一个无法成线的点。
+ * 只认"省+市"链条或纯城市名，"黄陂木兰文化生态旅游区""湖北省博物馆-盘龙城展厅"
+ * 这类带真实地标的名字不受影响。
+ */
+export const ADMIN_REGION_RE = /省.*市|^\p{Script=Han}{2,8}市$/u;
+
 /** 地质与科研描述：高德/维基会把"两期岩体穿插关系""断层构造"这类条目作为 POI 返回。 */
 export const NON_SIGHT_RE = /岩体|地层|地质构造|断层|剖面|化石|群核|观测站|监测站|气象站|科研|试验基地|保护区管理局|婚礼|旅拍|婚纱摄影|演艺中心|大剧院|会展/;
 
@@ -48,6 +58,7 @@ export function rejectReasonForPOI(name: unknown, options: PoiFilterOptions = {}
   if (INFRA_RE.test(value)) return "交通/服务设施";
   if (JUNK_RE.test(value)) return "餐饮住宿商业";
   if (AMUSE_RE.test(value)) return "游乐商业场所";
+  if (ADMIN_REGION_RE.test(value)) return "行政区名而非景点";
   if (NON_SIGHT_RE.test(value)) return "非游览对象（地质/科研/商业场地）";
   for (const re of options.extra || []) if (re.test(value)) return "自定义规则";
   return null;
