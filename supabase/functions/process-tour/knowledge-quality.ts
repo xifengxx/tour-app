@@ -45,12 +45,21 @@ function ratioOf(knowledge: DestinationRouteKnowledge) {
     + (trails.some(t => (t.stops || []).length >= 3) ? 1 : 0)
     + (knowledge.zones?.length ? 1 : 0)
     + (trails.some(t => !!t.notes) ? 1 : 0);
+  // 分区覆盖率：知识声明了几个徒步区，其中几个真的给了动线。
+  // 实测玉龙雪山 auto-research 声明 3 个分区但只有 2 条 trail，
+  // 结果"云杉坪/牦牛坪"下的所有实际地点都无从绑定，
+  // 18 个未绑定站点全部是"知识里没有这个点"而不是"名字对不上"。
+  // 所以知识不够用时，先补覆盖，不是先改匹配算法。
+  const zones = knowledge.zones || [];
+  const zonesWithTrail = zones.filter(z => trails.some(t => t.zoneId === z.id)).length;
   return {
     total, withCoord, evidenceBound, facility, stopPairs,
     coordCoverage: RATIO(withCoord, total),
     evidenceCoverage: RATIO(evidenceBound, total),
     sitePurity: total ? 1 - RATIO(facility, total) : 0,
     structureCompleteness: structured / 4,
+    zoneTrailCoverage: zones.length ? RATIO(zonesWithTrail, zones.length) : 1,
+    zonesWithoutTrail: zones.length - zonesWithTrail,
   };
 }
 
@@ -101,6 +110,8 @@ export function scoreKnowledge(knowledge: DestinationRouteKnowledge): KnowledgeQ
     stops: r.total,
     trails: (knowledge.trails || []).length,
     edges: (knowledge.edges || []).length,
+    zones: (knowledge.zones || []).length,
+    zoneTrailCoverage: round(r.zoneTrailCoverage),
   };
 }
 
@@ -110,6 +121,7 @@ export function qualityGaps(quality: KnowledgeQuality): string[] {
   if (quality.parts.coordCoverage < 0.8) gaps.push(`${quality.stops - Math.round(quality.parts.coordCoverage * quality.stops)}/${quality.stops} 个站点没有坐标`);
   if (quality.parts.evidenceCoverage < 0.5) gaps.push(`仅 ${Math.round(quality.parts.evidenceCoverage * 100)}% 站点的坐标能追溯到外部证据`);
   if (quality.parts.sitePurity < 0.9) gaps.push("步道里混入了厕所/候车厅等非游览设施点");
+  if (quality.zoneTrailCoverage < 1) gaps.push(`${quality.zones - Math.round(quality.zoneTrailCoverage * quality.zones)} 个分区没有对应动线，分区内地点无法绑定`);
   if (quality.transportCoverage < 0.6) gaps.push("相邻站点大多没有显式交通边，索道与观光车关系未记录");
   if (quality.parts.structureCompleteness < 0.75) gaps.push("结构不完整（缺分区、动线说明或站点过少）");
   return gaps;

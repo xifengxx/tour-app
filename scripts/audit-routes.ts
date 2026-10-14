@@ -112,7 +112,7 @@ const MODE_RANK: Record<string, number> = { walk: 0, cableway: 1, shuttle: 1, ot
 
 const tours = await select<Tour>("tours?select=id,title,created_at,status,destination,process_report&order=created_at.desc" + (Deno.args.includes("--all") ? "" : "&is_public=eq.true"));
 const rows: any[] = [];
-const summary = { tours: 0, tierL3: 0, tierL2: 0, tierL1: 0, wouldSuppressMultiDay: 0, wouldSuppressTheme: 0, routes: 0, storedLegs: 0, missingLegs: 0, modeChanged: 0, upgraded: 0, downgraded: 0, issues: 0, longDay: 0, legacyUmbrellaStops: 0, legacyUmbrellaRoutes: 0, blocking: 0, gateBlockedRoutes: 0, repairableByReorder: 0, duplicatePairs: 0, toursWithDuplicates: 0, boundStops: 0, routeStops: 0 };
+const summary = { tours: 0, tierL3: 0, tierL2: 0, tierL1: 0, wouldSuppressMultiDay: 0, wouldSuppressTheme: 0, routes: 0, storedLegs: 0, missingLegs: 0, modeChanged: 0, upgraded: 0, downgraded: 0, issues: 0, longDay: 0, legacyUmbrellaStops: 0, legacyUmbrellaRoutes: 0, blocking: 0, gateBlockedRoutes: 0, repairableByReorder: 0, duplicatePairs: 0, toursWithDuplicates: 0, boundStops: 0, routeStops: 0, zoneAssignedStops: 0 };
 // 无知识路径下的"改判"不代表线上会变好：那些目的地在生产上有 auto-research/策展边，
 // 只是 destination_route_knowledge 受 RLS 保护、本脚本用 anon key 读不到。
 // 混进主计数会把工具读数误导成"降级了 N 条路线"，所以单独统计。
@@ -150,8 +150,20 @@ for (const tour of tours) {
   // 但只有 2 条能连上相邻站点对，其余等于死数据。
   const graph = buildRouteGraph(knowledge);
   const boundIds = [...matchLocsToGraph(stopIdsOfAll, locs as any[], graph).keys()];
+  // 绑定要分两层看，只报节点绑定会低估知识的实际作用：
+  //   节点绑定  地点能对应到 trails 上的站点 → 决定步道顺序
+  //   分区归属  地点名命中 zones 的名称或别名 → 决定跨区换乘判定
+  const norm = (v: unknown) => String(v ?? "").toLowerCase().replace(/[，。、·—\-\s（）()《》"]/g, "");
+  const zoneHit = stopIdsOfAll.map((id: string) => {
+    const loc = (locs as any[]).find(l => l.id === id);
+    const name = norm(loc?.name);
+    if (!name) return false;
+    return (knowledge.zones || []).some(z =>
+      [z.name, ...(z.aliases || [])].some(a => { const v = norm(a); return !!v && name.includes(v); }));
+  }).filter(Boolean).length;
   summary.routeStops += stopIdsOfAll.length;
   summary.boundStops += boundIds.length;
+  summary.zoneAssignedStops += zoneHit;
   const quality = knowledge.trails.length ? scoreKnowledge(knowledge) : null;
 
   console.log(`\n── ${tour.title}  (${tour.created_at.slice(0, 10)} / 知识=${effectiveKnowledge.source}${recorded ? "" : "（报告未记录，按重建推断）"} → ${tier} ${TIER_LABEL[tier]}, ${locs.length} 地点)`);
@@ -173,7 +185,7 @@ for (const tour of tours) {
   }
 
   if (quality) {
-    console.log(`   知识完整度 ${quality.score}（${quality.grade}）｜交通边覆盖 ${quality.transportCoverage}｜本次路线站点绑定 ${boundIds.length}/${stopIdsOfAll.length}`);
+    console.log(`   知识完整度 ${quality.score}（${quality.grade}）｜节点绑定 ${boundIds.length}/${stopIdsOfAll.length}｜分区归属 ${zoneHit}/${stopIdsOfAll.length}｜交通边覆盖 ${quality.transportCoverage}`);
     for (const g of qualityGaps(quality)) console.log(`     缺口：${g}`);
   }
 
@@ -259,7 +271,8 @@ for (const tour of tours) {
       durationMinutes: duration.totalMinutes,
       narrativeInstruction: routeLegsText(next),
       tier, knowledgeSource: effectiveKnowledge.source, tierLabel: TIER_LABEL[tier], suppressedByTier,
-      bindingRate: stopIdsOfAll.length ? boundIds.length / stopIdsOfAll.length : null,
+      bindingRate: stopIdsOfAll.length ? Math.round((boundIds.length / stopIdsOfAll.length) * 100) / 100 : null,
+      zoneRate: stopIdsOfAll.length ? Math.round((zoneHit / stopIdsOfAll.length) * 100) / 100 : null,
       knowledgeQuality: quality ? quality.score : null,
       duplicatePairs: dupPairs.map(d => ({ keep: d.keepLabel, drop: d.dropLabel, identical: d.identical, exempted: d.exempted })),
       umbrellaStops: umbrellaStops.map((l: any) => l.name),

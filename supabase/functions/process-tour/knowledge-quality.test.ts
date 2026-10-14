@@ -132,3 +132,35 @@ describe("qualityGaps", () => {
     expect(gaps.some(g => g.includes("外部证据"))).toBe(true);
   });
 });
+
+describe("分区动线覆盖（v92 实测结论）", () => {
+  it("声明了分区却没给动线时，明确报出覆盖缺口", () => {
+    // 玉龙雪山实测：研究声明 3 个分区却只产出 2 条 trail，
+    // 未绑定的 18 个站点全部是"知识里没有这个点"，不是名字对不上。
+    const partial: DestinationRouteKnowledge = {
+      destinationName: "玉龙雪山", aliases: [],
+      zones: [
+        { id: "z1", name: "冰川公园" }, { id: "z2", name: "蓝月谷" }, { id: "z3", name: "牦牛坪" },
+      ],
+      trails: [
+        { id: "t1", aliases: [], zoneId: "z1", stops: [{ name: "游客中心" }, { name: "冰川公园" }, { name: "观景台" }] },
+        { id: "t2", aliases: [], zoneId: "z2", stops: [{ name: "驿站" }, { name: "湖边" }, { name: "栈道口" }] },
+      ],
+      edges: [], source: "auto-research", confidence: 0.6,
+    };
+    const q = scoreKnowledge(partial);
+    expect(q.zones).toBe(3);
+    expect(q.zoneTrailCoverage).toBeCloseTo(0.67, 2);
+    // 这份夹具没给坐标，所以同时会有坐标缺口；只断言新增的分区覆盖项
+    expect(qualityGaps(q)).toEqual(expect.arrayContaining([expect.stringContaining("个分区没有对应动线")]));
+  });
+
+  it("没有分区的单景区目的地不会被误报覆盖缺口", () => {
+    const single: DestinationRouteKnowledge = {
+      destinationName: "恒山", aliases: [], zones: [],
+      trails: [{ id: "t", aliases: [], stops: [{ name: "三清殿" }, { name: "虎风口" }, { name: "天峰岭" }] }],
+      edges: [], source: "curated", confidence: 0.9,
+    };
+    expect(scoreKnowledge(single).zoneTrailCoverage).toBe(1);
+  });
+});

@@ -49,6 +49,9 @@ export type KnowledgeQuality = {
     structureCompleteness: number;
   };
   transportCoverage: number;
+  /** 声明的分区里有多少真的给了动线。缺失时该分区下的地点根本无从绑定。 */
+  zoneTrailCoverage: number;
+  zones: number;
   stops: number;
   trails: number;
   edges: number;

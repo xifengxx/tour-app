@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildRouteGraph, buildRouteLegs, elevationDeltaM, estimateRouteDuration, inferTransferMode, matchLocsToGraph, minModeForTransfer, parseElevationM, planGraphStops, routeGraphSegments, routeGraphIssues, routeGraphNotes, repairPlanStops, routeLegsText, SCENIC_SHUTTLE_MAX_M } from "./route-graph.ts";
+import { buildRouteGraph, buildRouteLegs, elevationDeltaM, estimateRouteDuration, inferTransferMode, matchLocsToGraph, minModeForTransfer, parseElevationM, planGraphStops, routeGraphSegments, routeGraphIssues, routeGraphNotes, repairPlanStops, routeLegsText, SCENIC_SHUTTLE_MAX_M, stripFacilitySuffix } from "./route-graph.ts";
 import type { DestinationRouteKnowledge } from "./route-knowledge-types.ts";
 import { CURATED_TRAILS, orderStopsByTrail } from "./trail-routes.ts";
 
@@ -503,5 +503,64 @@ describe("route graph", () => {
       destinationName: "北岳恒山", aliases: ["北岳恒山"], zones: [], trails: CURATED_TRAILS, edges: [], source: "curated", confidence: 0.9,
     });
     expect(issues).toEqual([]);
+  });
+});
+
+describe("设施后缀剥离匹配（v92 绑定改善）", () => {
+  it("剥离规则本身", () => {
+    expect(stripFacilitySuffix("蓝月谷游览车-候车厅")).toBe("蓝月谷");
+    expect(stripFacilitySuffix("牦牛坪下部站")).toBe("牦牛坪");
+    expect(stripFacilitySuffix("玉龙雪山国家级风景名胜区游客服务中心")).toBe("玉龙雪山国家级风景名胜区");
+    // 帐篷不在设施表里：不能被剥成"金顶"去冒充山顶点
+    expect(stripFacilitySuffix("武功山金顶帐篷")).toBe("");
+    // 剥离后过短会退化成无意义键，宁可不用
+    expect(stripFacilitySuffix("谷驿站")).toBe("");
+    expect(stripFacilitySuffix("蓝月谷")).toBe(""); // 本来就不是设施名
+  });
+
+  const valleyLoc = [{ id: "v", name: "玉龙雪山国家级风景名胜区蓝月谷", lat: 27.126, lng: 100.247 }];
+  const facilityKnowledge: DestinationRouteKnowledge = {
+    destinationName: "玉龙雪山",
+    aliases: ["玉龙雪山"],
+    zones: [],
+    trails: [{
+      id: "t1", aliases: ["玉龙雪山"], scenicName: "蓝月谷",
+      stops: [
+        { name: "蓝月谷游览车-候车厅", lat: 27.1259, lng: 100.2479 },
+        { name: "蓝月谷导览驿站", lat: 27.12624, lng: 100.24754 },
+      ],
+    }],
+    edges: [{ from: "蓝月谷导览驿站", to: "蓝月谷游览车-候车厅", mode: "shuttle", source: "manual" }],
+    source: "auto-research",
+    confidence: 0.6,
+  };
+
+  it("同一景区名同时有真实景点与设施节点时，绑定给景点", () => {
+    const matched = matchLocsToGraph(["v"], valleyLoc, buildRouteGraph(facilityKnowledge));
+    expect(matched.get("v")?.name).toBe("蓝月谷导览驿站");
+  });
+
+  it("设施节点由显式边创建出来时，也排在其后", () => {
+    // 只保留候车厅作 trail 站点，但 edges 仍会额外造出"导览驿站"节点
+    const onlyFacilityTrail: DestinationRouteKnowledge = {
+      ...facilityKnowledge,
+      trails: [{ ...facilityKnowledge.trails[0], stops: [{ name: "蓝月谷游览车-候车厅", lat: 27.1259, lng: 100.2479 }] }],
+    };
+    expect(matchLocsToGraph(["v"], valleyLoc, buildRouteGraph(onlyFacilityTrail)).get("v")?.name).toBe("蓝月谷导览驿站");
+  });
+
+  it("知识里只有设施节点时仍能绑定，不至于完全连不上", () => {
+    const facilityOnly: DestinationRouteKnowledge = { ...facilityKnowledge, edges: [], trails: [{ ...facilityKnowledge.trails[0], stops: [{ name: "蓝月谷游览车-候车厅", lat: 27.1259, lng: 100.2479 }] }] };
+    expect(matchLocsToGraph(["v"], valleyLoc, buildRouteGraph(facilityOnly)).get("v")?.name).toBe("蓝月谷游览车-候车厅");
+  });
+
+  it("相邻但语义不同的地标不会被剥成同一个键", () => {
+    const graph = buildRouteGraph({
+      destinationName: "武功山", aliases: [], zones: [],
+      trails: [{ id: "t", aliases: ["武功山"], stops: [{ name: "武功山金顶帐篷", lat: 27.478, lng: 114.136 }] }],
+      edges: [], source: "auto-research", confidence: 0.6,
+    });
+    const locs = [{ id: "j", name: "金顶", lat: 27.48, lng: 114.14 }];
+    expect(matchLocsToGraph(["j"], locs, graph).has("j")).toBe(false);
   });
 });

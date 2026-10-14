@@ -7,6 +7,26 @@ const normalizeName = (value: unknown) =>
     .toLowerCase()
     .replace(/[，。、·—\-_\s（）()《》"]/g, "");
 
+/**
+ * 设施后缀剥离（v92）。目的地知识里的节点常写成“景区名 + 设施词”：
+ * 「蓝月谷游览车-候车厅」「牦牛坪下部站」「玉龙雪山游客服务中心」。
+ * 而实际入库的游览点叫「蓝月谷」「牦牛坪」，两侧都包含关系不成立，
+ * 于是知识里写好的交通边一条都连不上（实测玉龙雪山 21 站只绑上 2 站）。
+ *
+ * 只剥"确定的设施词"，不做任意包含匹配：
+ * 「武功山金顶帐篷」剥不掉"帐篷"（不在表内），因此不会冒充"金顶"，
+ * 这正是历史上专门防过的一类误配。
+ */
+const FACILITY_SUFFIX_RE = /(?:游览车|观光车|接驳车|索道|缆车)?[-—\s]?(?:候车厅|候车区|候车点|候车室|下部站|上部站|中部站|中站|上站|下站|导览驿站|驿站|服务站|游客服务中心|游客中心|服务中心|售票处|售票点|检票口|换乘点|站台)$/;
+
+export function stripFacilitySuffix(value: unknown): string {
+  const raw = normalizeName(value);
+  if (!raw) return "";
+  const stripped = raw.replace(FACILITY_SUFFIX_RE, "").trim();
+  // 剥离后过短（少于 2 字）会退化成"蓝""谷"这类无意义键，宁可不用
+  return stripped.length >= 2 && stripped !== raw ? stripped : "";
+}
+
 // 高德/AI 常把交通设施并入景点名（例如“紫极宫(中庵)”对应“中庵索道”）。
 // 图节点保留资料原名，同时派生常用短别名，让显式交通边可以命中实际站点。
 function implicitNodeAliases(value: unknown) {
@@ -324,6 +344,15 @@ function scoreNode(locName: string, node: GraphNode, loc: { lat?: number; lng?: 
     if (target === candidate) nameScore = Math.max(nameScore ?? -1, 3);
     else if (target.endsWith(candidate)) nameScore = Math.max(nameScore ?? -1, 2);
     else if (target.includes(candidate)) nameScore = Math.max(nameScore ?? -1, 1);
+    else {
+      // 剥离设施后缀才相等：算命中但只给 1.5 分，
+      // 低于精确(3)与后缀(2)，这样同一景区下若存在真实景点节点，
+      // 绝不会由"候车厅/服务中心"这类设施节点来抢占位置。
+      const stripped = stripFacilitySuffix(alias);
+      if (stripped && (target === stripped || target.endsWith(stripped))) {
+        nameScore = Math.max(nameScore ?? -1, 1.5);
+      }
+    }
   }
   if (nameScore == null) return null;
   const distance = node.lat && node.lng && loc.lat && loc.lng

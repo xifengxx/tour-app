@@ -1,5 +1,5 @@
 {
-  "auditedAt": "2026-10-14T09:35:21.058Z",
+  "auditedAt": "2026-10-14T09:46:02.047Z",
   "summary": {
     "tours": 12,
     "tierL3": 2,
@@ -10,10 +10,10 @@
     "routes": 34,
     "storedLegs": 6,
     "missingLegs": 28,
-    "modeChanged": 12,
+    "modeChanged": 10,
     "upgraded": 7,
-    "downgraded": 5,
-    "issues": 22,
+    "downgraded": 3,
+    "issues": 19,
     "longDay": 2,
     "legacyUmbrellaStops": 21,
     "legacyUmbrellaRoutes": 21,
@@ -22,8 +22,9 @@
     "repairableByReorder": 3,
     "duplicatePairs": 2,
     "toursWithDuplicates": 2,
-    "boundStops": 19,
-    "routeStops": 259
+    "boundStops": 20,
+    "routeStops": 259,
+    "zoneAssignedStops": 7
   },
   "routes": [
     {
@@ -37,11 +38,10 @@
         {
           "from": "玉龙雪山冰川公园栈道",
           "to": "玉龙雪山国家级风景名胜区蓝月谷",
-          "mode": "shuttle",
+          "mode": "cableway",
           "distanceM": 5193,
           "elevationDeltaM": -1606,
-          "roadMinutes": 14,
-          "inferred": true
+          "inferred": false
         },
         {
           "from": "玉龙雪山国家级风景名胜区蓝月谷",
@@ -61,26 +61,19 @@
           "inferred": true
         }
       ],
-      "changedModes": [
-        "77a10329-glacier-park>77a10329-blue-moon-valley:cableway=>shuttle"
-      ],
-      "issues": [
-        {
-          "type": "long-transfer",
-          "level": "advisory",
-          "message": "玉龙雪山冰川公园栈道 → 玉龙雪山国家级风景名胜区蓝月谷（直线约 5km、高差约 1606m）资料中无衔接方式，已推断为「观光车/摆渡车」（未经核实）"
-        }
-      ],
+      "changedModes": [],
+      "issues": [],
       "blocking": [],
       "autoRepairable": false,
-      "durationMinutes": 100,
-      "narrativeInstruction": "玉龙雪山冰川公园栈道 → 玉龙雪山国家级风景名胜区蓝月谷：观光车/摆渡车，约 2.3 小时车程，不同徒步/索道分区，需换乘观光车或接驳车；高差约 1606m，须借助索道或景区交通下撤，禁止写成连续徒步（narrative 须写明乘坐景区观光车或摆渡车）；玉龙雪山国家级风景名胜区蓝月谷 → 白水河：徒步；白水河 → 甘海子：观光车/摆渡车，约 2 小时车程，直线约 4km，建议乘坐景区观光车（narrative 须写明乘坐景区观光车或摆渡车）",
+      "durationMinutes": 110,
+      "narrativeInstruction": "玉龙雪山冰川公园栈道 → 玉龙雪山国家级风景名胜区蓝月谷：索道，先乘索道下至索道候车厅，再换乘观光车/接驳前往目的地；玉龙雪山国家级风景名胜区蓝月谷 → 白水河：徒步；白水河 → 甘海子：观光车/摆渡车，约 2 小时车程，直线约 4km，建议乘坐景区观光车（narrative 须写明乘坐景区观光车或摆渡车）",
       "tier": "L2",
       "knowledgeSource": "auto-research",
       "tierLabel": "自动研究/策展顺序，未经核实",
       "suppressedByTier": false,
-      "bindingRate": 0.09523809523809523,
-      "knowledgeQuality": 0.67,
+      "bindingRate": 0.14,
+      "zoneRate": 0.33,
+      "knowledgeQuality": 0.64,
       "duplicatePairs": [],
       "umbrellaStops": []
     },
@@ -95,11 +88,10 @@
         {
           "from": "玉龙雪山冰川公园栈道",
           "to": "玉龙雪山国家级风景名胜区蓝月谷",
-          "mode": "shuttle",
+          "mode": "cableway",
           "distanceM": 5193,
           "elevationDeltaM": -1606,
-          "roadMinutes": 14,
-          "inferred": true
+          "inferred": false
         },
         {
           "from": "玉龙雪山国家级风景名胜区蓝月谷",
@@ -173,15 +165,9 @@
         }
       ],
       "changedModes": [
-        "77a10329-glacier-park>77a10329-blue-moon-valley:cableway=>shuttle",
         "77a10329-yak-meadow>77a10329-yushui-village:shuttle=>car"
       ],
       "issues": [
-        {
-          "type": "long-transfer",
-          "level": "advisory",
-          "message": "玉龙雪山冰川公园栈道 → 玉龙雪山国家级风景名胜区蓝月谷（直线约 5km、高差约 1606m）资料中无衔接方式，已推断为「观光车/摆渡车」（未经核实）"
-        },
         {
           "type": "long-transfer",
           "level": "advisory",
@@ -195,14 +181,15 @@
       ],
       "blocking": [],
       "autoRepairable": false,
-      "durationMinutes": 368,
-      "narrativeInstruction": "玉龙雪山冰川公园栈道 → 玉龙雪山国家级风景名胜区蓝月谷：观光车/摆渡车，约 2.3 小时车程，不同徒步/索道分区，需换乘观光车或接驳车；高差约 1606m，须借助索道或景区交通下撤，禁止写成连续徒步（narrative 须写明乘坐景区观光车或摆渡车）；玉龙雪山国家级风景名胜区蓝月谷 → 白水河：徒步；白水河 → 甘海子：观光车/摆渡车，约 2 小时车程，直线约 4km，建议乘坐景区观光车（narrative 须写明乘坐景区观光车或摆渡车）；甘海子 → 云杉坪索道上部站：观光车/摆渡车，约 2.3 小时车程，不同徒步/索道分区，需换乘观光车或接驳车（narrative 须写明乘坐景区观光车或摆渡车）；云杉坪索道上部站 → 云杉坪：徒步；云杉坪 → 牦牛坪：观光车/摆渡车，约 1.8 小时车程，不同徒步/索道分区，需换乘观光车或接驳车；高差约 460m，须借助索道或景区交通上升，禁止写成连续徒步（narrative 须写明乘坐景区观光车或摆渡车）；牦牛坪 → 丽江玉水寨：专车/出租车，约 12 小时车程，高差约 1000m，须借助索道或景区交通下撤，禁止写成连续徒步（narrative 必须写明需乘车/包车并给出时长，禁止描述为景区观光车短驳或索道直达）；丽江玉水寨 → 东巴谷：观光车/摆渡车，约 2.7 小时车程，直线约 6km，建议乘坐景区观光车（narrative 须写明乘坐景区观光车或摆渡车）；东巴谷 → 玉峰寺：观光车/摆渡车，约 3 小时车程，直线约 7km，建议乘坐景区观光车（narrative 须写明乘坐景区观光车或摆渡车）",
+      "durationMinutes": 378,
+      "narrativeInstruction": "玉龙雪山冰川公园栈道 → 玉龙雪山国家级风景名胜区蓝月谷：索道，先乘索道下至索道候车厅，再换乘观光车/接驳前往目的地；玉龙雪山国家级风景名胜区蓝月谷 → 白水河：徒步；白水河 → 甘海子：观光车/摆渡车，约 2 小时车程，直线约 4km，建议乘坐景区观光车（narrative 须写明乘坐景区观光车或摆渡车）；甘海子 → 云杉坪索道上部站：观光车/摆渡车，约 2.3 小时车程，直线约 5km，建议乘坐景区观光车（narrative 须写明乘坐景区观光车或摆渡车）；云杉坪索道上部站 → 云杉坪：徒步；云杉坪 → 牦牛坪：观光车/摆渡车，约 1.8 小时车程，不同徒步/索道分区，需换乘观光车或接驳车；高差约 460m，须借助索道或景区交通上升，禁止写成连续徒步（narrative 须写明乘坐景区观光车或摆渡车）；牦牛坪 → 丽江玉水寨：专车/出租车，约 12 小时车程，高差约 1000m，须借助索道或景区交通下撤，禁止写成连续徒步（narrative 必须写明需乘车/包车并给出时长，禁止描述为景区观光车短驳或索道直达）；丽江玉水寨 → 东巴谷：观光车/摆渡车，约 2.7 小时车程，直线约 6km，建议乘坐景区观光车（narrative 须写明乘坐景区观光车或摆渡车）；东巴谷 → 玉峰寺：观光车/摆渡车，约 3 小时车程，直线约 7km，建议乘坐景区观光车（narrative 须写明乘坐景区观光车或摆渡车）",
       "tier": "L2",
       "knowledgeSource": "auto-research",
       "tierLabel": "自动研究/策展顺序，未经核实",
       "suppressedByTier": true,
-      "bindingRate": 0.09523809523809523,
-      "knowledgeQuality": 0.67,
+      "bindingRate": 0.14,
+      "zoneRate": 0.33,
+      "knowledgeQuality": 0.64,
       "duplicatePairs": [],
       "umbrellaStops": []
     },
@@ -217,11 +204,10 @@
         {
           "from": "玉龙雪山冰川公园栈道",
           "to": "玉龙雪山国家级风景名胜区蓝月谷",
-          "mode": "shuttle",
+          "mode": "cableway",
           "distanceM": 5193,
           "elevationDeltaM": -1606,
-          "roadMinutes": 14,
-          "inferred": true
+          "inferred": false
         },
         {
           "from": "玉龙雪山国家级风景名胜区蓝月谷",
@@ -233,9 +219,8 @@
         {
           "from": "邀月楼",
           "to": "云杉坪索道上部站",
-          "mode": "shuttle",
+          "mode": "walk",
           "distanceM": 1715,
-          "roadMinutes": 5,
           "inferred": true
         },
         {
@@ -265,27 +250,22 @@
         }
       ],
       "changedModes": [
-        "77a10329-glacier-park>77a10329-blue-moon-valley:cableway=>shuttle",
+        "77a10329-reg-16>77a10329-spruce-meadow:shuttle=>walk",
         "77a10329-ganhaizi>77a10329-reg-13:shuttle=>car",
         "77a10329-reg-13>77a10329-reg-14:shuttle=>car"
       ],
-      "issues": [
-        {
-          "type": "long-transfer",
-          "level": "advisory",
-          "message": "玉龙雪山冰川公园栈道 → 玉龙雪山国家级风景名胜区蓝月谷（直线约 5km、高差约 1606m）资料中无衔接方式，已推断为「观光车/摆渡车」（未经核实）"
-        }
-      ],
+      "issues": [],
       "blocking": [],
       "autoRepairable": false,
-      "durationMinutes": 420,
-      "narrativeInstruction": "玉龙雪山冰川公园栈道 → 玉龙雪山国家级风景名胜区蓝月谷：观光车/摆渡车，约 2.3 小时车程，不同徒步/索道分区，需换乘观光车或接驳车；高差约 1606m，须借助索道或景区交通下撤，禁止写成连续徒步（narrative 须写明乘坐景区观光车或摆渡车）；玉龙雪山国家级风景名胜区蓝月谷 → 邀月楼：徒步；邀月楼 → 云杉坪索道上部站：观光车/摆渡车，约 0.8 小时车程，不同徒步/索道分区，需换乘观光车或接驳车（narrative 须写明乘坐景区观光车或摆渡车）；云杉坪索道上部站 → 甘海子：观光车/摆渡车，约 2.3 小时车程，不同徒步/索道分区，需换乘观光车或接驳车（narrative 须写明乘坐景区观光车或摆渡车）；甘海子 → 丽江拉市海湿地公园：专车/出租车，约 18.2 小时车程，直线约 29km，山路约 54.4km / 109 分钟车程（narrative 必须写明需乘车/包车并给出时长，禁止描述为景区观光车短驳或索道直达）；丽江拉市海湿地公园 → 香格里拉虎跳峡：专车/出租车，约 23.3 小时车程，直线约 37km，山路约 69.8km / 140 分钟车程（narrative 必须写明需乘车/包车并给出时长，禁止描述为景区观光车短驳或索道直达）",
+      "durationMinutes": 465,
+      "narrativeInstruction": "玉龙雪山冰川公园栈道 → 玉龙雪山国家级风景名胜区蓝月谷：索道，先乘索道下至索道候车厅，再换乘观光车/接驳前往目的地；玉龙雪山国家级风景名胜区蓝月谷 → 邀月楼：徒步；邀月楼 → 云杉坪索道上部站：徒步；云杉坪索道上部站 → 甘海子：观光车/摆渡车，约 2.3 小时车程，直线约 5km，建议乘坐景区观光车（narrative 须写明乘坐景区观光车或摆渡车）；甘海子 → 丽江拉市海湿地公园：专车/出租车，约 18.2 小时车程，直线约 29km，山路约 54.4km / 109 分钟车程（narrative 必须写明需乘车/包车并给出时长，禁止描述为景区观光车短驳或索道直达）；丽江拉市海湿地公园 → 香格里拉虎跳峡：专车/出租车，约 23.3 小时车程，直线约 37km，山路约 69.8km / 140 分钟车程（narrative 必须写明需乘车/包车并给出时长，禁止描述为景区观光车短驳或索道直达）",
       "tier": "L2",
       "knowledgeSource": "auto-research",
       "tierLabel": "自动研究/策展顺序，未经核实",
       "suppressedByTier": true,
-      "bindingRate": 0.09523809523809523,
-      "knowledgeQuality": 0.67,
+      "bindingRate": 0.14,
+      "zoneRate": 0.33,
+      "knowledgeQuality": 0.64,
       "duplicatePairs": [],
       "umbrellaStops": []
     },
@@ -346,6 +326,7 @@
       "tierLabel": "自动研究/策展顺序，未经核实",
       "suppressedByTier": false,
       "bindingRate": 0,
+      "zoneRate": 0,
       "knowledgeQuality": null,
       "duplicatePairs": [],
       "umbrellaStops": []
@@ -433,6 +414,7 @@
       "tierLabel": "自动研究/策展顺序，未经核实",
       "suppressedByTier": true,
       "bindingRate": 0,
+      "zoneRate": 0,
       "knowledgeQuality": null,
       "duplicatePairs": [],
       "umbrellaStops": []
@@ -526,6 +508,7 @@
       "tierLabel": "自动研究/策展顺序，未经核实",
       "suppressedByTier": true,
       "bindingRate": 0,
+      "zoneRate": 0,
       "knowledgeQuality": null,
       "duplicatePairs": [],
       "umbrellaStops": []
@@ -632,7 +615,8 @@
       "knowledgeSource": "builtin",
       "tierLabel": "已验证（人工策展或创作者确认）",
       "suppressedByTier": false,
-      "bindingRate": 0.6470588235294118,
+      "bindingRate": 0.65,
+      "zoneRate": 0,
       "knowledgeQuality": 0.68,
       "duplicatePairs": [],
       "umbrellaStops": []
@@ -694,7 +678,8 @@
       "knowledgeSource": "builtin",
       "tierLabel": "已验证（人工策展或创作者确认）",
       "suppressedByTier": false,
-      "bindingRate": 0.6470588235294118,
+      "bindingRate": 0.65,
+      "zoneRate": 0,
       "knowledgeQuality": 0.68,
       "duplicatePairs": [],
       "umbrellaStops": []
@@ -775,6 +760,7 @@
       "tierLabel": "无路线知识",
       "suppressedByTier": false,
       "bindingRate": 0,
+      "zoneRate": 0,
       "knowledgeQuality": null,
       "duplicatePairs": [],
       "umbrellaStops": [
@@ -872,6 +858,7 @@
       "tierLabel": "无路线知识",
       "suppressedByTier": true,
       "bindingRate": 0,
+      "zoneRate": 0,
       "knowledgeQuality": null,
       "duplicatePairs": [],
       "umbrellaStops": [
@@ -938,6 +925,7 @@
       "tierLabel": "无路线知识",
       "suppressedByTier": true,
       "bindingRate": 0,
+      "zoneRate": 0,
       "knowledgeQuality": null,
       "duplicatePairs": [],
       "umbrellaStops": [
@@ -997,6 +985,7 @@
       "tierLabel": "无路线知识",
       "suppressedByTier": false,
       "bindingRate": 0,
+      "zoneRate": 0,
       "knowledgeQuality": null,
       "duplicatePairs": [],
       "umbrellaStops": [
@@ -1111,6 +1100,7 @@
       "tierLabel": "无路线知识",
       "suppressedByTier": true,
       "bindingRate": 0,
+      "zoneRate": 0,
       "knowledgeQuality": null,
       "duplicatePairs": [],
       "umbrellaStops": [
@@ -1197,6 +1187,7 @@
       "tierLabel": "无路线知识",
       "suppressedByTier": false,
       "bindingRate": 0,
+      "zoneRate": 0,
       "knowledgeQuality": null,
       "duplicatePairs": [],
       "umbrellaStops": [
@@ -1336,6 +1327,7 @@
       "tierLabel": "无路线知识",
       "suppressedByTier": true,
       "bindingRate": 0,
+      "zoneRate": 0,
       "knowledgeQuality": null,
       "duplicatePairs": [],
       "umbrellaStops": [
@@ -1409,6 +1401,7 @@
       "tierLabel": "无路线知识",
       "suppressedByTier": true,
       "bindingRate": 0,
+      "zoneRate": 0,
       "knowledgeQuality": null,
       "duplicatePairs": [],
       "umbrellaStops": [
@@ -1481,6 +1474,7 @@
       "tierLabel": "无路线知识",
       "suppressedByTier": false,
       "bindingRate": 0,
+      "zoneRate": 0,
       "knowledgeQuality": null,
       "duplicatePairs": [],
       "umbrellaStops": [
@@ -1560,6 +1554,7 @@
       "tierLabel": "无路线知识",
       "suppressedByTier": false,
       "bindingRate": 0,
+      "zoneRate": 0,
       "knowledgeQuality": null,
       "duplicatePairs": [],
       "umbrellaStops": [
@@ -1649,6 +1644,7 @@
       "tierLabel": "无路线知识",
       "suppressedByTier": false,
       "bindingRate": 0,
+      "zoneRate": 0,
       "knowledgeQuality": null,
       "duplicatePairs": [
         {
@@ -1745,6 +1741,7 @@
       "tierLabel": "无路线知识",
       "suppressedByTier": false,
       "bindingRate": 0,
+      "zoneRate": 0,
       "knowledgeQuality": null,
       "duplicatePairs": [
         {
@@ -1785,6 +1782,7 @@
       "tierLabel": "无路线知识",
       "suppressedByTier": false,
       "bindingRate": 0,
+      "zoneRate": 0,
       "knowledgeQuality": null,
       "duplicatePairs": [],
       "umbrellaStops": [
@@ -1819,6 +1817,7 @@
       "tierLabel": "无路线知识",
       "suppressedByTier": false,
       "bindingRate": 0,
+      "zoneRate": 0,
       "knowledgeQuality": null,
       "duplicatePairs": [],
       "umbrellaStops": []
@@ -1865,6 +1864,7 @@
       "tierLabel": "无路线知识",
       "suppressedByTier": false,
       "bindingRate": 0,
+      "zoneRate": 0,
       "knowledgeQuality": null,
       "duplicatePairs": [],
       "umbrellaStops": [
@@ -1976,6 +1976,7 @@
       "tierLabel": "无路线知识",
       "suppressedByTier": true,
       "bindingRate": 0,
+      "zoneRate": 0,
       "knowledgeQuality": null,
       "duplicatePairs": [],
       "umbrellaStops": []
@@ -2036,6 +2037,7 @@
       "tierLabel": "无路线知识",
       "suppressedByTier": false,
       "bindingRate": 0,
+      "zoneRate": 0,
       "knowledgeQuality": null,
       "duplicatePairs": [],
       "umbrellaStops": []
@@ -2091,6 +2093,7 @@
       "tierLabel": "无路线知识",
       "suppressedByTier": true,
       "bindingRate": 0,
+      "zoneRate": 0,
       "knowledgeQuality": null,
       "duplicatePairs": [],
       "umbrellaStops": []
@@ -2191,7 +2194,8 @@
       "knowledgeSource": "builtin",
       "tierLabel": "已验证（人工策展或创作者确认）",
       "suppressedByTier": false,
-      "bindingRate": 0.21428571428571427,
+      "bindingRate": 0.21,
+      "zoneRate": 0,
       "knowledgeQuality": 0.54,
       "duplicatePairs": [],
       "umbrellaStops": [
@@ -2307,7 +2311,8 @@
       "knowledgeSource": "builtin",
       "tierLabel": "已验证（人工策展或创作者确认）",
       "suppressedByTier": false,
-      "bindingRate": 0.21428571428571427,
+      "bindingRate": 0.21,
+      "zoneRate": 0,
       "knowledgeQuality": 0.54,
       "duplicatePairs": [],
       "umbrellaStops": [
@@ -2365,7 +2370,8 @@
       "knowledgeSource": "builtin",
       "tierLabel": "已验证（人工策展或创作者确认）",
       "suppressedByTier": false,
-      "bindingRate": 0.21428571428571427,
+      "bindingRate": 0.21,
+      "zoneRate": 0,
       "knowledgeQuality": 0.54,
       "duplicatePairs": [],
       "umbrellaStops": [
@@ -2430,7 +2436,8 @@
       "knowledgeSource": "builtin",
       "tierLabel": "已验证（人工策展或创作者确认）",
       "suppressedByTier": false,
-      "bindingRate": 0.21428571428571427,
+      "bindingRate": 0.21,
+      "zoneRate": 0,
       "knowledgeQuality": 0.54,
       "duplicatePairs": [],
       "umbrellaStops": []
@@ -2511,6 +2518,7 @@
       "tierLabel": "无路线知识",
       "suppressedByTier": false,
       "bindingRate": 0,
+      "zoneRate": 0,
       "knowledgeQuality": null,
       "duplicatePairs": [
         {
@@ -2630,6 +2638,7 @@
       "tierLabel": "无路线知识",
       "suppressedByTier": true,
       "bindingRate": 0,
+      "zoneRate": 0,
       "knowledgeQuality": null,
       "duplicatePairs": [
         {
@@ -2735,6 +2744,7 @@
       "tierLabel": "无路线知识",
       "suppressedByTier": true,
       "bindingRate": 0,
+      "zoneRate": 0,
       "knowledgeQuality": null,
       "duplicatePairs": [
         {
@@ -2824,6 +2834,7 @@
       "tierLabel": "无路线知识",
       "suppressedByTier": false,
       "bindingRate": 0,
+      "zoneRate": 0,
       "knowledgeQuality": null,
       "duplicatePairs": [
         {

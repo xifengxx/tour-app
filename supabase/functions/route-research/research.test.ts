@@ -99,6 +99,7 @@ describe("route research", () => {
     ]);
     expect(prompt[0].content).toContain("不要虚构景点");
     expect(prompt[1].content).toContain("模型自评不作数");
+    expect(prompt[1].content).toContain("每个 zone 都要给出一条对应 trail");
     expect(prompt[1].content).not.toContain("\"confidence\"");
     expect(prompt[1].content).toContain("【来源1·wikipedia】");
   });
