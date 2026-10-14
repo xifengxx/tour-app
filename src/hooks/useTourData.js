@@ -96,6 +96,14 @@ export function normalizeTour(row) {
     title: r.title,
     stops: r.stops,
     legs: r.legs || [],
+    // v93：主题游分区（主题 → 景区 → 景区内游览点）。线性路线为空数组。
+    sections: (r.sections || []).map(sec => ({
+      key: sec?.key || String(sec?.name || ''),
+      name: sec?.name || '',
+      kind: sec?.kind === '核心景区' ? '核心景区' : '周边景点',
+      stops: Array.isArray(sec?.stopIds) ? sec.stopIds : (Array.isArray(sec?.stops) ? sec.stops : []),
+      text: sec?.text || '',
+    })),
     prof: (r.prof || []).map(p => Array.isArray(p) ? p : [p?.km, p?.m])
       .filter(p => Number.isFinite(p[0]) && Number.isFinite(p[1])),
     narrative: r.narrative,

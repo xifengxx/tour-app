@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { filterRouteStops, isRouteStopEligible, orderStopsGeographic, planRoutes } from "./routes.ts";
+import { buildThemeSections, filterRouteStops, isRouteStopEligible, orderStopsGeographic, planRoutes } from "./routes.ts";
 
 const point = (id: string, scenic: string, tags: string[] = [], importance = 3, lng = 116, lat = 39) => ({ id, name: id, scenic, tags, importance, lng, lat });
 
@@ -214,7 +214,9 @@ describe("planRoutes 能力授权（v89 分层）", () => {
     point("外围纪念馆", "独立", ["地区景点"], 5, 114.20, 27.50),
   ];
   const full = { multiDay: true, themeTour: true, zoneDriven: true, trailOrder: true, assertTransport: true };
-  const researched = { multiDay: false, themeTour: false, zoneDriven: false, trailOrder: true, assertTransport: false };
+  // v93：主题游不再受分层限制（分区结构只声明"这几个就近景区可连着玩"，
+  // 不声明跨区连续动线），所以 researched 档只剩多日线被抑制
+  const researched = { multiDay: false, themeTour: true, zoneDriven: false, trailOrder: true, assertTransport: false };
   const ctxOf = (over: Record<string, unknown> = {}) => ({
     coreScenicName: "核心", mainScenicName: "后山", destName: "示例山", isNovelBased: false,
     novelName: "", hasRegionTour: true, zones: [zoneA, zoneB], ...over,
@@ -234,10 +236,9 @@ describe("planRoutes 能力授权（v89 分层）", () => {
     const plans = planRoutes(locs, ctxOf({
       capabilities: researched, onSuppressed: (plan, reason) => suppressed.push({ plan, reason }),
     }));
-    expect(plans.map(p => p.label)).toEqual(["1日精华游"]);
-    expect(suppressed.map(p => p.plan).sort()).toEqual(["2日全景游", "主题游"]);
-    expect(suppressed.find(p => p.plan === "2日全景游")?.reason).toContain("未经核实");
-    expect(suppressed.find(p => p.plan === "主题游")?.reason).toContain("跨片区");
+    expect(plans.map(p => p.label)).toEqual(["1日精华游", "主题游"]);
+    expect(suppressed.map(p => p.plan)).toEqual(["2日全景游"]);
+    expect(suppressed[0].reason).toContain("未经核实");
   });
 
   it("未核实分区不再把 1 日线压到 5 站", () => {
@@ -255,9 +256,11 @@ describe("planRoutes 能力授权（v89 分层）", () => {
   });
 
   it("小说源导览的文学巡礼线不受能力授权影响", () => {
-    const plans = planRoutes(locs, ctxOf({ capabilities: researched, isNovelBased: true, novelName: "示例小说" }));
-    expect(plans.map(p => p.label)).toEqual(["1日精华游", "文学巡礼线"]);
-    expect(plans[1].allow).toBeNull();
+    const withNovel = planRoutes(locs, ctxOf({ capabilities: researched, isNovelBased: true, novelName: "示例小说" }));
+    const withoutNovel = planRoutes(locs, ctxOf({ capabilities: researched, isNovelBased: false, novelName: "" }));
+    expect(withNovel.map(p => p.label)).toEqual(["1日精华游", "主题游", "文学巡礼线"]);
+    expect(withNovel[2].allow).toBeNull(); // 文学线由 AI 自由选点，不锁站点
+    expect(withoutNovel.map(p => p.label)).toEqual(["1日精华游", "主题游"]);
   });
 
   it("缺省不传 capabilities 时保持既有行为（向后兼容）", () => {
@@ -311,4 +314,46 @@ describe("路线站点资格（景区伞形名）", () => {
     expect(kept).toEqual(["h2", "h3"]);
     expect(dropped).toEqual(["黄山"]);
   });
+
+describe("主题游分区结构（v93）", () => {
+  const corePool = [
+    point("核心A", "核心", [], 5, 114.10, 27.40),
+    point("核心B", "核心", [], 4, 114.11, 27.41),
+  ];
+  const clusters = [
+    { rep: point("蓝月谷", "独立", ["地区景点"], 4, 114.20, 27.50), locs: [
+      point("蓝月谷", "独立", ["地区景点"], 4, 114.20, 27.50),
+      point("白水河", "独立", ["地区景点"], 3, 114.21, 27.51),
+    ] },
+    { rep: point("云杉坪", "独立", ["地区景点"], 3, 114.40, 27.60), locs: [
+      point("云杉坪", "独立", ["地区景点"], 3, 114.40, 27.60),
+    ] },
+  ];
+
+  it("一簇 = 一个片区，代表点在前，成员是片区内具体玩法点", () => {
+    const sections = buildThemeSections([...corePool, ...clusters[0].locs, ...clusters[1].locs], { destName: "示例山", coreScenicName: "核心" }, corePool, clusters);
+    expect(sections.map(s => s.name)).toEqual(["核心", "蓝月谷", "云杉坪"]);
+    expect(sections[0].kind).toBe("核心景区");
+    expect(sections[1]).toMatchObject({ kind: "周边景点", allow: ["蓝月谷", "白水河"] });
+    // 片区总数受上限约束，不会把 60km 半径内所有散点全塞进主题游
+    expect(sections.reduce((n, s) => n + s.allow.length, 0)).toBeLessThanOrEqual(20);
+  });
+
+  it("planRoutes 的主题游带分区，且 allow 是各分区拼接结果", () => {
+    const plans = planRoutes([
+      ...Array.from({ length: 6 }, (_, i) => point(`核心${i}`, "核心", [], 6 - i, 114.10 + i * 0.002, 27.40)),
+      point("蓝月谷", "独立", ["地区景点"], 4, 114.20, 27.50),
+      point("白水河", "独立", ["地区景点"], 3, 114.205, 27.505),
+      point("云杉坪", "独立", ["地区景点"], 3, 114.30, 27.60),
+      point("牦牛坪", "独立", ["地区景点"], 3, 114.305, 27.605),
+    ], { coreScenicName: "核心", mainScenicName: "", destName: "示例山", isNovelBased: false, novelName: "", hasRegionTour: true, zones: [] });
+    const theme = plans.find(p => p.label === "主题游");
+    expect(theme?.sections?.length).toBeGreaterThan(1);
+    expect(theme?.allow).toEqual(theme!.sections!.flatMap(s => s.allow));
+    // 每个片区的站点都必须是路线站点的子集，前端才能只用一份 stops 做地图连线
+    for (const sec of theme!.sections!) {
+      expect(sec.allow.every(id => theme!.allow!.includes(id))).toBe(true);
+    }
+  });
+});
 });

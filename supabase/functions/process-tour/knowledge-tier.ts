@@ -67,9 +67,15 @@ export function knowledgeTier(knowledge?: DestinationRouteKnowledge | null): Kno
 }
 
 const CAPABILITIES: Record<KnowledgeTier, TierCapabilities> = {
+  // v93：主题游不再依赖知识分层。它过去被 L3 限制，是因为它和 1日/2日 用同一种形态
+  // ——把散点串成一条线，于是必须断言跨片区的交通方式，而没有已验证知识时这种断言必然出错。
+  // 改成"主题 → 景区分组 → 景区内具体点"之后，主题游只声明"这几个就近的景区可以连着玩"，
+  // 不再声明一条连续动线，因此 L1/L2 也能安全产出：分组依据是已经过坐标校验的真实地点。
+  // 仍然只有 2 日全景游需要 L3：它必须回答"哪几个区算第一天、哪几个算第二天"，
+  // 那才是真正需要分区与换乘知识的地方。
   L3: { multiDay: true, themeTour: true, zoneDriven: true, trailOrder: true, assertTransport: true },
-  L2: { multiDay: false, themeTour: false, zoneDriven: false, trailOrder: true, assertTransport: false },
-  L1: { multiDay: false, themeTour: false, zoneDriven: false, trailOrder: false, assertTransport: false },
+  L2: { multiDay: false, themeTour: true, zoneDriven: false, trailOrder: true, assertTransport: false },
+  L1: { multiDay: false, themeTour: true, zoneDriven: false, trailOrder: false, assertTransport: false },
 };
 
 export function tierCapabilities(tier: KnowledgeTier): TierCapabilities {

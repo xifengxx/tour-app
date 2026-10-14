@@ -60,3 +60,34 @@ describe('computeBounds', () => {
     expect(computeBounds([{ lat: 0, lng: 0 }])).toBeNull();
   });
 });
+
+describe('normalizeTour 主题游分区（v93）', () => {
+  it('把 stopIds 归一化成 stops，并按片区分核心与周边', () => {
+    const tour = normalizeTour({
+      id: 't1', title: 'T', content_layers: [], tips: [],
+      locations: [{ id: 'a', name: 'A', lat: 1, lng: 1 }],
+      routes: [{ id: 'r1', day_label: '主题游', title: '深度', stops: ['a'], sections: [
+        { key: 'core', name: '目的地', kind: '核心景区', stopIds: ['a'], text: '玩法' },
+      ] }],
+    });
+    expect(tour.routes[0].sections).toEqual([
+      { key: 'core', name: '目的地', kind: '核心景区', stops: ['a'], text: '玩法' },
+    ]);
+  });
+
+  it('线性路线与历史数据（无 sections）退化为空数组，不炸渲染', () => {
+    const tour = normalizeTour({
+      id: 't2', title: 'T', content_layers: [], tips: [],
+      locations: [], routes: [{ id: 'r1', day_label: '1日精华游', stops: [], legs: [] }],
+    });
+    expect(tour.routes[0].sections).toEqual([]);
+  });
+
+  it('未知 kind 归为周边景点', () => {
+    const tour = normalizeTour({
+      id: 't3', title: 'T', content_layers: [], tips: [], locations: [],
+      routes: [{ id: 'r', day_label: '主题游', stops: [], sections: [{ name: 'X', stopIds: [], kind: '怪' }] }],
+    });
+    expect(tour.routes[0].sections[0].kind).toBe('周边景点');
+  });
+});

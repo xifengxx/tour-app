@@ -13,12 +13,31 @@ const CORE_ROUTE_MAX_STOPS = 10;
 const CORE_ROUTE_RADIUS_M = 15000;
 const ROAD_RE = /公路$|大道$|路$|街$|巷$/;
 
+/**
+ * 主题游的一个分区（v93）：一个可独立游览的景区 + 它内部具体可玩的点。
+ *
+ * 主题游过去和 1日/2日 用同一种形态——把一堆散点串成一条线，
+ * 于是一条"主题游"里既有 28km 外的另一个景区又被写成连续行程，
+ * 既不可行也读不出主题。新形态是两层结构：
+ *   主题 → 若干就近可组合的景区 → 每个景区内部的具体玩法点。
+ * 分区之间是"可以连着玩"的关系，不是一条步行动线。
+ */
+export type RouteSection = {
+  key: string;
+  name: string;
+  kind: "核心景区" | "周边景点";
+  allow: string[];
+  note?: string;
+};
+
 type RoutePlan = {
   label: string;
   title: string;
   allow: string[] | null;
   preordered?: boolean;
   dayPlan?: { label: string; title: string; allow: string[] }[];
+  /** 主题游专用：分区结构。allow 仍是扁平站点序列，保证旧消费方不破。 */
+  sections?: RouteSection[];
 };
 
 const normalizeText = (value: unknown) =>
@@ -151,6 +170,55 @@ export type PlanRoutesContext = {
   onSuppressed?: (plan: string, reason: string) => void;
 };
 
+/**
+ * 把"地区景点"按空间聚成可独立游览的景区分区（v93）。
+ *
+ * 复用 clusterRegionPts 已经算出的簇：它过去只保留每簇一个代表点，
+ * 成员被丢掉，所以主题游退化成一串互不相关的散点。
+ * 现在保留成员：一簇 = 一个景区，簇内的点就是"这个景区里具体玩什么"。
+ */
+export function buildThemeSections(
+  locs: any[],
+  ctx: { destName: string; coreScenicName?: string },
+  corePool: any[],
+  regionClusters: { rep: any; locs: any[] }[],
+  limits: { maxSections?: number; maxPerSection?: number; maxTotal?: number } = {},
+): RouteSection[] {
+  const maxSections = limits.maxSections ?? 6;
+  const maxPerSection = limits.maxPerSection ?? 6;
+  const maxTotal = limits.maxTotal ?? 20;
+  const byImp = (a: any, b: any) => (b.importance || 3) - (a.importance || 3);
+  const coreIds = new Set(corePool.map((l: any) => l.id));
+  const sections: RouteSection[] = [];
+  let used = 0;
+
+  if (corePool.length) {
+    const ids = corePool.slice(0, Math.min(maxPerSection, 4)).map((l: any) => l.id);
+    used += ids.length;
+    sections.push({
+      key: "core",
+      name: ctx.coreScenicName || ctx.destName,
+      kind: "核心景区",
+      allow: ids,
+    });
+  }
+
+  for (const cluster of regionClusters) {
+    if (sections.length >= maxSections || used >= maxTotal) break;
+    const rep = cluster.rep;
+    // 成员 = 该景区内其他可玩点（同簇 8km 内）。代表点始终排在最前，
+    // 它就是"这个景区"的名字；剩下按重要性列具体玩法点。
+    const members = cluster.locs.filter((l: any) => l.id !== rep.id).sort(byImp);
+    const ids = [rep.id, ...members.map((l: any) => l.id)]
+      .filter((id, i, all) => all.indexOf(id) === i && !coreIds.has(id))
+      .slice(0, maxPerSection);
+    if (!ids.length) continue;
+    used += ids.length;
+    sections.push({ key: `area-${rep.id}`, name: rep.name, kind: "周边景点", allow: ids });
+  }
+  return sections;
+}
+
 export function planRoutes(locs: any[], ctx: PlanRoutesContext) {
   // v89：能力授权。缺省全开，只有显式传入 capabilities 时才收敛，
   // 避免这个改动在调用方接入前就改变既有行为。
@@ -182,7 +250,8 @@ export function planRoutes(locs: any[], ctx: PlanRoutesContext) {
   if (mainPool.length) mainPool = mainPool.filter(l => isRouteSite(l) && nearCore(l, 35000));
   // 主题游的覆盖半径应与地区景点合并半径一致（60km）。此前只取 40km，
   // 会出现地点已入库（如应县木塔 47km、华严寺 60km）但没有任何路线引用的“孤岛地点”。
-  const unifiedRegion60 = clusterRegionPts(locs, corePool).map((c) => pickRep(c, ctx.destName)).filter((l: any) => isRouteSite(l) && nearCore(l, REGION_RADIUS));
+  const regionClusters = clusterRegionPts(locs, corePool);
+  const unifiedRegion60 = regionClusters.map((c) => pickRep(c, ctx.destName)).filter((l: any) => isRouteSite(l) && nearCore(l, REGION_RADIUS));
   const plans: RoutePlan[] = [];
   if (ctx.zones?.length && caps.zoneDriven) {
     const { pools } = zonePools(routeCorePool, ctx.zones);
@@ -214,7 +283,19 @@ export function planRoutes(locs: any[], ctx: PlanRoutesContext) {
       suppress("主题游", "目的地路线知识未经核实，无法确认跨片区接驳可行性");
     }
   } else if (ctx.hasRegionTour && unifiedRegion60.length) {
-    plans.push({ label: "主题游", title: `${ctx.destName}深度主题游`, allow: [...routeCorePool.slice(0, 4).map((l) => l.id), ...unifiedRegion60.map((l) => l.id)] });
+    // v93：主题游改为"景区分组"而不是"散点连线"。
+    // unifiedRegion60 仍决定哪些簇够格进主题游（已按目的地半径与可游览性过滤），
+    // 这里把每簇的成员一并带上，形成 主题 → 景区 → 具体点 的两层结构。
+    const eligible = new Set(unifiedRegion60.map((l: any) => l.id));
+    const themeClusters = regionClusters.filter(c => eligible.has(c.rep.id));
+    const sections = buildThemeSections(locs, { destName: ctx.destName, coreScenicName: ctx.coreScenicName }, routeCorePool, themeClusters);
+    const flat = sections.flatMap(sec => sec.allow);
+    if (flat.length) {
+      plans.push({
+        label: "主题游", title: `${ctx.destName}深度主题游`,
+        allow: flat, preordered: true, sections,
+      });
+    }
   }
   if (ctx.isNovelBased) plans.push({ label: "文学巡礼线", title: `《${ctx.novelName}》文学巡礼`, allow: null });
   return plans;

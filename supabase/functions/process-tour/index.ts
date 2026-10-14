@@ -561,7 +561,12 @@ Deno.serve(async (req: Request) => {
     // 站内顺序在调 AI 前排定，planText 即最终动线，AI 的 narrative 按此顺序展开
     for (const p of plans) {
       if (!p.allow) continue;
-      if (p.preordered && p.dayPlan) {
+      if (p.sections?.length) {
+        // 主题游按分区各自排序后再拼接：整体排序会把不同景区的点交错，
+        // 分组结构就白做了。
+        for (const sec of p.sections) sec.allow = orderStops(sec.allow, locs);
+        p.allow = p.sections.flatMap(sec => sec.allow);
+      } else if (p.preordered && p.dayPlan) {
         for (const day of p.dayPlan) day.allow = orderStops(day.allow, locs);
         p.allow = p.dayPlan.flatMap(day => day.allow);
       } else {
@@ -577,7 +582,17 @@ Deno.serve(async (req: Request) => {
     for (const p of plans) {
       if (!p.allow) continue;
       const allowLongTransfers = p.label === "主题游";
-      if (p.preordered && p.dayPlan) {
+      if (p.sections?.length) {
+        // 分区各自按"一天"校验与修复：一个景区排不下就削它自己的站点，
+        // 不会像整条拼接那样把别的景区一起削掉。
+        for (const sec of p.sections) {
+          const repaired = repairPlanStops(sec.allow, locs, routeKnowledge, { allowLongTransfers: true, dayLabel: "1日", maxDailyHours: 10 });
+          sec.allow = repaired.stopIds;
+          for (const r of repaired.repairs) planRepairNotes.push(`♻️ 主题游·${sec.name}：${r.message}`);
+        }
+        p.allow = p.sections.flatMap(sec => sec.allow).filter((id, i, all) => all.indexOf(id) === i);
+        if (!p.allow.length) suppressedPlans.push({ plan: p.label, reason: "各分区在容量修复后都没有剩余站点" });
+      } else if (p.preordered && p.dayPlan) {
         // 逐日校验容量：2 日线的总量阈值会被"第 1 天 12 小时 + 第 2 天 3 小时"蒙混过去
         for (const day of p.dayPlan) {
           const repaired = repairPlanStops(day.allow, locs, routeKnowledge, { allowLongTransfers, dayLabel: day.label });
@@ -601,11 +616,15 @@ Deno.serve(async (req: Request) => {
         ? p.allow.map(id => { const l = locs.find(x => x.id === id); return l ? `${id}: ${l.name}` : id; }).join(", ")
         : "（文学巡礼线：自由选点）";
       const traffic = routeTrafficHints.get(p.label);
+      const sectionText = p.sections?.map(sec => {
+        const secStops = sec.allow.map(id => { const l = locs.find(x => x.id === id); return l ? `${id}: ${l.name}` : id; }).join(", ");
+        return `【${sec.name}】（${sec.kind}）— 该景区内的游览点: ${secStops}`;
+      }).join("\n   ");
       const dayText = p.dayPlan?.map(day => {
         const dayStops = day.allow.map(id => { const l = locs.find(x => x.id === id); return l ? `${id}: ${l.name}` : id; }).join(", ");
         return `${day.label}「${day.title}」 — 指定站点: ${dayStops}`;
       }).join("\n   ");
-      return `${i + 1}. ${p.label}「${p.title}」 — 指定站点: ${stopsTxt}${dayText ? `\n   按日分组（必须严格执行）:\n   ${dayText}` : ""}${traffic ? `\n   交通衔接（narrative 必须按此执行）: ${traffic}` : ""}`;
+      return `${i + 1}. ${p.label}「${p.title}」 — 指定站点: ${stopsTxt}${sectionText ? `\n   按景区分组（主题游必须按分组写：先说明主题与这些景区为什么值得连着玩，再逐景区写怎么玩）:\n   ${sectionText}` : ""}${dayText ? `\n   按日分组（必须严格执行）:\n   ${dayText}` : ""}${traffic ? `\n   交通衔接（narrative 必须按此执行）: ${traffic}` : ""}`;
     }).join("\n");
 
     const [contentById, routes] = await Promise.all([
@@ -674,7 +693,7 @@ Deno.serve(async (req: Request) => {
         for (let attempt = 0; attempt < 2 && routes.length < plans.length; attempt++) {
           const rr = await deepseek([
             { role: "system", content: "你是旅游路线规划师。只返回JSON。" },
-            { role: "user", content: `${destName}路线。**每条路线的站点及其顺序已由系统按地理动线排定，stops 必须严格按给定顺序逐字输出（这是实际游览顺序，已保证不走回头路），严禁增删替换或调整顺序；文学巡礼线除外（可自由选点与排序）。**\n\n${planText}\n\n${trailNotes ? `参考真实动线：${trailNotes}\n\n` : ""}${graphNotes ? `路线衔接：${graphNotes}\n\n` : ""}要求：\n1. 每条路线按上面的指定站点生成完整行程（从入口/索道进 → 逐点游览 → 出口/索道出）。\n2. narrative 各写 150-300 字完整行程描述：从哪个入口/索道进、每段用什么交通（徒步/索道/观光车）、依次经过哪些地点、从哪里出。narrative 中必须写地点的中文名（如"玉京峰"），严禁写 id 代号。narrative 的游览顺序必须与给定站点顺序一致。山地路线从半山下降到山脚庙宇/游客中心/停车场，或从游客中心前往外围峡谷/悬空景点时，必须写清换乘观光车、摆渡车或专车，不要把长距离位移写成连续徒步。\n3. **2日全景游 narrative 必须明确「第1天前山」「第2天后山」各去哪**；主题游写明主题与串联逻辑。\n4. day_label 必须是上面给定的标签（1日精华游/2日全景游/主题游/文学巡礼线）。\n5. 地点少时压缩天数，严禁编造不存在的多日行程。\n6. stops 数组顺序必须与 narrative 中的实际游览顺序一致（入口/索道在前，依次游览，出口/索道在后）；stops 只能从上面指定 id 中逐字复制。\n7. 路线条数必须与上述完全一致（${plans.length} 条），缺一不可。\nJSON: {"routes":[{"day_label":"","title":"","stops":["id1","id2"],"narrative":"完整行程描述"}]}` },
+            { role: "user", content: `${destName}路线。**每条路线的站点及其顺序已由系统按地理动线排定，stops 必须严格按给定顺序逐字输出（这是实际游览顺序，已保证不走回头路），严禁增删替换或调整顺序；文学巡礼线除外（可自由选点与排序）。**\n\n${planText}\n\n${trailNotes ? `参考真实动线：${trailNotes}\n\n` : ""}${graphNotes ? `路线衔接：${graphNotes}\n\n` : ""}要求：\n1. 每条路线按上面的指定站点生成完整行程（从入口/索道进 → 逐点游览 → 出口/索道出）。\n2. narrative 各写 150-300 字完整行程描述：从哪个入口/索道进、每段用什么交通（徒步/索道/观光车）、依次经过哪些地点、从哪里出。narrative 中必须写地点的中文名（如"玉京峰"），严禁写 id 代号。narrative 的游览顺序必须与给定站点顺序一致。山地路线从半山下降到山脚庙宇/游客中心/停车场，或从游客中心前往外围峡谷/悬空景点时，必须写清换乘观光车、摆渡车或专车，不要把长距离位移写成连续徒步。\n3. **2日全景游 narrative 必须明确「第1天前山」「第2天后山」各去哪**；主题游写明主题与串联逻辑。\n4. day_label 必须是上面给定的标签（1日精华游/2日全景游/主题游/文学巡礼线）。\n5. 地点少时压缩天数，严禁编造不存在的多日行程。\n6. stops 数组顺序必须与 narrative 中的实际游览顺序一致（入口/索道在前，依次游览，出口/索道在后）；stops 只能从上面指定 id 中逐字复制。\n7. 路线条数必须与上述完全一致（${plans.length} 条），缺一不可。\n主题游额外要求：按上面给的"按景区分组"输出 sections 数组，每项 {name, text}，name 用给定的景区名原样，text 写 60-120 字"这个景区里怎么玩"；不要把不同景区的点混写成一条连续步行线，景区之间如需乘车就照交通衔接写。\nJSON: {"routes":[{"day_label":"","title":"","stops":["id1","id2"],"narrative":"完整行程描述","sections":[{"name":"","text":""}]}]}` },
           ], { temperature: 0.2 });
           // Route stop validation: resolve + 确定性兜底。
           // 注意：不能按数组下标取 plan（AI 返回 routes 的顺序常与 plans 不一致 → 会张冠李戴，
@@ -738,11 +757,28 @@ Deno.serve(async (req: Request) => {
             }
             stops = sanitized.kept;
             if (!stops.length && !plan.allow) stops = coreFallbackStops(plan.label, "AI 选点全是景区伞形名");
+            // v93：主题游的分区结构落库。AI 若按分组写了小节文案就并进来，
+            // 没写就留空字符串，前端退化为"只列景区与其内景点"，不影响可用性。
+            const aiSections = Array.isArray(ai.sections) ? ai.sections : [];
+            const sections = (plan.sections || []).map(sec => {
+              const kept = sec.allow.filter(id => stops.includes(id));
+              const hit = aiSections.find((x: any) => {
+                const name = String(x?.name || "").trim();
+                return !!name && (sec.name.includes(name) || name.includes(sec.name));
+              });
+              return {
+                key: sec.key, name: sec.name, kind: sec.kind,
+                stopIds: kept.length ? kept : sec.allow.filter(id => stops.includes(id)),
+                text: typeof hit?.text === "string" ? hit.text.trim().slice(0, 400) : "",
+              };
+            }).filter(sec => sec.stopIds.length);
+
             return {
               id: `${scope}-r${i + 1}`,
               day_label: plan.label,
               title: plan.title,
               stops,
+              sections,
               narrative: typeof ai.narrative === "string" ? ai.narrative : "",
               sort_order: i,
               _free: !plan.allow, // v70.4：自由选点路线（文学巡礼线）标记，去重时跳过
@@ -781,6 +817,9 @@ Deno.serve(async (req: Request) => {
       const issues = routeGraphIssues(route.stops, dbLocs, routeKnowledge, {
         allowLongTransfers: route.day_label === "主题游",
         dayLabel: route.day_label,
+        // 主题游是 N 个可连着玩的景区，按 N 日计容量；
+        // 按 1 日算会把正常的分组主题游全判成超容量（v93）。
+        dayCount: route.sections?.length && route.day_label === "主题游" ? route.sections.length : undefined,
       });
       routeGraphIssueCount += issues.length;
       for (const issue of blockingIssues(issues)) gateBlocking.push({ label: route.day_label, message: issue.message });
@@ -817,7 +856,7 @@ Deno.serve(async (req: Request) => {
         if (prof) routeProfiles.set(route.id, prof);
       }
     }));
-    await postRows("routes", routes.map(r => ({ id: r.id, tour_id: tourId, day_label: r.day_label, title: r.title, stops: r.stops, legs: r.legs || [], prof: routeProfiles.get(r.id) || [], narrative: r.narrative, sort_order: r.sort_order })));
+    await postRows("routes", routes.map(r => ({ id: r.id, tour_id: tourId, day_label: r.day_label, title: r.title, stops: r.stops, sections: r.sections || [], legs: r.legs || [], prof: routeProfiles.get(r.id) || [], narrative: r.narrative, sort_order: r.sort_order })));
 
     // Quality report
     const report = {
@@ -825,6 +864,9 @@ Deno.serve(async (req: Request) => {
       routes: routes.length,
       plans: plans.length, // v70.3 诊断：计划路线数 vs 实际路线数（v89 起会随能力授权收敛）
       corePool: corePoolSize, mainScenic: mainScenicName, coreScenic: coreScenicName,
+      // 主题游分区结构概览（v93）
+      themeSections: routes.filter((r: any) => r.day_label === "主题游")
+        .map((r: any) => ({ route: r.day_label, groups: (r.sections || []).map((s: any) => ({ name: s.name, kind: s.kind, stops: s.stopIds.length })) })),
       routeKnowledge: {
         source: routeKnowledge.source, confidence: routeKnowledge.confidence, destination: routeKnowledge.destinationName,
         tier, capabilities,

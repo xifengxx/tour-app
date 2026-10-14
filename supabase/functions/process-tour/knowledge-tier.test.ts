@@ -20,10 +20,13 @@ describe("knowledgeTier", () => {
     }
   });
 
-  it("自动研究算未核实，即使置信度看起来很高", () => {
+  it("自动研究算未核实，只锁多日线，不锁主题游", () => {
     expect(knowledgeTier(base({ source: "auto-research", confidence: 0.75 }))).toBe("L2");
-    // 丽江玉龙雪山线上实况：auto-research 置信度 0.75 却能驱动 2 日线分区装配
+    // v93：主题游改成"景区分组"后不再声明跨区连续动线，
+    // 分组依据是已经过坐标校验的真实地点，所以 L1/L2 也能安全产出。
     expect(tierCapabilities("L2").multiDay).toBe(false);
+    expect(tierCapabilities("L2").themeTour).toBe(true);
+    expect(tierCapabilities("L1").themeTour).toBe(true);
   });
 
   it("内置策展快照按人工撰写计入 L3，但没有 zones/edges 时相应能力仍关闭", () => {

@@ -78,6 +78,12 @@ export type RouteGraphOptions = {
   longTransferM?: number;
   dayLabel?: string;
   maxDailyHours?: number;
+  /**
+   * 显式天数，优先于从 dayLabel 里正则猜。
+   * 主题游是"几个可连着玩的景区"，每个景区自成一日，
+   * 按 1 日容量去校验会把正常的分组行程全判成超容量。
+   */
+  dayCount?: number;
 };
 
 export type RouteGraphSegment = {
@@ -710,7 +716,7 @@ export function routeGraphIssues(
   // 所以先按标签日数放大阈值；只要总耗时除以天数后仍超限就告警。
   const duration = estimateRouteDuration(legs, stopIds.length);
   const dayMatch = String(options.dayLabel || "").match(/(\d+)\s*日/);
-  const days = dayMatch ? Math.max(1, Number(dayMatch[1])) : 1;
+  const days = Math.max(1, options.dayCount ?? (dayMatch ? Number(dayMatch[1]) : 1));
   const dailyHours = options.maxDailyHours ?? 10;
   if (duration.totalMinutes > days * dailyHours * 60) {
     issues.push({
