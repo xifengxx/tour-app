@@ -31,18 +31,29 @@ export default function TourEditReview({
 
       {/* 公开/私密切换 + 编辑基本信息 */}
       <div className="flex items-center gap-2 mb-3 flex-wrap">
+        {/* P1-2 闸门：存在阻断级路线问题时禁止直接发布，核实前不给公开入口 */}
         <button
           onClick={() => setIsPublic(!isPublic)}
+          disabled={!reportSummary.canPublish}
+          title={reportSummary.canPublish ? '' : `存在 ${reportSummary.blockingCount} 个阻断级路线问题，核实后才能发布`}
+          aria-describedby={reportSummary.canPublish ? undefined : 'publish-gate-hint'}
           className={`flex items-center gap-1.5 text-xs px-3 py-2 rounded-lg border transition-colors ${
-            isPublic
-              ? 'bg-pine/10 border-pine/30 text-pine'
-              : 'bg-black/[0.04] border-border text-muted-foreground'
+            !reportSummary.canPublish
+              ? 'bg-muted/50 border-border text-muted-foreground/60 cursor-not-allowed'
+              : isPublic
+                ? 'bg-pine/10 border-pine/30 text-pine'
+                : 'bg-black/[0.04] border-border text-muted-foreground'
           }`}
         >
           {isPublic
             ? <><Globe className="h-3.5 w-3.5" /> 已公开（所有人可见）</>
             : <><Lock className="h-3.5 w-3.5" /> 私密（仅自己可见）</>}
         </button>
+        {!reportSummary.canPublish && (
+          <span id="publish-gate-hint" className="text-[11px] text-destructive">
+            需先核实 {reportSummary.blockingCount} 个阻断级路线问题，才能设为公开
+          </span>
+        )}
         <button
           onClick={() => onSetPhase('input')}
           className="flex items-center gap-1.5 text-xs px-3 py-2 rounded-lg border border-border bg-black/[0.04] text-muted-foreground hover:bg-black/[0.08] transition-colors"

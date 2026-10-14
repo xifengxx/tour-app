@@ -32,6 +32,25 @@ describe('ProcessReport', () => {
     expect(screen.getByRole('button', { name: /AI 处理报告/ })).toHaveAttribute('aria-expanded', 'true');
   });
 
+  it('闸门阻断时改用阻断措辞，并说明需核实后才能发布', () => {
+    const gated = {
+      ...report,
+      gate: { blocking: [{ label: '2日全景游', message: '牦牛坪 → 丽江玉水寨 相距约 19km，但缺少索道/观光车/专车衔接' }] },
+    };
+    render(<ProcessReport summary={summarizeReport(gated, routes)} />);
+    expect(screen.getByText('1 项需核实后才能发布')).toBeInTheDocument();
+    expect(screen.getByText(/本导览需核实后才能发布/)).toBeInTheDocument();
+  });
+
+  it('闸门收回公开状态时如实说明，不假装是创作者自己关的', () => {
+    const gated = {
+      ...report,
+      gate: { blocking: [{ label: '2日全景游', message: '牦牛坪 → 丽江玉水寨 相距约 19km，但缺少索道/观光车/专车衔接' }], unpublished: true },
+    };
+    render(<ProcessReport summary={summarizeReport(gated, routes)} />);
+    expect(screen.getByText(/已自动转为私有/)).toBeInTheDocument();
+  });
+
   it('可折叠，键盘可操作', () => {
     render(<ProcessReport summary={summarizeReport(report, routes)} />);
     const toggle = screen.getByRole('button', { name: /AI 处理报告/ });
@@ -67,9 +86,15 @@ describe('RouteIssueList', () => {
     expect(container).toBeEmptyDOMElement();
   });
 
-  it('有问题时给出可读的待核实列表', () => {
-    render(<RouteIssueList issues={[{ text: '日观峰 → 岱庙 高差约 1386m', level: 'blocking' }]} />);
-    expect(screen.getByText('待核实：1 个交通/衔接问题')).toBeInTheDocument();
+  it('阻断级问题使用阻断措辞', () => {
+    render(<RouteIssueList issues={[{ text: '日观峰 → 岱庙 高差约 1386m，资料中无衔接方式', level: 'blocking' }]} />);
+    expect(screen.getByText('需核实后才能发布：1 项')).toBeInTheDocument();
     expect(screen.getByText(/日观峰 → 岱庙/)).toBeInTheDocument();
+  });
+
+  it('推断级问题说明来源是系统按距离/高差推断', () => {
+    render(<RouteIssueList issues={[{ text: '牦牛坪 → 玉水寨 相距约 19km', level: 'advisory' }]} />);
+    expect(screen.getByText(/1 项交通衔接由系统按距离/)).toBeInTheDocument();
+    expect(screen.getByText(/牦牛坪 → 玉水寨/)).toBeInTheDocument();
   });
 });

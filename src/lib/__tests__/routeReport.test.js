@@ -30,11 +30,45 @@ describe('summarizeReport', () => {
   it('按路线标签归组交通衔接缺陷', () => {
     const summary = summarizeReport(lijiangReport, routes);
     expect(summary.available).toBe(true);
-    expect(summary.blockingCount).toBe(1);
+    expect(summary.reviewCount).toBe(1);
     const day2 = summary.routeIssues.find(r => r.label === '2日全景游');
     expect(day2.issues[0].text).toContain('牦牛坪 → 丽江玉水寨');
-    expect(day2.issues[0].level).toBe('blocking');
     expect(summary.routeIssues.find(r => r.label === '1日精华游').issues).toEqual([]);
+  });
+
+  it('历史报告只标为待核实，不追溯封锁发布权', () => {
+    // v88 之前的 report 没有 gate 字段，也没有分级。
+    // 用今天的阻断标准去判昨天的产物，会让所有存量导览突然无法发布。
+    const summary = summarizeReport(lijiangReport, routes);
+    expect(summary.gateSource).toBe('legacy');
+    expect(summary.routeIssues.find(r => r.label === '2日全景游').issues[0].level).toBe('advisory');
+    expect(summary.reviewCount).toBe(1);
+    expect(summary.blockingCount).toBe(0);
+    expect(summary.canPublish).toBe(true);
+  });
+
+  it('v88 闸门记名为 blocking 的问题才阻断发布', () => {
+    const gated = {
+      ...lijiangReport,
+      gate: {
+        blocking: [{ label: '2日全景游', message: '牦牛坪 → 丽江玉水寨 相距约 19km，但缺少索道/观光车/专车衔接' }],
+        repairs: 1,
+        routes: 3,
+        plans: 3,
+      },
+    };
+    const summary = summarizeReport(gated, routes);
+    expect(summary.gateSource).toBe('v88+');
+    expect(summary.routeIssues.find(r => r.label === '2日全景游').issues[0].level).toBe('blocking');
+    expect(summary.blockingCount).toBe(1);
+    expect(summary.canPublish).toBe(false);
+    expect(summary.repairs).toBe(1);
+  });
+
+  it('闸门自动收回公开状态时如实告知创作者', () => {
+    const summary = summarizeReport({ ...lijiangReport, gate: { blocking: [{ label: '2日全景游', message: '牦牛坪 → 丽江玉水寨 相距约 19km，但缺少索道/观光车/专车衔接' }], unpublished: true } }, routes);
+    expect(summary.unpublished).toBe(true);
+    expect(summary.canPublish).toBe(false);
   });
 
   it('路线级缺陷不混进全局告警，全局告警保留性质分级', () => {
@@ -57,6 +91,7 @@ describe('summarizeReport', () => {
     const summary = summarizeReport({ ...lijiangReport, plans: 4, routes: 1 }, routes);
     const blocking = summary.general.filter(w => w.level === 'blocking');
     expect(blocking).toHaveLength(1);
+    expect(summary.canPublish).toBe(false);
     expect(blocking[0].text).toContain('计划生成 4 条');
     expect(blocking[0].text).toContain('实际只落库 1 条');
   });

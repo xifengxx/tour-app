@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-import { describe, expect, it } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
+import { fireEvent, render, screen } from '@testing-library/react';
 import TourEditReview from '../TourEditReview';
 
 // P1-1 接线验证：报告必须经 TourEdit → TourEditReview → 审核页真正落地，
@@ -38,6 +38,29 @@ describe('TourEditReview 质量报告接线', () => {
     // 同一处缺陷出现两次：报告总览一次、路线卡片内一次
     // （用"相距约 19km"限定，避免与路线卡片原有的"途经:"行文本混淆）
     expect(screen.getAllByText(/相距约 19km/)).toHaveLength(2);
-    expect(screen.getByText('待核实：1 个交通/衔接问题')).toBeInTheDocument();
+    // 路线卡片内按分级说明：该报告无 gate 字段 → 属推断级（advisory），不阻断发布
+    expect(screen.getByText(/1 项交通衔接由系统按距离/)).toBeInTheDocument();
+  });
+});
+
+describe('TourEditReview 发布闸门', () => {
+  const gatedReport = {
+    ...report,
+    gate: { blocking: [{ label: '2日全景游', message: '牦牛坪 → 丽江玉水寨 相距约 19km，但缺少索道/观光车/专车衔接' }], unpublished: false },
+  };
+
+  it('存在阻断级问题时不允许直接切为公开', () => {
+    const setIsPublic = vi.fn();
+    render(<TourEditReview {...props} isPublic={false} setIsPublic={setIsPublic} processReport={gatedReport} />);
+    const publishToggle = screen.getByRole('button', { name: /已公开|私密/ });
+    expect(publishToggle).toBeDisabled();
+    fireEvent.click(publishToggle);
+    expect(setIsPublic).not.toHaveBeenCalled();
+    expect(screen.getByText(/需先核实 1 个阻断级路线问题/)).toBeInTheDocument();
+  });
+
+  it('无阻断级问题时发布开关正常可用', () => {
+    render(<TourEditReview {...props} processReport={report} />);
+    expect(screen.getByRole('button', { name: /已公开|私密/ })).toBeEnabled();
   });
 });

@@ -50,6 +50,13 @@ export function summarizeReport(report, routes = []) {
     at: report.at || '',
   };
 
+  // 闸门结论只认同一次生成写下的 report.gate。
+  // 不能用新规则追溯封锁历史导览的发布权：v88 之前的告警没有分级，
+  // 拿今天的阻断标准去判昨天的产物，会让所有存量导览突然无法发布。
+  const gate = report.gate && typeof report.gate === 'object' ? report.gate : null;
+  const gateBlocking = Array.isArray(gate?.blocking) ? gate.blocking : [];
+  const gateKeys = new Set(gateBlocking.map(b => `${b.label || ''}|${b.message || ''}`));
+
   // 路线数少于计划数 = 有路线在生成中被丢弃，属于必须先给创作者看的硬信号。
   const droppedPlan = metrics.plans > metrics.routes
     ? { label: '路线组成', text: `计划生成 ${metrics.plans} 条路线，实际只落库 ${metrics.routes} 条，有路线被静默丢弃`, level: 'blocking' }
@@ -64,7 +71,9 @@ export function summarizeReport(report, routes = []) {
     if (routed) {
       const [, label, message] = routed;
       if (!byLabel.has(label)) byLabel.set(label, []);
-      byLabel.get(label).push({ text: message || text, level: 'blocking' });
+      // 只有被闸门记名为 blocking 的才是阻断级；其余是"已推断、待核实"。
+      const level = gateKeys.has(`${label}|${message || ''}`) ? 'blocking' : 'advisory';
+      byLabel.get(label).push({ text: message || text, level });
       continue;
     }
     const kind = classify(text);
@@ -85,8 +94,22 @@ export function summarizeReport(report, routes = []) {
     }
   }
 
-  const blockingCount = routeIssues.reduce((n, r) => n + r.issues.length, 0);
-  return { available: true, metrics, routeIssues, general, blockingCount };
+  const blockingCount = routeIssues.reduce((n, r) => n + r.issues.filter(i => i.level === 'blocking').length, 0)
+    + general.filter(w => w.level === 'blocking').length;
+  const reviewCount = routeIssues.reduce((n, r) => n + r.issues.length, 0);
+  return {
+    available: true,
+    metrics,
+    routeIssues,
+    general,
+    blockingCount,
+    reviewCount,
+    // 闸门阻断时不允许直接发布；advisory 只提示核实。
+    canPublish: blockingCount === 0,
+    unpublished: Boolean(gate?.unpublished),
+    repairs: Number(gate?.repairs) || 0,
+    gateSource: gate ? 'v88+' : 'legacy',
+  };
 }
 
 export function issuesForRoute(summary, route) {

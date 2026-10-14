@@ -68,7 +68,7 @@ export default function Home() {
     let cancelled = false;
     supabase
       .from('tours')
-      .select('id, title, subtitle, destination, theme, is_public, created_at, locations(count), routes(count)')
+      .select('id, title, subtitle, destination, theme, is_public, status, created_at, locations(count), routes(count)')
       .eq('user_id', user.id)
       .order('created_at', { ascending: false })
       .then(({ data, error }) => {
@@ -211,11 +211,19 @@ export default function Home() {
       {/* My tour: 状态印戳 + 操作菜单 */}
       {isMyTour && (
         <div className="absolute top-3 right-3 flex items-center gap-1.5">
-          <span className={`seal-outline text-[10px] px-1.5 py-1 ${
-            tour.is_public ? 'text-primary bg-primary/5' : 'text-muted-foreground bg-black/[0.03]'
-          }`}>
-            {tour.is_public ? '已发布' : '私密'}
-          </span>
+          {/* P1-2 闸门：needs_review 的导览内容已写好但不能直接发布。
+              不在列表里标出来的话，创作者根本不知道自己有东西要处理。 */}
+          {tour.status === 'needs_review' ? (
+            <span className="seal-outline text-[10px] px-1.5 py-1 text-destructive bg-destructive/5" title="存在阻断级路线问题，需核实后才能发布">
+              待核实
+            </span>
+          ) : (
+            <span className={`seal-outline text-[10px] px-1.5 py-1 ${
+              tour.is_public ? 'text-primary bg-primary/5' : 'text-muted-foreground bg-black/[0.03]'
+            }`}>
+              {tour.is_public ? '已发布' : '私密'}
+            </span>
+          )}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button
