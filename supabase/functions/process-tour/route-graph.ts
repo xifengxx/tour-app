@@ -693,6 +693,18 @@ export function routeGraphIssues(
         level: "advisory",
         message: `${leg.fromName} → ${leg.toName} ${claimed}，但${why}，实际需改用「${MODE_TEXT[leg.mode]}」`,
       });
+    } else if (leg.mode === "car" && !options.allowLongTransfers) {
+      // v94：核心路线（1日/2日）里出现"必须开车"的段，说明路线组成错了，
+      // 不是交通方式待核实。这是结构不变量，不是又一个魔法阈值。
+      // 线上实测：v89 关掉未核实的分区选点后，1日精华游按重要性取满 10 站，
+      // 把 19km 外、独立售票的"丽江玉水寨"等三个 4A 点吸进了"玉龙雪山一日精华游"，
+      // 产出 牦牛坪 → 丽江玉水寨（19km / 高差 1000m）这种必须包车的"一日游"。
+      const drop = leg.elevationDeltaM != null ? `、高差约 ${Math.abs(leg.elevationDeltaM)}m` : "";
+      issues.push({
+        type: "long-transfer",
+        level: "blocking",
+        message: `${leg.fromName} → ${leg.toName} 直线约 ${Math.round((distance || 0) / 1000)}km${drop}，需乘车跨片区，不属于本路线的游览范围`,
+      });
     } else if (leg.inferred && ((far && !options.allowLongTransfers) || bigDropNeedsTransport)) {
       const why = [distance != null ? `直线约 ${Math.round(distance / 1000)}km` : "", drop != null ? `高差约 ${drop}m` : ""]
         .filter(Boolean).join("、");
@@ -957,6 +969,27 @@ function trimmability(loc: any, matched: boolean, index: number, total: number):
     + (index < total / 2 ? 3 : 0);
 }
 
+/** 跨片区段的受害端点：重要性低的先走，同分时离其余站点质心远的先走。 */
+function pickCrossAreaVictim(
+  leg: RouteLeg,
+  byId: Map<string, any>,
+  current: string[],
+): string | null {
+  const a = byId.get(leg.fromId);
+  const b = byId.get(leg.toId);
+  if (!a || !b) return null;
+  const impA = a.importance || 3;
+  const impB = b.importance || 3;
+  if (impA !== impB) return impA < impB ? leg.fromId : leg.toId;
+  const rest = current.filter(id => id !== leg.fromId && id !== leg.toId)
+    .map(id => byId.get(id)).filter((l: any) => l?.lat && l?.lng);
+  if (!rest.length) return leg.toId;
+  const cx = rest.reduce((n, l: any) => n + l.lng, 0) / rest.length;
+  const cy = rest.reduce((n, l: any) => n + l.lat, 0) / rest.length;
+  const far = (l: any) => (l.lat && l.lng ? haversineM({ lng: cx, lat: cy }, l) : Infinity);
+  return far(a) >= far(b) ? leg.fromId : leg.toId;
+}
+
 /**
  * 在给定站点集合上做确定性修复，返回修复后的站点、修复动作和剩余问题。
  * 只重排或砍站，绝不新增站点，因此不会引入原计划里不存在的地点。
@@ -991,6 +1024,22 @@ export function repairPlanStops(
           repairs.push({ type: "reordered", message: `按路线图重排站点顺序，消除「${backtrack.message}」` });
           continue;
         }
+      }
+    }
+
+    // 跨片区车行段：削掉更"离群"的那一端（重要性低优先，其次离质心远），
+    // 逐轮迭代直到核心路线里不再出现 car 段。
+    const carLeg = current.length > 3
+      ? buildRouteLegs(current, locs, knowledge).find(l => l.mode === "car")
+      : undefined;
+    if (carLeg && !options.allowLongTransfers) {
+      const victim = pickCrossAreaVictim(carLeg, byId, current);
+      if (victim) {
+        current = current.filter(id => id !== victim);
+        trimmedIds.push(victim);
+        const name = String(byId.get(victim)?.name || victim);
+        repairs.push({ type: "trimmed", message: `移除跨片区站点「${name}」（与相邻站点需 ${Math.round((carLeg.distanceM || 0) / 1000)}km 车程，不属于本路线游览范围）` });
+        continue;
       }
     }
 

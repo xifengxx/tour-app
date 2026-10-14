@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildRouteGraph, buildRouteLegs, elevationDeltaM, estimateRouteDuration, inferTransferMode, matchLocsToGraph, minModeForTransfer, parseElevationM, planGraphStops, routeGraphSegments, routeGraphIssues, routeGraphNotes, repairPlanStops, routeLegsText, SCENIC_SHUTTLE_MAX_M, stripFacilitySuffix } from "./route-graph.ts";
+import { blockingIssues, buildRouteGraph, buildRouteLegs, elevationDeltaM, estimateRouteDuration, inferTransferMode, matchLocsToGraph, minModeForTransfer, parseElevationM, planGraphStops, routeGraphSegments, routeGraphIssues, routeGraphNotes, repairPlanStops, routeLegsText, SCENIC_SHUTTLE_MAX_M, stripFacilitySuffix } from "./route-graph.ts";
 import type { DestinationRouteKnowledge } from "./route-knowledge-types.ts";
 import { CURATED_TRAILS, orderStopsByTrail } from "./trail-routes.ts";
 
@@ -438,8 +438,9 @@ describe("route graph", () => {
       { id: "a", name: "山腰寺", lat: 30.0, lng: 118.0 },
       { id: "b", name: "邻县古镇", lat: 30.25, lng: 118.2 },
     ];
+    // 34km 属跨片区：新规则下是阻断级"不属于本路线"，而不是"待核实"
     expect(routeGraphIssues(["a", "b"], far, noKnowledge)).toEqual([
-      expect.objectContaining({ type: "long-transfer", message: expect.stringContaining("未经核实") }),
+      expect.objectContaining({ type: "long-transfer", level: "blocking", message: expect.stringContaining("不属于本路线") }),
     ]);
     // 步行段资料缺失但物理上必须机动化时，措辞要说清是"默认按步行"而非"资料主张步行"
     const synthetic = [
@@ -465,8 +466,14 @@ describe("route graph", () => {
       { id: "chengkan", name: "呈坎", lat: 29.914335, lng: 118.280803 },
     ];
     const issues = routeGraphIssues(["hou", "chengkan"], huangshan, noKnowledge);
-    expect(issues[0].message).toContain("专车/出租车");
+    expect(issues[0]).toMatchObject({ level: "blocking", type: "long-transfer" });
     expect(issues[0].message).toContain("直线约 28km");
+    expect(issues[0].message).toContain("不属于本路线");
+    // 只有两个站点时不削站（削完就没路线了），但必须把阻断报出来
+    const repaired = repairPlanStops(["hou", "chengkan"], huangshan, noKnowledge, { dayLabel: "2日全景游" });
+    expect(repaired.stopIds).toEqual(["hou", "chengkan"]);
+    expect(repaired.repairs).toEqual([]);
+    expect(blockingIssues(repaired.issues)).toHaveLength(1);
   });
 
   it("发现每日行程超过容量上限", () => {
@@ -563,4 +570,43 @@ describe("设施后缀剥离匹配（v92 绑定改善）", () => {
     const locs = [{ id: "j", name: "金顶", lat: 27.48, lng: 114.14 }];
     expect(matchLocsToGraph(["j"], locs, graph).has("j")).toBe(false);
   });
+
+describe("核心路线不含跨片区车行（v94 线上实测回归）", () => {
+  // 丽江重跑实况：v89 关掉未核实分区选点后，1日精华游按重要性取满 10 站，
+  // 把 19km 外、独立售票的 4A 景区"丽江玉水寨"吸进了"玉龙雪山一日精华游"。
+  // 坐标与海拔取自线上 locations 表原值
+  const yak = { id: "yak", name: "牦牛坪", lat: 27.166042, lng: 100.244457, elevation: "约3700米", importance: 4 };
+  const yushui = { id: "ys", name: "丽江玉水寨", lat: 26.999757, lng: 100.201622, elevation: "约2700米", importance: 4 };
+  const noKnowledge: DestinationRouteKnowledge = {
+    destinationName: "玉龙雪山", aliases: [], zones: [], trails: [], edges: [], source: "none", confidence: 0,
+  };
+
+  it("19km 跨片区段被标为阻断级", () => {
+    const issues = routeGraphIssues(["yak", "ys"], [yak, yushui], noKnowledge, { dayLabel: "1日精华游" });
+    expect(issues[0]).toMatchObject({ type: "long-transfer", level: "blocking" });
+    expect(issues[0].message).toContain("高差约 1000m");
+  });
+
+  it("重要性相同时削掉离其余站点质心更远的那个", () => {
+    const inPark = [
+      { id: "a", name: "玉龙雪山冰川公园栈道", lat: 27.102002, lng: 100.199865, elevation: "4506-4680米", importance: 5 },
+      { id: "b", name: "玉龙雪山国家级风景名胜区蓝月谷", lat: 27.124436, lng: 100.245886, elevation: "约2900米", importance: 5 },
+      { id: "c", name: "甘海子", lat: 27.090724, lng: 100.257808, elevation: "约3100米", importance: 4 },
+      yak, yushui,
+    ];
+    const repaired = repairPlanStops(["a", "b", "c", "yak", "ys"], inPark, noKnowledge, { dayLabel: "1日精华游" });
+    expect(repaired.stopIds).not.toContain("ys");
+    expect(repaired.stopIds).toEqual(["a", "b", "c", "yak"]);
+    expect(blockingIssues(repaired.issues)).toEqual([]);
+    expect(repaired.repairs.map(r => r.message).join()).toContain("丽江玉水寨");
+  });
+
+  it("主题游允许跨片区串联，不触发这条阻断", () => {
+    const issues = routeGraphIssues(["yak", "ys"], [yak, yushui], noKnowledge, {
+      allowLongTransfers: true, dayLabel: "主题游",
+    });
+    expect(issues.filter(i => i.level === "blocking")).toEqual([]);
+  });
+});
+
 });

@@ -28,3 +28,6 @@ supabase/.temp/
 
 # Claude Code 本地配置（不入库）
 .claude/
+
+# 重跑前的生产数据备份（含用户内容，不入库）
+scripts/out/backup/

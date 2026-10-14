@@ -9,7 +9,7 @@ import { regeo } from "./gaode-validation.ts";
 import { gaodeNearbyCulturalPOIs, isDestinationUmbrella, JUNK_RE, semanticDedupLocations } from "./gaode-scan.ts";
 import { AMUSE_RE, FACILITY_RE, gaode, gaodeRegionScenics } from "./gaode-search.ts";
 import { haversineM } from "./geo.ts";
-import { filterRouteStops, isRouteStopEligible, orderStopsGeographic, planRoutes as planRoutesModule } from "./routes.ts";
+import { filterRouteStops, isRouteStopEligible, mapSectionsToDbIds, orderStopsGeographic, planRoutes as planRoutesModule } from "./routes.ts";
 import { applyTrailGroups, getPrimaryTrailScenicName, getTrailNotes, injectTrailSeeds, orderStopsByTrail } from "./trail-routes.ts";
 import { loadOrResearchRouteKnowledge } from "./route-knowledge.ts";
 import { capabilitiesFor, TIER_LABEL } from "./knowledge-tier.ts";
@@ -760,18 +760,15 @@ Deno.serve(async (req: Request) => {
             // v93：主题游的分区结构落库。AI 若按分组写了小节文案就并进来，
             // 没写就留空字符串，前端退化为"只列景区与其内景点"，不影响可用性。
             const aiSections = Array.isArray(ai.sections) ? ai.sections : [];
-            const sections = (plan.sections || []).map(sec => {
-              const kept = sec.allow.filter(id => stops.includes(id));
+            // slug → db id 必须在这里映射，否则分区站点与 stops 永不相交，
+            // sections 会被下面的非空过滤全部清空（线上实测踩过）。
+            const sections = mapSectionsToDbIds(plan.sections, slugToDbId, stops).map(sec => {
               const hit = aiSections.find((x: any) => {
                 const name = String(x?.name || "").trim();
                 return !!name && (sec.name.includes(name) || name.includes(sec.name));
               });
-              return {
-                key: sec.key, name: sec.name, kind: sec.kind,
-                stopIds: kept.length ? kept : sec.allow.filter(id => stops.includes(id)),
-                text: typeof hit?.text === "string" ? hit.text.trim().slice(0, 400) : "",
-              };
-            }).filter(sec => sec.stopIds.length);
+              return { ...sec, text: typeof hit?.text === "string" ? hit.text.trim().slice(0, 400) : "" };
+            });
 
             return {
               id: `${scope}-r${i + 1}`,

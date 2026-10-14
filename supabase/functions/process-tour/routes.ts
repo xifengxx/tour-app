@@ -388,3 +388,28 @@ export function filterRouteStops(
   }
   return { kept, dropped };
 }
+
+/**
+ * 把分区的 slug id 映射成写库用的 db id。
+ *
+ * planRoutes 产出的是 slug 空间（"h1"），而 routes.stops 存的是加过导览前缀的
+ * db id（"77a10329-h1"）。这个映射是线上实测抓出来的 bug：
+ * 之前直接拿 slug 去和 db id 求交集，结果恒为空，
+ * 每个分区都被当成"没有站点"过滤掉，sections 落库永远是空数组。
+ */
+export function mapSectionsToDbIds(
+  sections: RouteSection[] | undefined,
+  slugToDbId: Map<string, string>,
+  routeStopIds: string[],
+): { key: string; name: string; kind: string; stopIds: string[] }[] {
+  const inRoute = new Set(routeStopIds);
+  return (sections || [])
+    .map(sec => ({
+      key: sec.key,
+      name: sec.name,
+      kind: sec.kind,
+      stopIds: [...new Set((sec.allow || []).map(id => slugToDbId.get(id) || id))]
+        .filter(id => inRoute.has(id)),
+    }))
+    .filter(sec => sec.stopIds.length > 0);
+}
