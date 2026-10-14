@@ -363,7 +363,7 @@ curl -X POST 'https://qxunedraoviaonjdanag.supabase.co/functions/v1/route-resear
 
 ---
 
-## 路线质量收口（v88）
+## 路线质量收口（v88-v89）
 
 本轮不改架构，只把「直线距离 → 交通方式」这条错误映射、以及诊断结果的出口链路修通。
 起因是一份跨模型诊断结论的复核：现网 12 条公开导览里，海拔剖面只有 1 条有数据、
@@ -614,6 +614,61 @@ L3 2 个目的地 / L2 2 个 / L1 8 个
 未生成的路线走 `suppressedPlans` 单独通道，**不计入 blocking、不阻断发布** ——
 它是"少产出"，不是"产出错的东西"。
 
+## 重复路线检测与存量重跑（v90）
+
+### 相似度必须用 Jaccard，不能用包含率
+
+`index.ts` 的旧去重是"排序后站点集合完全相等"，既漏掉近似重复，也与文档宣称的
+"重叠 >70% 视为重复"不一致。改造时第一反应是换成包含率 `|A∩B| / min(|A|,|B|)`，
+**这个指标会摧毁多日线**：2日全景游按构造就是 `[...1日核心站点, ...第二景区站点]`，
+必然完全包含 1日线。实测现网 18 组路线对里有 12 组"包含率 100%"。
+
+改用 Jaccard（交集/并集）后分布立刻分开了：
+
+```
+100%  三清山 1日游·徒步环线 × 1日游·车行索道线   ← 真重复（10 站完全相同）
+100%  黄山   1日精华游 × 文学巡礼线              ← 真重复（AI 自由选点抄了 1日线）
+ 80%  青城山/泰山 1日精华游 × 2日全景游           ← 设计如此，必须保留
+≤73%  其余全部                                    ← 正常
+```
+
+阈值取 `DUPLICATE_JACCARD = 0.9`：远高于合法包含关系的上限（80%），只抓真重复。
+另设 `MIN_DUP_STOPS = 3`，避免两站的"半日游"互相误伤。
+
+### 自由选点路线只上报，不删除
+
+v70.4 的结论仍然成立：文学巡礼线的价值在叙事，与 1日线撞站不该直接删掉。
+但撞成**完全相同**（黄山线上实况）也不能静默留着，等于把"AI 抄了一遍 1日线"藏起来。
+所以 `dedupeRoutes` 分两路返回：`dropped`（自动删除）与 `suspicious`（上报待核实）。
+
+重复检测在**生成阶段**做，因此省掉一条重复路线的 AI 文案开销；
+`scripts/audit-routes.ts` 另外报告存量重复与处置方式。
+
+### 存量重跑脚本 `scripts/reprocess-tours.ts`
+
+v88-v90 的修复只作用于新生成，存量 12 个导览不会自动收敛。没有重跑工具，
+这些修复对线上内容等于没发生。
+
+重新处理会 `deleteRows` 后重建 locations/routes/content_layers，
+创作者未保存的编辑会丢失，公开导览没过闸门还会被收回公开。所以脚本设了四道闸：
+
+1. 默认 dry-run 只读，必须显式 `--apply` 才写
+2. `--apply` 前自动导出备份到 `scripts/out/backup/<id>-<标题>-<时间>.json`
+3. `--all` 需再用 `--confirm <数量>` 复核范围，防止一次误操作全库
+4. 串行处理（每条约 1 分钟；并发会打爆高德限流与函数 worker 预算）
+
+`--apply` 必须提供 `SERVICE_ROLE_KEY` 或 `SUPABASE_JWT`：anon key 受 RLS 限制，
+无法更新他人导览。卡在 `processing` 的历史行会先置 `draft` 再置 `processing`，
+否则 UPDATE 触发器（只在"非 processing → processing"时开火）不会重跑。
+
+```bash
+export SERVICE_ROLE_KEY=***
+deno run --allow-net --allow-read --allow-env --allow-write scripts/reprocess-tours.ts            # 预览
+deno run ... scripts/reprocess-tours.ts --dest 丽江 --apply                                       # 单条
+deno run ... scripts/reprocess-tours.ts --all --apply --confirm 12                                # 全量
+deno run ... scripts/audit-routes.ts --json scripts/out/route-audit-baseline.json                  # 重跑后复验
+```
+
 ### 尚未落地（下一轮）
 
 - **闸门未做路线降级**：只实现了"重排 + 按容量砍站"两类自动修复，
@@ -622,8 +677,7 @@ L3 2 个目的地 / L2 2 个 / L1 8 个
 - **伪 confidence 仍在用于知识挑选**：`0.6 + 0.05 × min(证据数,3) + 0.02` 只数证据条数、
   不检验内容。v89 的分层已经接管"能力授权"，但 `selectRouteKnowledge` 排序仍按 confidence 取值，
   应改为按 (分级, 证据完整度) 排序，并把 confidence 字段本身换成可解释的证据打分。
-- **重复路线检测**：三清山「徒步环线」与「车行索道线」站点集合 10 站完全相同，
-  现网未被发现；`index.ts` 的去重只比精确站点集合，且只在单次生成内生效。
+- ~~重复路线检测~~ 已完成（v90，见上文）。存量 2 组重复需重跑才会收敛。
 - **非山岳目的地没有知识入口**：`loadOrResearchRouteKnowledge` 只在
   `destinationType === "mountain"` 时触发自动研究，古城/湖泊/园林类目的地恒为 L1。
   分层后它们至少不会再造出假装正确的多日线，但要能出好路线仍需知识来源。
@@ -639,3 +693,5 @@ L3 2 个目的地 / L2 2 个 / L1 8 个
 | 路线缺 `legs` | 34 条中 28 条 | 重跑时生成 |
 | 路线缺 `prof` 海拔剖面 | 34 条中约 31 条 | 重跑时采样 |
 | `route_confirmations` | 疑似 0 条 | 需 service_role 确认；分层后确认才有解锁收益 |
+
+---
