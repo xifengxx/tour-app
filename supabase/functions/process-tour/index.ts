@@ -171,13 +171,23 @@ Deno.serve(async (req: Request) => {
           { role: "user", content: `为「${destName}（${destRegion}）」的导览生成一句简短有文学意境的副标题（15-30字，用于首页卡片展示）。${tour.source?.title ? `源材料来自《${tour.source.title}》${tour.source.author ? `（${tour.source.author}）` : ""}` : ""}\n参考风格：\n- "跟着语文课本，登天都峰看奇石云海"\n- "循秦始皇足迹，登岱顶祭天封禅"\n- "天上白玉京 · 云上三清看奇峰"\n要求：点出目的地最核心的看点或文化记忆点，文学味浓，不要罗列地名，不要加书名号。JSON: {"subtitle":"一句话副标题"}` },
         ]).then((r: any) => String(r?.subtitle || "").trim()).catch(() => null);
 
-    // 2. Extract locations（v70：temperature 0.7→0.2，提取/路线要稳定性；源文本 6000→12000 字）
-    const lr = await deepseek([
-      { role: "system", content: "你是中国旅游规划专家。只返回JSON。只提取真实存在的地点，不确定的地点不要提取。只列固定旅游景点/地标/古迹/公园/山峰/宫观，不要临时展览、活动、演出、商业店铺等非固定地点。" },
-      { role: "user", content: `目的地：${destName}（${destRegion}）\n文本：${src.slice(0, 12000)}\n\n提取目的地自身值得探访的地点：有文本时以文本提到的地点为准；文本为空时列出目的地自身及紧邻的真实名胜（山峰、宫观、栈道、园区、古迹等）。至少提取 8-12 个（景点多可更多）。宁可多列，坐标校验会过滤掉不存在的——不要遗漏真实景点。\nJSON: {"locations":[{"id":"en-id","name":"地点","importance":1-5,"elevation":"","tags":[]}]}` },
-    ], { temperature: 0.2 });
-
     const warnings: string[] = [];
+    // 2. Extract locations（v70：temperature 0.7→0.2，提取/路线要稳定性；源文本 6000→12000 字）
+    // v96.4：这是管线里最后一个没有截断兜底的 AI 调用。"宁可多列"的指令偶发让
+    // 模型输出上百个条目、超 8192 token（青城山重跑实测 status=error，
+    // 失败原因只有一句 finish_reason=length）。截断 → 限量清单重试，仍失败才上抛。
+    const extractMessages = (capped: boolean) => [
+      { role: "system", content: "你是中国旅游规划专家。只返回JSON。只提取真实存在的地点，不确定的地点不要提取。只列固定旅游景点/地标/古迹/公园/山峰/宫观，不要临时展览、活动、演出、商业店铺等非固定地点。" },
+      { role: "user", content: `目的地：${destName}（${destRegion}）\n文本：${src.slice(0, 12000)}\n\n提取目的地自身值得探访的地点：有文本时以文本提到的地点为准；文本为空时列出目的地自身及紧邻的真实名胜（山峰、宫观、栈道、园区、古迹等）。${capped ? "最多列 14 个最重要的地点，宁缺勿多。" : "至少提取 8-12 个（景点多可更多）。宁可多列，坐标校验会过滤掉不存在的——不要遗漏真实景点。"}\nJSON: {"locations":[{"id":"en-id","name":"地点","importance":1-5,"elevation":"","tags":[]}]}` },
+    ];
+    let lr: any;
+    try {
+      lr = await deepseek(extractMessages(false), { temperature: 0.2 });
+    } catch (e: any) {
+      if (!e.truncated) throw e;
+      warnings.push("⚠️ 地点提取输出超 token 被截断，改用限量清单（最多 14 个）重试");
+      lr = await deepseek(extractMessages(true), { temperature: 0.2 });
+    }
     let hasRegionTour = false; // 仅由下述确定性高德地区合并判定（AI 不稳定，不做依据）
     let aiAttractions: string[] = []; // AI 提议的著名景点/子景点名单（供子景点扫描 rank0 与去重用）
     const locs: any[] = [];
