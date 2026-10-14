@@ -14,6 +14,7 @@ import { applyTrailGroups, getPrimaryTrailScenicName, getTrailNotes, injectTrail
 import { loadOrResearchRouteKnowledge } from "./route-knowledge.ts";
 import { buildRouteLegs, estimateRouteDuration, planGraphStops, routeGraphIssues, routeGraphNotes, routeLegsText } from "./route-graph.ts";
 import { resolveCoreDestination } from "./destination.ts";
+import { isNonSitePOI, rejectReasonForPOI } from "./poi-filter.ts";
 import { elevationProfile } from "./elevation.ts";
 import { attachScenicTags as attachScenicTagsModule, buildAnchors as buildAnchorsModule, scanAnchorSubs as scanAnchorSubsModule } from "./anchors.ts";
 import { REGION_RADIUS, SUB_DEDUP_M, SUB_TOTAL_CAP } from "./anchors.ts";
@@ -124,7 +125,7 @@ function regionMatch(geo: { province: string; city: string | string[]; district?
 }
 
 const DEDUP_M = 150;
-const INFRA_RE = /车站$|停车场|售票|游客中心|服务(?:中心|区|站|处)|管理处|管委会|监测|接待|讲解|卫生间|厕所|公交站|地铁站|候车|入口$|出口$|门店|商店|超市|银行|加油站/;
+// P1-4: INFRA_RE 移至 poi-filter.ts，供全部五个地点入口复用（此前只在首层提取生效）。
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: cors() });
@@ -209,8 +210,9 @@ Deno.serve(async (req: Request) => {
       // Use Gaode's official name if available
       const displayName = c.name && c.name !== l.name ? c.name : l.name;
       // 首层提取拒绝服务设施；不用 FACILITY_RE，避免误杀“金龙峡栈道”这类真实游览点。
-      if (INFRA_RE.test(displayName) || JUNK_RE.test(displayName) || AMUSE_RE.test(displayName)) {
-        return { warn: `⚠️ "${displayName}" 是服务/商业设施，已跳过`, loc: null as any };
+      const poiReject = rejectReasonForPOI(displayName);
+      if (poiReject) {
+        return { warn: `⚠️ "${displayName}" 是${poiReject}，已跳过`, loc: null as any };
       }
       return { warn: null, loc: { id: l.id, name: displayName, lat: c.lat, lng: c.lng, elevation: l.elevation || "", importance: l.importance || 3, tags: l.tags || [] } };
     });
@@ -304,7 +306,7 @@ Deno.serve(async (req: Request) => {
               const natural = /峰|岭|口|峡|栈道|洞|亭|台|谷|岩|石|松|门|府/.test(p.name);
               return (cultural || natural) && p.rating >= (cultural ? 3.5 : 3.0);
             })
-            .filter(p => !INFRA_RE.test(p.name) && !JUNK_RE.test(p.name) && !AMUSE_RE.test(p.name))
+            .filter(p => !isNonSitePOI(p.name))
             .filter(p => ![...locs, ...validRepaired].some(q => String(q.name) === p.name || haversineM(q, p) < DEDUP_M))
             .sort((a, b) => {
               const rank = (n: string) => /庙$|殿$|宫$|祠$/.test(n) ? 3 : /寺$|观$/.test(n) ? 2 : /峰|岭|口|峡|栈道|洞|亭|台|谷|岩|石|松|门|府/.test(n) ? 1 : 0;
@@ -349,7 +351,7 @@ Deno.serve(async (req: Request) => {
           const c = await gaode(name, destRegion, destLoc || undefined);
           if (!c || !c.lat) return null;
           // v70：AI 提议点同样过设施/餐饮/游乐过滤——"老院子饭庄(永定大道)""普光禅寺(公交站)"曾直接并入
-          if (FACILITY_RE.test(c.name) || JUNK_RE.test(c.name) || AMUSE_RE.test(c.name) || /公交站|地铁站/.test(c.name)) return null;
+          if (FACILITY_RE.test(c.name) || isNonSitePOI(c.name)) return null;
           if (locs.some(l => haversineM(l, c) < 5000)) return null; // 距核心太近 → 非独立地区点
           return { lng: c.lng, lat: c.lat, name: c.name || name };
         });
@@ -363,6 +365,9 @@ Deno.serve(async (req: Request) => {
         }
         // regionScenics 补足（名称级去重，防核心点如"天门山国家森林公园"被重复并入）
         for (const p of regionScenics) {
+          // P1-4：高德"地区知名景点"结果同样必须过滤非游览点。
+          // 这一路此前完全没有过滤，导致「玄岳门(公交站)」这类 POI 直接入库并排进路线。
+          if (isNonSitePOI(p.name)) continue;
           if (regionFinal.some(q => haversineM(q, p) < 1000)) continue; // 同坐标（如武陵源/张家界国家森林公园）只留一个
           if (nameSeen.has(p.name)) continue;
           if (locs.some(l => String(l.name) === p.name)) continue; // 与核心地点同名（如"天门山国家森林公园"）→ 不重复并入
@@ -460,6 +465,30 @@ Deno.serve(async (req: Request) => {
     // 这类步道/换乘事实；恒山实测会继续产出上下锯齿。
     const trailSeedNames = injectTrailSeeds(locs, destName, coreScenicName, routeKnowledge.trails);
     if (trailSeedNames.length) warnings.push(`🥾 已知步道补全 +${trailSeedNames.length} 个：${trailSeedNames.join("/")}`);
+    // P1-4：非游览点总闸。五个地点入口（AI 提取 / AI 核心补全 / AI 地区提议 /
+    // 高德地区知名景点 / 锚点子景点扫描）历史上各自维护过滤规则，
+    // 高德"地区知名景点"那一路完全没有过滤，导致「玄岳门(公交站)」「两期岩体穿插关系」
+    // 这类条目入库并被排进路线。这里在唯一汇合点统一兜底，
+    // 但豁免策展步道上已确认的站点：已验证知识优先于启发式规则。
+    const trailStopKeys = new Set<string>();
+    for (const trail of routeKnowledge.trails || []) {
+      for (const stop of trail.stops || []) {
+        for (const alias of [stop.name, ...(stop.aliases || [])]) {
+          const key = String(alias || "").trim().toLowerCase();
+          if (key) trailStopKeys.add(key);
+        }
+      }
+    }
+    const nonSiteLocs = locs.filter(l =>
+      !l.regionOnly && isNonSitePOI(l.name) && !trailStopKeys.has(String(l.name || "").trim().toLowerCase()));
+    if (nonSiteLocs.length) {
+      const drop = new Set(nonSiteLocs);
+      for (const l of nonSiteLocs) warnings.push(`🧹 "${l.name}" 不是可游览地点，已从路线与地图中移除`);
+      const kept = locs.filter(l => !drop.has(l));
+      kept.forEach((l, i) => (l.sort_order = i));
+      locs.length = 0;
+      locs.push(...kept);
+    }
     // 所有来源（AI、高德、地区合并、子景点扫描、步道补全）都进入同一语义清洗层。
     // 泛指地点保留在地图数据里但带“景区泛指”标签；路线组成和补全层都不会把它当徒步站。
     const semanticMerged = semanticDedupLocations(locs, destName);
