@@ -375,20 +375,33 @@ Deno.serve(async (req: Request) => {
           if (regionFinal.some(q => haversineM(q, p) < 1000)) continue; // 同坐标（如武陵源/张家界国家森林公园）只留一个
           if (nameSeen.has(p.name)) continue;
           if (locs.some(l => String(l.name) === p.name)) continue; // 与核心地点同名（如"天门山国家森林公园"）→ 不重复并入
-          // 离核心景点太近的不是"另一个景区"，而是它的子 POI（恒山实测会返回
-          // 介石/财神庙/洗心亭这类），当作独立片区会让主题游变成同一景区的内部路线。
-          if (locs.some(l => haversineM(l, p) < 3000)) continue;
+          // 离核心景点太近**且名称与核心/目的地同源**的才是同一个景区的子 POI
+          // （恒山实测返回"北岳恒山-介石/财神庙/洗心亭"这类）。
+          // v96.4：不能只看距离——武汉龟山实测把 1.4km 外的独立景区"黄鹤楼公园"
+          // 一起剔了，市区里相邻独立景区恰恰是主题游最有价值的部分。
+          if (locs.some(l => haversineM(l, p) < 3000 && (
+            p.name.includes(String(l.name)) || String(l.name).includes(p.name) ||
+            (!!destName && (p.name.includes(destName) || destName.includes(p.name)))))) continue;
           nameSeen.add(p.name);
           regionFinal.push(p);
         }
         // 半径过滤：只并核心周边 REGION_RADIUS 内的地区点（目的地地区是裸省名如"四川"时，
         // 高德/AI 会把九寨沟/四姑娘山/峨眉山等整个省的名胜拉进来，150-500km 必须剔除）
+        // v96.4：半径闸的圆心必须用目的地坐标而不是全体 locs 的质心。
+        // 裸省名（如青城山地区填"四川"）时 AI 会提议乐山/九寨沟/峨眉山，
+        // 质心被 150-500km 外的远点拉到省中部，都江堰这类 12km 的邻居反而
+        // 被 60km 闸整体误杀且全程静默（线上实测主题游消失、报告零解释）。
         const coreCenter = locs.reduce((acc, l) => ({ lng: acc.lng + l.lng, lat: acc.lat + l.lat }), { lng: 0, lat: 0 });
         const coreN = locs.length || 1;
-        const center = { lng: coreCenter.lng / coreN, lat: coreCenter.lat / coreN };
+        const center = destLoc || { lng: coreCenter.lng / coreN, lat: coreCenter.lat / coreN };
+        const regionCandidateCount = regionFinal.length;
         const near = regionFinal.filter(p => haversineM(center, p) <= REGION_RADIUS);
         regionFinal.length = 0;
         regionFinal.push(...near);
+        if (!regionFinal.length) {
+          // v96.4：候选在距离闸前就归零同样必须可见，禁止静默不出主题游。
+          warnings.push(`⚠️ 未能组成主题游：${destName} 的 ${REGION_RADIUS / 1000}km 内没有可并入的独立景区（地区检索/AI 提议共 ${regionCandidateCount} 个候选，全部因距离或非游览点被过滤。若目的地地区只填了省名，建议改为"省+市"）`);
+        }
         if (regionFinal.length >= 1) {
           // v70：名称含目的地名的点（"嵩山国家重点风景名胜区""中国·嵩山世界地质公园"）是目的地自身/别名，
           // 并入后会作为"地区景点"混进主题游 → 剔除；cap 20→12、importance 4→3（不该压过核心点）
