@@ -9,7 +9,7 @@ import { regeo } from "./gaode-validation.ts";
 import { gaodeNearbyCulturalPOIs, isDestinationUmbrella, JUNK_RE, semanticDedupLocations } from "./gaode-scan.ts";
 import { AMUSE_RE, FACILITY_RE, gaode, gaodeRegionScenics } from "./gaode-search.ts";
 import { haversineM } from "./geo.ts";
-import { orderStopsGeographic, planRoutes as planRoutesModule } from "./routes.ts";
+import { filterRouteStops, isRouteStopEligible, orderStopsGeographic, planRoutes as planRoutesModule } from "./routes.ts";
 import { applyTrailGroups, getPrimaryTrailScenicName, getTrailNotes, injectTrailSeeds, orderStopsByTrail } from "./trail-routes.ts";
 import { loadOrResearchRouteKnowledge } from "./route-knowledge.ts";
 import { buildRouteLegs, estimateRouteDuration, planGraphStops, routeGraphIssues, routeGraphNotes, routeLegsText } from "./route-graph.ts";
@@ -508,6 +508,10 @@ Deno.serve(async (req: Request) => {
     const slugToDbId = new Map(locs.map(l => [l.id, `${scope}-${l.id}`]));
     // 数据库 id 视图的地点列表（供地理排序用：stops 存的是 db id）
     const dbLocs = locs.map(l => ({ ...l, id: slugToDbId.get(l.id) || l.id }));
+    // 路线站点资格判据（v88）：景区伞形名/景区泛指点不能作为游览站，
+    // 但策展步道明确列为入口/换乘点的除外（恒山首站「游客中心」别名就是「北岳恒山」）。
+    const dbLocById = new Map(dbLocs.map((l: any) => [l.id, l]));
+    const stopEligibility = { destName, protectedNames: trailStopKeys };
     const trailNotes = getTrailNotes(destName, dbLocs, routeKnowledge.trails);
     const orderStops = (stopIds: string[], source: any[]) => {
       // v81：优先用真实路线图做“整段分区 + 段内步道顺序”，避免太室山/少室山这类
@@ -634,6 +638,17 @@ Deno.serve(async (req: Request) => {
           // 注意：不能按数组下标取 plan（AI 返回 routes 的顺序常与 plans 不一致 → 会张冠李戴，
           // 2日 混入 西岭雪山 就是顺序错位导致的）。按 day_label 模糊匹配 plan，找不到才回退下标。
           // day_label/title/stops 全部以 plan 为准（路线组成 100% 确定），AI 只贡献 narrative 与站内相对顺序。
+          // v88：文学巡礼线是自由选点，既可能全部无法 resolve，也可能选中的全是
+          // 景区伞形点被资格闸清空。两种情况都必须回退到核心可游览点，
+          // 否则小说源导览会静默少一条路线（routes < plans）。
+          const coreFallbackStops = (label: string, reason: string): string[] => {
+            const fallback = locs.filter(l => !(l.tags || []).includes("地区景点") && isRouteStopEligible(l, stopEligibility))
+              .slice().sort((a, b) => (b.importance || 3) - (a.importance || 3)).slice(0, 4);
+            const fallbackIds = fallback.map(l => slugToDbId.get(l.id)).filter((id): id is string => !!id);
+            const ordered = orderStops(fallbackIds, dbLocs);
+            if (ordered.length) warnings.push(`♻️ 路线"${label}"${reason}，回退核心 ${ordered.length} 站`);
+            return ordered;
+          };
           const aiRoutes = rr.routes || [];
           const allRoutes = plans.map((plan, i: number) => {
             const ai = aiRoutes.find((x: any) => {
@@ -670,13 +685,17 @@ Deno.serve(async (req: Request) => {
               // v70.3：自由选点全部无法 resolve 时不静默丢路线（黄山实测 routes 3/4）——
               // 回退到核心高重要性 4 站，保证小说源导览必有文学巡礼线
               if (!stops.length) {
-                const fallback = locs.filter(l => !(l.tags || []).includes("地区景点"))
-                  .slice().sort((a, b) => (b.importance || 3) - (a.importance || 3)).slice(0, 4);
-                const fallbackIds = fallback.map(l => slugToDbId.get(l.id)).filter((id): id is string => !!id);
-                stops = orderStops(fallbackIds, dbLocs);
-                if (stops.length) warnings.push(`♻️ 路线"${plan.label}"AI 选点无法匹配，回退核心 ${stops.length} 站`);
+                stops = coreFallbackStops(plan.label, "AI 选点无法匹配");
               }
             }
+            // v88：统一站点资格闸。文学巡礼线由 AI 自由选点，绕过了 planRoutes 的
+            // 伞形名过滤，这里在写库前收口，任何一条路线都不可能再带上景区伞形点。
+            const sanitized = filterRouteStops(stops, dbLocById, stopEligibility);
+            if (sanitized.dropped.length) {
+              warnings.push(`🚫 路线"${plan.label}"剔除景区伞形/泛指点 ${sanitized.dropped.length} 个：${sanitized.dropped.join("/")}`);
+            }
+            stops = sanitized.kept;
+            if (!stops.length && !plan.allow) stops = coreFallbackStops(plan.label, "AI 选点全是景区伞形名");
             return {
               id: `${scope}-r${i + 1}`,
               day_label: plan.label,

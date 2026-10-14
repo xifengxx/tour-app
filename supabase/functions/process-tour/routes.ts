@@ -136,7 +136,7 @@ function pickRep(cluster: { locs: any[] }, destName: string): any {
 }
 
 export function planRoutes(locs: any[], ctx: { coreScenicName: string; mainScenicName: string; destName: string; destLoc?: { lng: number; lat: number } | null; isNovelBased: boolean; novelName: string; hasRegionTour: boolean; zones?: RouteZone[] }) {
-  const canRoute = (l: any) => !(l.tags || []).includes("景区泛指") && !isDestinationUmbrella(l.name, ctx.destName);
+  const canRoute = (l: any) => isRouteStopEligible(l, { destName: ctx.destName });
   const isRouteSite = (l: any) => canRoute(l) && !JUNK_RE.test(String(l.name || "")) && !ROAD_RE.test(String(l.name || ""));
   const isRegion = (l: any) => (l.tags || []).includes("地区景点");
   const byImp = (a: any, b: any) => (b.importance || 3) - (a.importance || 3);
@@ -220,4 +220,53 @@ export function orderStopsGeographic(stopIds: string[], locs: any[], entrance?: 
   }
   if (remaining.size) ordered.push(...remaining);
   return [...ordered, ...noCoord];
+}
+
+// ── 路线站点资格（v88）──────────────────────────────────────────────
+// planRoutes 的 1日/2日/主题游池子本来就排除伞形景区名（canRoute），但文学巡礼线
+// 走 AI 自由选点、resolveStop 又是名称双向包含匹配，会绕过这层过滤：
+// 提到"黄山风景区"就能命中名为"黄山"的伞形 POI。线上数据里
+// 泰山「泰山风景名胜区」、黄山「黄山」、天门山「天门山国家森林公园」都是这样进的路径，
+// 它们的坐标是景区质心/行政点而非游览点，于是相邻站之间出现
+// 「红门宫 → 泰山风景名胜区 7km/1295m」「森林公园 → 天门山索道 8.83km」这类假位移，
+// 既污染交通衔接推断，也污染最近邻排序。
+//
+// 这里不能一刀切：策展步道会刻意用目的地名充当入口/换乘点
+// （恒山首站「游客中心」的别名就是「北岳恒山」），删掉会让路线从山顶开始。
+// 判据与全项目一致：已验证知识优先于启发式。
+
+export type StopEligibilityContext = {
+  destName: string;
+  /** 策展步道站点名与别名（归一化后）；命中即视为已验证的入口/换乘点，保留。 */
+  protectedNames?: Set<string>;
+};
+
+const normalizeStopName = (value: unknown) => String(value ?? "").trim().toLowerCase();
+
+export function isRouteStopEligible(loc: any, ctx: StopEligibilityContext): boolean {
+  if (!loc) return false;
+  const name = String(loc.name || "");
+  const tags: string[] = loc.tags || [];
+  const protectedNames = ctx.protectedNames;
+  if (protectedNames?.has(normalizeStopName(name))) return true;
+  if (tags.includes("景区泛指")) return false;
+  if (isDestinationUmbrella(name, ctx.destName)) return false;
+  return true;
+}
+
+/** 过滤站点序列，返回保留项与被剔除的点名（供告警展示）。未知 id 原样保留，交由上游匹配层处理。 */
+export function filterRouteStops(
+  stopIds: string[],
+  locsById: Map<string, any>,
+  ctx: StopEligibilityContext,
+): { kept: string[]; dropped: string[] } {
+  const kept: string[] = [];
+  const dropped: string[] = [];
+  for (const id of stopIds) {
+    const loc = locsById.get(id);
+    if (!loc) { kept.push(id); continue; }
+    if (isRouteStopEligible(loc, ctx)) kept.push(id);
+    else dropped.push(String(loc.name || id));
+  }
+  return { kept, dropped };
 }

@@ -15,6 +15,7 @@
 // 只读：全程仅 SELECT，不写库、不改文件（除 --json 显式指定的输出）。
 
 import { buildRouteLegs, estimateRouteDuration, routeGraphIssues, routeLegsText } from "../supabase/functions/process-tour/route-graph.ts";
+import { isRouteStopEligible } from "../supabase/functions/process-tour/routes.ts";
 import { CURATED_TRAILS } from "../supabase/functions/process-tour/trail-routes.ts";
 import type { DestinationRouteKnowledge } from "../supabase/functions/process-tour/route-knowledge-types.ts";
 
@@ -79,7 +80,7 @@ const MODE_RANK: Record<string, number> = { walk: 0, cableway: 1, shuttle: 1, ot
 
 const tours = await select<Tour>("tours?select=id,title,created_at,status,destination&order=created_at.desc" + (Deno.args.includes("--all") ? "" : "&is_public=eq.true"));
 const rows: any[] = [];
-const summary = { tours: 0, routes: 0, storedLegs: 0, missingLegs: 0, modeChanged: 0, upgraded: 0, downgraded: 0, issues: 0, longDay: 0 };
+const summary = { tours: 0, routes: 0, storedLegs: 0, missingLegs: 0, modeChanged: 0, upgraded: 0, downgraded: 0, issues: 0, longDay: 0, legacyUmbrellaStops: 0, legacyUmbrellaRoutes: 0 };
 // 无知识路径下的"改判"不代表线上会变好：那些目的地在生产上有 auto-research/策展边，
 // 只是 destination_route_knowledge 受 RLS 保护、本脚本用 anon key 读不到。
 // 混进主计数会把工具读数误导成"降级了 N 条路线"，所以单独统计。
@@ -119,7 +120,28 @@ for (const tour of tours) {
     summary.issues += issues.length;
     if (issues.some(i => i.type === "long-day")) summary.longDay++;
 
-    const flag = issues.length || changed.length ? "⚠" : " ";
+    // 历史数据体检：v88 之前的路线可能把景区伞形名当成游览站点存进了库。
+    // 新代码已在 planRoutes 池子和写库前的资格闸两处排除，这里只统计"现网存量"。
+    const protectedNames = new Set<string>();
+    for (const trail of knowledge.trails || []) {
+      for (const stop of trail.stops || []) {
+        for (const alias of [stop.name, ...(stop.aliases || [])]) {
+          const k = String(alias || "").trim().toLowerCase();
+          if (k) protectedNames.add(k);
+        }
+      }
+    }
+    const byIdForElig = new Map(locs.map((l: any) => [l.id, l]));
+    const umbrellaStops = stopIds
+      .map(id => byIdForElig.get(id))
+      .filter(l => l && !isRouteStopEligible(l, { destName: String(tour.destination?.name || ""), protectedNames }));
+    summary.legacyUmbrellaStops += umbrellaStops.length;
+    if (umbrellaStops.length) summary.legacyUmbrellaRoutes++;
+    if (umbrellaStops.length) {
+      console.log(`       ⛔ 历史数据：站点里含景区伞形/泛指点 ${umbrellaStops.length} 个 → ${umbrellaStops.map((l: any) => l.name).join("/")}（新代码已排除，重跑即清理）`);
+    }
+
+    const flag = issues.length || changed.length || umbrellaStops.length ? "⚠" : " ";
     console.log(`   ${flag} [${route.day_label}] ${stopIds.length}站  落库legs=${stored.length} 重算legs=${next.length} 变化=${changed.length} 问题=${issues.length} 预计${(duration.totalMinutes / 60).toFixed(1)}h`);
     for (const leg of changed) {
       const before = stored.find(s => s.fromId === leg.fromId && s.toId === leg.toId)?.mode;
@@ -149,7 +171,7 @@ if (jsonOut) {
     await Deno.writeTextFile(jsonOut, JSON.stringify({ auditedAt: new Date().toISOString(), summary, routes: rows }, null, 2));
     console.log(`快照已写入 ${jsonOut}`);
   } catch (e) {
-    console.error(`写入快照失败：${e?.message || e}（写文件需要 --allow-write）`);
+    console.error(`写入快照失败：${e instanceof Error ? e.message : String(e)}（写文件需要 --allow-write）`);
     Deno.exit(1);
   }
 }

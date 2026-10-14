@@ -1,5 +1,5 @@
 {
-  "auditedAt": "2026-10-14T07:02:19.860Z",
+  "auditedAt": "2026-10-14T07:23:32.871Z",
   "summary": {
     "tours": 12,
     "routes": 34,
@@ -9,7 +9,9 @@
     "upgraded": 7,
     "downgraded": 6,
     "issues": 22,
-    "longDay": 2
+    "longDay": 2,
+    "legacyUmbrellaStops": 21,
+    "legacyUmbrellaRoutes": 21
   },
   "routes": [
     {

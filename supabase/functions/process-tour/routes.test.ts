@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { orderStopsGeographic, planRoutes } from "./routes.ts";
+import { filterRouteStops, isRouteStopEligible, orderStopsGeographic, planRoutes } from "./routes.ts";
 
 const point = (id: string, scenic: string, tags: string[] = [], importance = 3, lng = 116, lat = 39) => ({ id, name: id, scenic, tags, importance, lng, lat });
 
@@ -197,5 +197,51 @@ describe("orderStopsGeographic", () => {
     const ordered = orderStopsGeographic(["noCoord", "gate", "summit"], locs, gate);
     expect(ordered.at(-1)).toBe("noCoord");
     expect(ordered).toContain("gate");
+  });
+});
+describe("路线站点资格（景区伞形名）", () => {
+  it("伞形景区名不能作为游览站", () => {
+    // 现网实况：这三个都是景区名被高德定位到行政/质心点，却出现在路线站点序列里
+    expect(isRouteStopEligible({ name: "泰山风景名胜区", tags: [] }, { destName: "泰山" })).toBe(false);
+    expect(isRouteStopEligible({ name: "黄山", tags: [] }, { destName: "黄山" })).toBe(false);
+    expect(isRouteStopEligible({ name: "天门山国家森林公园", tags: [] }, { destName: "天门山" })).toBe(false);
+    expect(isRouteStopEligible({ name: "武功山", tags: ["景区泛指"] }, { destName: "武功山" })).toBe(false);
+  });
+
+  it("带景区前缀的真实地标不被误杀", () => {
+    expect(isRouteStopEligible({ name: "泰山风景名胜区-碧霞祠", tags: [] }, { destName: "泰山" })).toBe(true);
+    expect(isRouteStopEligible({ name: "日观峰", tags: [] }, { destName: "泰山" })).toBe(true);
+    expect(isRouteStopEligible({ name: "岱庙", tags: [] }, { destName: "泰山" })).toBe(true);
+    expect(isRouteStopEligible({ name: "玉龙雪山国家级风景名胜区蓝月谷", tags: [] }, { destName: "玉龙雪山" })).toBe(true);
+    expect(isRouteStopEligible({ name: "嵩山国家重点风景名胜区峻极峰", tags: [] }, { destName: "嵩山" })).toBe(true);
+  });
+
+  it("策展步道声明的入口/换乘点获得豁免（恒山首站别名就是目的地名）", () => {
+    const protectedNames = new Set(["北岳恒山", "恒山", "游客中心"]);
+    expect(isRouteStopEligible({ name: "北岳恒山", tags: ["景区泛指"] }, { destName: "北岳恒山", protectedNames })).toBe(true);
+    // 没有步道保护时仍然排除
+    expect(isRouteStopEligible({ name: "北岳恒山", tags: ["景区泛指"] }, { destName: "北岳恒山" })).toBe(false);
+  });
+
+  it("filterRouteStops 剔除伞形点并报告点名，未知 id 原样保留", () => {
+    const byId = new Map<string, any>([
+      ["d1", { id: "d1", name: "红门宫", tags: [] }],
+      ["d2", { id: "d2", name: "泰山风景名胜区", tags: [] }],
+      ["d3", { id: "d3", name: "中天门", tags: [] }],
+    ]);
+    const { kept, dropped } = filterRouteStops(["d1", "d2", "d3", "d-unknown"], byId, { destName: "泰山" });
+    expect(kept).toEqual(["d1", "d3", "d-unknown"]);
+    expect(dropped).toEqual(["泰山风景名胜区"]);
+  });
+
+  it("文学巡礼线经资格闸后不再混入伞形点，且不会清空整条路线", () => {
+    const byId = new Map<string, any>([
+      ["h1", { id: "h1", name: "黄山", tags: ["景区泛指"] }],
+      ["h2", { id: "h2", name: "黄山-迎客松", tags: [] }],
+      ["h3", { id: "h3", name: "黄山风景区-光明顶", tags: [] }],
+    ]);
+    const { kept, dropped } = filterRouteStops(["h1", "h2", "h3"], byId, { destName: "黄山" });
+    expect(kept).toEqual(["h2", "h3"]);
+    expect(dropped).toEqual(["黄山"]);
   });
 });
