@@ -14,9 +14,3 @@ ALTER TABLE public.routes
 COMMENT ON COLUMN public.routes.sections IS '主题游分区：主题→景区→景区内游览点。空数组表示该路线是线性行程（1日/2日）。';
 
 -- 校验分区不引用不存在的站点（只作提示，不阻断写入：重跑顺序与写库顺序之间不做外键）
-DO $$
-BEGIN
-  IF EXISTS (SELECT 1 FROM pg_stat_user_tables WHERE relname = 'routes') THEN
-    RAISE NOTICE 'routes.sections 已就绪；现网存量路线该列为空，重跑后生成';
-  END IF;
-END $$;
