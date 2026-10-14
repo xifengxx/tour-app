@@ -98,3 +98,37 @@ describe('RouteIssueList', () => {
     expect(screen.getByText(/牦牛坪 → 玉水寨/)).toBeInTheDocument();
   });
 });
+
+describe('ProcessReport 能力分层提示（v89）', () => {
+  const tieredReport = {
+    locations: 13, routes: 1, plans: 1,
+    routeKnowledge: { source: 'auto-research', confidence: 0.75, destination: '玉龙雪山', capabilities: { multiDay: false, themeTour: false, zoneDriven: false } },
+    knowledgeTier: 'L2',
+    knowledgeTierLabel: '自动研究/策展顺序，未经核实',
+    suppressedPlans: [
+      { plan: '2日全景游', reason: '目的地路线知识未经核实，无法确认分区间换乘与第二天可达性' },
+      { plan: '主题游', reason: '目的地路线知识未经核实，无法确认跨片区接驳可行性' },
+    ],
+    warnings: [],
+  };
+
+  it('说明当前分级与为什么只产出保守路线', () => {
+    render(<ProcessReport summary={summarizeReport(tieredReport, routes)} />);
+    expect(screen.getByText(/L2 · 自动研究\/策展顺序，未经核实/)).toBeInTheDocument();
+    expect(screen.getByText(/本轮只产出保守路线/)).toBeInTheDocument();
+  });
+
+  it('列出未生成的路线类型并给出解锁方式', () => {
+    render(<ProcessReport summary={summarizeReport(tieredReport, routes)} />);
+    expect(screen.getByText('未生成的路线（2 类）')).toBeInTheDocument();
+    expect(screen.getByText(/2日全景游/)).toBeInTheDocument();
+    expect(screen.getByText(/主题游/)).toBeInTheDocument();
+    expect(screen.getByText(/解锁方式/)).toBeInTheDocument();
+  });
+
+  it('v89 之前的报告没有分级字段时不显示分级段', () => {
+    render(<ProcessReport summary={summarizeReport({ locations: 5, routes: 2, plans: 2 }, routes)} />);
+    expect(screen.queryByText(/路线知识分级/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/未生成的路线/)).not.toBeInTheDocument();
+  });
+});

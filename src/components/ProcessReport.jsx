@@ -55,9 +55,13 @@ function Metric({ label, value, hint }) {
 }
 
 export default function ProcessReport({ summary, className = '' }) {
-  // 有任何待核实项就默认展开：只收起完全干净的报告。
-  // 若把"需核实"的告警折叠起来，它和不存在没有区别——这正是 process_report 过去的下场。
-  const [open, setOpen] = useState((summary?.blockingCount || 0) > 0 || (summary?.reviewCount || 0) > 0);
+  // 有待核实项、或被分层抑制过路线，就默认展开：只收起完全干净的报告。
+  // 若把"需核实"折叠起来，它和不存在没有区别——这正是 process_report 过去的下场；
+  // 而"为什么这个导览只有一条路线"若不主动说明，看起来就像 bug。
+  const attentionNeeded = (summary?.blockingCount || 0) > 0
+    || (summary?.reviewCount || 0) > 0
+    || (summary?.suppressed?.length || 0) > 0;
+  const [open, setOpen] = useState(attentionNeeded);
   if (!summary?.available) return null;
 
   const { metrics, general, routeIssues, blockingCount, reviewCount, unpublished } = summary;
@@ -100,6 +104,29 @@ export default function ProcessReport({ summary, className = '' }) {
                 闸门拦下 <b>{blockingCount}</b> 个阻断级路线问题，本导览需核实后才能发布。
                 {unpublished && '该导览原先是公开的，因未过检已自动转为私有，核实后请重新开启公开。'}
                 可直接删除对应路线、调整站点顺序，或重新分析。
+              </p>
+            </div>
+          )}
+
+          {summary.isTiered && (
+            <p className="text-[11px] text-muted-foreground leading-relaxed">
+              路线知识分级：<span className={`font-serif ${summary.tier === 'L3' ? 'text-pine' : 'text-gamboge'}`}>{summary.tier} · {summary.tierLabel}</span>
+              {summary.tier !== 'L3' && '。未核实的分区与交通资料不能用来决定天数划分，因此本轮只产出保守路线。'}
+            </p>
+          )}
+
+          {summary.suppressed.length > 0 && (
+            <div className="border-l-2 border-l-dai bg-dai/[0.05] rounded-r px-2.5 py-2">
+              <p className="text-xs text-dai font-serif mb-1">未生成的路线（{summary.suppressed.length} 类）</p>
+              <ul className="space-y-0.5 list-none">
+                {summary.suppressed.map((item, i) => (
+                  <li key={i} className="text-xs text-foreground/90 leading-relaxed">
+                    <b>{item.plan}</b>：{item.reason}
+                  </li>
+                ))}
+              </ul>
+              <p className="text-[11px] text-muted-foreground mt-1.5 leading-relaxed">
+                解锁方式：在下方路线卡片确认一条正确路线（写入目的地知识），或对目的地分区与换乘做一次「AI 重新分析」前先在地图上核对站点归属。
               </p>
             </div>
           )}

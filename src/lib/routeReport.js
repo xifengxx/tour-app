@@ -42,6 +42,9 @@ export function summarizeReport(report, routes = []) {
     knowledgeSource: knowledge.source || '未知',
     knowledgeConfidence: knowledge.confidence ?? null,
     knowledgeDestination: knowledge.destination || '',
+    knowledgeTier: report.knowledgeTier || '',
+    knowledgeTierLabel: report.knowledgeTierLabel || '',
+    knowledgeCapabilities: knowledge.capabilities || null,
     graphChecked: Number(graph.checked) || 0,
     graphIssues: Number(graph.issues) || 0,
     estimatedHours: graph.estimatedMinutes != null
@@ -94,6 +97,8 @@ export function summarizeReport(report, routes = []) {
     }
   }
 
+  const suppressed = Array.isArray(report.suppressedPlans) ? report.suppressedPlans : [];
+
   const blockingCount = routeIssues.reduce((n, r) => n + r.issues.filter(i => i.level === 'blocking').length, 0)
     + general.filter(w => w.level === 'blocking').length;
   const reviewCount = routeIssues.reduce((n, r) => n + r.issues.length, 0);
@@ -109,6 +114,11 @@ export function summarizeReport(report, routes = []) {
     unpublished: Boolean(gate?.unpublished),
     repairs: Number(gate?.repairs) || 0,
     gateSource: gate ? 'v88+' : 'legacy',
+    // 能力分层（v89）：让审核页能说清"为什么只有一条路线"以及怎么解锁。
+    suppressed,
+    tier: metrics.knowledgeTier,
+    tierLabel: metrics.knowledgeTierLabel,
+    isTiered: Boolean(metrics.knowledgeTier),
   };
 }
 

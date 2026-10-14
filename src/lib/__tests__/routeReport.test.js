@@ -112,6 +112,30 @@ describe('summarizeReport', () => {
     expect(summary.metrics.estimatedHours).toBeNull();
   });
 
+  it('透出能力分层与未生成路线', () => {
+    const tiered = {
+      locations: 13, routes: 1, plans: 1,
+      routeKnowledge: { source: 'auto-research', confidence: 0.75, capabilities: { multiDay: false } },
+      knowledgeTier: 'L2', knowledgeTierLabel: '自动研究/策展顺序，未经核实',
+      suppressedPlans: [{ plan: '2日全景游', reason: '未经核实' }],
+      warnings: [],
+    };
+    const summary = summarizeReport(tiered, routes);
+    expect(summary.isTiered).toBe(true);
+    expect(summary.tier).toBe('L2');
+    expect(summary.suppressed).toEqual([{ plan: '2日全景游', reason: '未经核实' }]);
+    expect(summary.metrics.knowledgeCapabilities).toEqual({ multiDay: false });
+    // 抑制路线不是缺陷：不阻断、不计入 blocking
+    expect(summary.blockingCount).toBe(0);
+    expect(summary.canPublish).toBe(true);
+  });
+
+  it('suppressedPlans 缺失时按空数组处理', () => {
+    const summary = summarizeReport({ locations: 3, routes: 1, plans: 1, knowledgeTier: 'L3' }, routes);
+    expect(summary.suppressed).toEqual([]);
+    expect(summary.tier).toBe('L3');
+  });
+
   it('issuesForRoute 先按 id 命中，再按标签兜底', () => {
     const summary = summarizeReport(lijiangReport, routes);
     expect(issuesForRoute(summary, routes[1])).toHaveLength(1);
