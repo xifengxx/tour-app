@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildThemeSections, filterRouteStops, isRouteStopEligible, orderStopsGeographic, planRoutes } from "./routes.ts";
+import { buildThemeSections, filterRouteStops, mapSectionsToDbIds, isRouteStopEligible, orderStopsGeographic, planRoutes } from "./routes.ts";
 
 const point = (id: string, scenic: string, tags: string[] = [], importance = 3, lng = 116, lat = 39) => ({ id, name: id, scenic, tags, importance, lng, lat });
 
@@ -356,4 +356,34 @@ describe("主题游分区结构（v93）", () => {
     }
   });
 });
+});
+
+describe("mapSectionsToDbIds（v94 线上 bug 回归）", () => {
+  const slugToDbId = new Map([["h1", "77a1-h1"], ["h2", "77a1-h2"], ["h3", "77a1-h3"]]);
+  const sections = [
+    { key: "core", name: "玉龙雪山", kind: "核心景区" as const, allow: ["h1", "h2"], text: "" },
+    { key: "area-h3", name: "蓝月谷", kind: "周边景点" as const, allow: ["h3"], text: "" },
+  ];
+
+  it("分区的 slug id 必须映射成写库用的 db id", () => {
+    // 线上实测：之前直接拿 slug 与 db id 求交集，结果恒为空，
+    // 每个分区都被"非空站点"过滤掉，routes.sections 落库永远是空数组。
+    const mapped = mapSectionsToDbIds(sections, slugToDbId, ["77a1-h1", "77a1-h2", "77a1-h3"]);
+    expect(mapped).toEqual([
+      { key: "core", name: "玉龙雪山", kind: "核心景区", stopIds: ["77a1-h1", "77a1-h2"] },
+      { key: "area-h3", name: "蓝月谷", kind: "周边景点", stopIds: ["77a1-h3"] },
+    ]);
+  });
+
+  it("不在最终路线里的站点被剔除，空分区不写库", () => {
+    const mapped = mapSectionsToDbIds(sections, slugToDbId, ["77a1-h1"]);
+    expect(mapped).toEqual([
+      { key: "core", name: "玉龙雪山", kind: "核心景区", stopIds: ["77a1-h1"] },
+    ]);
+  });
+
+  it("没有分区（线性路线）时返回空数组", () => {
+    expect(mapSectionsToDbIds(undefined, slugToDbId, [])).toEqual([]);
+    expect(mapSectionsToDbIds([], slugToDbId, [])).toEqual([]);
+  });
 });
