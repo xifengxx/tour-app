@@ -17,6 +17,7 @@
 import { blockingIssues, buildRouteLegs, estimateRouteDuration, repairPlanStops, routeGraphIssues, routeLegsText } from "../supabase/functions/process-tour/route-graph.ts";
 import { isRouteStopEligible } from "../supabase/functions/process-tour/routes.ts";
 import { tierCapabilities, tierForSource, TIER_LABEL } from "../supabase/functions/process-tour/knowledge-tier.ts";
+import { findDuplicateRoutes } from "../supabase/functions/process-tour/route-dedup.ts";
 import { CURATED_TRAILS } from "../supabase/functions/process-tour/trail-routes.ts";
 import type { DestinationRouteKnowledge } from "../supabase/functions/process-tour/route-knowledge-types.ts";
 
@@ -98,7 +99,7 @@ const MODE_RANK: Record<string, number> = { walk: 0, cableway: 1, shuttle: 1, ot
 
 const tours = await select<Tour>("tours?select=id,title,created_at,status,destination,process_report&order=created_at.desc" + (Deno.args.includes("--all") ? "" : "&is_public=eq.true"));
 const rows: any[] = [];
-const summary = { tours: 0, tierL3: 0, tierL2: 0, tierL1: 0, wouldSuppressMultiDay: 0, wouldSuppressTheme: 0, routes: 0, storedLegs: 0, missingLegs: 0, modeChanged: 0, upgraded: 0, downgraded: 0, issues: 0, longDay: 0, legacyUmbrellaStops: 0, legacyUmbrellaRoutes: 0, blocking: 0, gateBlockedRoutes: 0, repairableByReorder: 0 };
+const summary = { tours: 0, tierL3: 0, tierL2: 0, tierL1: 0, wouldSuppressMultiDay: 0, wouldSuppressTheme: 0, routes: 0, storedLegs: 0, missingLegs: 0, modeChanged: 0, upgraded: 0, downgraded: 0, issues: 0, longDay: 0, legacyUmbrellaStops: 0, legacyUmbrellaRoutes: 0, blocking: 0, gateBlockedRoutes: 0, repairableByReorder: 0, duplicatePairs: 0, toursWithDuplicates: 0 };
 // 无知识路径下的"改判"不代表线上会变好：那些目的地在生产上有 auto-research/策展边，
 // 只是 destination_route_knowledge 受 RLS 保护、本脚本用 anon key 读不到。
 // 混进主计数会把工具读数误导成"降级了 N 条路线"，所以单独统计。
@@ -128,6 +129,22 @@ for (const tour of tours) {
   summary.tours++;
   if (!hasKnowledge) noKnowledge.tours++;
   console.log(`\n── ${tour.title}  (${tour.created_at.slice(0, 10)} / 知识=${effectiveKnowledge.source}${recorded ? "" : "（报告未记录，按重建推断）"} → ${tier} ${TIER_LABEL[tier]}, ${locs.length} 地点)`);
+
+  // 重复路线是"少而重复"的质量问题：现网三清山两条 10 站完全相同的路线就是这么发出去的。
+  // 循环内去重只能防住新生成，存量要能看见。
+  // 文学巡礼线是 AI 自由选点，v70.4 起不参与删除；要带上 _free 才能报出正确处置。
+  const dupPairs = findDuplicateRoutes(routes.map(r => ({
+    day_label: r.day_label,
+    stops: r.stops || [],
+    _free: /文学巡礼/.test(String(r.day_label || "")),
+  })));
+  if (dupPairs.length) {
+    summary.toursWithDuplicates++;
+    summary.duplicatePairs += dupPairs.length;
+    for (const d of dupPairs) {
+      console.log(`       ⛔ 重复路线：「${d.dropLabel}」与「${d.keepLabel}」站点集合${d.identical ? "完全相同" : `重复度 ${Math.round(d.similarity * 100)}%`} → ${d.exempted ? "自由选点路线，重跑不会删除，需人工核实是否应改按情节线索选点" : "重跑会去掉后一条"}`);
+    }
+  }
 
   for (const route of routes) {
     summary.routes++;
@@ -211,6 +228,8 @@ for (const tour of tours) {
       durationMinutes: duration.totalMinutes,
       narrativeInstruction: routeLegsText(next),
       tier, knowledgeSource: effectiveKnowledge.source, tierLabel: TIER_LABEL[tier], suppressedByTier,
+      duplicatePairs: dupPairs.map(d => ({ keep: d.keepLabel, drop: d.dropLabel, identical: d.identical, exempted: d.exempted })),
+      umbrellaStops: umbrellaStops.map((l: any) => l.name),
     });
   }
 }

@@ -1,5 +1,5 @@
 {
-  "auditedAt": "2026-10-14T07:58:39.543Z",
+  "auditedAt": "2026-10-14T08:40:13.925Z",
   "summary": {
     "tours": 12,
     "tierL3": 2,
@@ -19,7 +19,9 @@
     "legacyUmbrellaRoutes": 21,
     "blocking": 4,
     "gateBlockedRoutes": 4,
-    "repairableByReorder": 3
+    "repairableByReorder": 3,
+    "duplicatePairs": 2,
+    "toursWithDuplicates": 2
   },
   "routes": [
     {
@@ -74,7 +76,9 @@
       "tier": "L2",
       "knowledgeSource": "auto-research",
       "tierLabel": "自动研究/策展顺序，未经核实",
-      "suppressedByTier": false
+      "suppressedByTier": false,
+      "duplicatePairs": [],
+      "umbrellaStops": []
     },
     {
       "tourId": "77a10329-37f8-4a9d-8889-d33cec89ad65",
@@ -192,7 +196,9 @@
       "tier": "L2",
       "knowledgeSource": "auto-research",
       "tierLabel": "自动研究/策展顺序，未经核实",
-      "suppressedByTier": true
+      "suppressedByTier": true,
+      "duplicatePairs": [],
+      "umbrellaStops": []
     },
     {
       "tourId": "77a10329-37f8-4a9d-8889-d33cec89ad65",
@@ -271,7 +277,9 @@
       "tier": "L2",
       "knowledgeSource": "auto-research",
       "tierLabel": "自动研究/策展顺序，未经核实",
-      "suppressedByTier": true
+      "suppressedByTier": true,
+      "duplicatePairs": [],
+      "umbrellaStops": []
     },
     {
       "tourId": "7feeedd7-893a-4677-8c81-4213b69ee96c",
@@ -328,7 +336,9 @@
       "tier": "L2",
       "knowledgeSource": "auto-research",
       "tierLabel": "自动研究/策展顺序，未经核实",
-      "suppressedByTier": false
+      "suppressedByTier": false,
+      "duplicatePairs": [],
+      "umbrellaStops": []
     },
     {
       "tourId": "7feeedd7-893a-4677-8c81-4213b69ee96c",
@@ -411,7 +421,9 @@
       "tier": "L2",
       "knowledgeSource": "auto-research",
       "tierLabel": "自动研究/策展顺序，未经核实",
-      "suppressedByTier": true
+      "suppressedByTier": true,
+      "duplicatePairs": [],
+      "umbrellaStops": []
     },
     {
       "tourId": "7feeedd7-893a-4677-8c81-4213b69ee96c",
@@ -500,7 +512,9 @@
       "tier": "L2",
       "knowledgeSource": "auto-research",
       "tierLabel": "自动研究/策展顺序，未经核实",
-      "suppressedByTier": true
+      "suppressedByTier": true,
+      "duplicatePairs": [],
+      "umbrellaStops": []
     },
     {
       "tourId": "1aa0b067-7082-47e4-a39f-4db35426b8d6",
@@ -603,7 +617,9 @@
       "tier": "L3",
       "knowledgeSource": "builtin",
       "tierLabel": "已验证（人工策展或创作者确认）",
-      "suppressedByTier": false
+      "suppressedByTier": false,
+      "duplicatePairs": [],
+      "umbrellaStops": []
     },
     {
       "tourId": "1aa0b067-7082-47e4-a39f-4db35426b8d6",
@@ -661,7 +677,9 @@
       "tier": "L3",
       "knowledgeSource": "builtin",
       "tierLabel": "已验证（人工策展或创作者确认）",
-      "suppressedByTier": false
+      "suppressedByTier": false,
+      "duplicatePairs": [],
+      "umbrellaStops": []
     },
     {
       "tourId": "9803d21e-7456-420c-8c92-d6cb71ca9c88",
@@ -737,7 +755,11 @@
       "tier": "L1",
       "knowledgeSource": "none",
       "tierLabel": "无路线知识",
-      "suppressedByTier": false
+      "suppressedByTier": false,
+      "duplicatePairs": [],
+      "umbrellaStops": [
+        "青城山"
+      ]
     },
     {
       "tourId": "9803d21e-7456-420c-8c92-d6cb71ca9c88",
@@ -828,7 +850,11 @@
       "tier": "L1",
       "knowledgeSource": "none",
       "tierLabel": "无路线知识",
-      "suppressedByTier": true
+      "suppressedByTier": true,
+      "duplicatePairs": [],
+      "umbrellaStops": [
+        "青城山"
+      ]
     },
     {
       "tourId": "9803d21e-7456-420c-8c92-d6cb71ca9c88",
@@ -888,7 +914,11 @@
       "tier": "L1",
       "knowledgeSource": "none",
       "tierLabel": "无路线知识",
-      "suppressedByTier": true
+      "suppressedByTier": true,
+      "duplicatePairs": [],
+      "umbrellaStops": [
+        "青城山"
+      ]
     },
     {
       "tourId": "be0c0e93-4e04-47f0-92db-d9cbaa048e8f",
@@ -941,7 +971,11 @@
       "tier": "L1",
       "knowledgeSource": "none",
       "tierLabel": "无路线知识",
-      "suppressedByTier": false
+      "suppressedByTier": false,
+      "duplicatePairs": [],
+      "umbrellaStops": [
+        "武当山"
+      ]
     },
     {
       "tourId": "be0c0e93-4e04-47f0-92db-d9cbaa048e8f",
@@ -1049,7 +1083,11 @@
       "tier": "L1",
       "knowledgeSource": "none",
       "tierLabel": "无路线知识",
-      "suppressedByTier": true
+      "suppressedByTier": true,
+      "duplicatePairs": [],
+      "umbrellaStops": [
+        "武当山"
+      ]
     },
     {
       "tourId": "f9573c9a-e581-4498-bdc0-13f6d6d66ed7",
@@ -1129,7 +1167,11 @@
       "tier": "L1",
       "knowledgeSource": "none",
       "tierLabel": "无路线知识",
-      "suppressedByTier": false
+      "suppressedByTier": false,
+      "duplicatePairs": [],
+      "umbrellaStops": [
+        "天门山国家森林公园"
+      ]
     },
     {
       "tourId": "f9573c9a-e581-4498-bdc0-13f6d6d66ed7",
@@ -1262,7 +1304,11 @@
       "tier": "L1",
       "knowledgeSource": "none",
       "tierLabel": "无路线知识",
-      "suppressedByTier": true
+      "suppressedByTier": true,
+      "duplicatePairs": [],
+      "umbrellaStops": [
+        "天门山国家森林公园"
+      ]
     },
     {
       "tourId": "f9573c9a-e581-4498-bdc0-13f6d6d66ed7",
@@ -1329,7 +1375,11 @@
       "tier": "L1",
       "knowledgeSource": "none",
       "tierLabel": "无路线知识",
-      "suppressedByTier": true
+      "suppressedByTier": true,
+      "duplicatePairs": [],
+      "umbrellaStops": [
+        "天门山国家森林公园"
+      ]
     },
     {
       "tourId": "b47e3d39-212f-44ff-acb4-7aa2b9b7ef6e",
@@ -1395,7 +1445,11 @@
       "tier": "L1",
       "knowledgeSource": "none",
       "tierLabel": "无路线知识",
-      "suppressedByTier": false
+      "suppressedByTier": false,
+      "duplicatePairs": [],
+      "umbrellaStops": [
+        "庐山"
+      ]
     },
     {
       "tourId": "b47e3d39-212f-44ff-acb4-7aa2b9b7ef6e",
@@ -1468,7 +1522,11 @@
       "tier": "L1",
       "knowledgeSource": "none",
       "tierLabel": "无路线知识",
-      "suppressedByTier": false
+      "suppressedByTier": false,
+      "duplicatePairs": [],
+      "umbrellaStops": [
+        "庐山"
+      ]
     },
     {
       "tourId": "1a956ea4-7f68-4db0-b745-d74182e10a9b",
@@ -1551,7 +1609,18 @@
       "tier": "L1",
       "knowledgeSource": "none",
       "tierLabel": "无路线知识",
-      "suppressedByTier": false
+      "suppressedByTier": false,
+      "duplicatePairs": [
+        {
+          "keep": "1日游·徒步环线",
+          "drop": "1日游·车行索道线",
+          "identical": true,
+          "exempted": false
+        }
+      ],
+      "umbrellaStops": [
+        "三清山"
+      ]
     },
     {
       "tourId": "1a956ea4-7f68-4db0-b745-d74182e10a9b",
@@ -1634,7 +1703,18 @@
       "tier": "L1",
       "knowledgeSource": "none",
       "tierLabel": "无路线知识",
-      "suppressedByTier": false
+      "suppressedByTier": false,
+      "duplicatePairs": [
+        {
+          "keep": "1日游·徒步环线",
+          "drop": "1日游·车行索道线",
+          "identical": true,
+          "exempted": false
+        }
+      ],
+      "umbrellaStops": [
+        "三清山"
+      ]
     },
     {
       "tourId": "0cb82b1c-54ed-42d7-ae36-6bcc42772160",
@@ -1661,7 +1741,11 @@
       "tier": "L1",
       "knowledgeSource": "none",
       "tierLabel": "无路线知识",
-      "suppressedByTier": false
+      "suppressedByTier": false,
+      "duplicatePairs": [],
+      "umbrellaStops": [
+        "龟山风景区"
+      ]
     },
     {
       "tourId": "0cb82b1c-54ed-42d7-ae36-6bcc42772160",
@@ -1689,7 +1773,9 @@
       "tier": "L1",
       "knowledgeSource": "none",
       "tierLabel": "无路线知识",
-      "suppressedByTier": false
+      "suppressedByTier": false,
+      "duplicatePairs": [],
+      "umbrellaStops": []
     },
     {
       "tourId": "0cb82b1c-54ed-42d7-ae36-6bcc42772160",
@@ -1731,7 +1817,11 @@
       "tier": "L1",
       "knowledgeSource": "none",
       "tierLabel": "无路线知识",
-      "suppressedByTier": false
+      "suppressedByTier": false,
+      "duplicatePairs": [],
+      "umbrellaStops": [
+        "龟山风景区"
+      ]
     },
     {
       "tourId": "690d3b68-908a-413a-b6f4-3ce89877eb6f",
@@ -1836,7 +1926,9 @@
       "tier": "L1",
       "knowledgeSource": "none",
       "tierLabel": "无路线知识",
-      "suppressedByTier": true
+      "suppressedByTier": true,
+      "duplicatePairs": [],
+      "umbrellaStops": []
     },
     {
       "tourId": "690d3b68-908a-413a-b6f4-3ce89877eb6f",
@@ -1892,7 +1984,9 @@
       "tier": "L1",
       "knowledgeSource": "none",
       "tierLabel": "无路线知识",
-      "suppressedByTier": false
+      "suppressedByTier": false,
+      "duplicatePairs": [],
+      "umbrellaStops": []
     },
     {
       "tourId": "690d3b68-908a-413a-b6f4-3ce89877eb6f",
@@ -1943,7 +2037,9 @@
       "tier": "L1",
       "knowledgeSource": "none",
       "tierLabel": "无路线知识",
-      "suppressedByTier": true
+      "suppressedByTier": true,
+      "duplicatePairs": [],
+      "umbrellaStops": []
     },
     {
       "tourId": "73e455ab-6b29-4a02-9a93-ec96b67e5b65",
@@ -2040,7 +2136,11 @@
       "tier": "L3",
       "knowledgeSource": "builtin",
       "tierLabel": "已验证（人工策展或创作者确认）",
-      "suppressedByTier": false
+      "suppressedByTier": false,
+      "duplicatePairs": [],
+      "umbrellaStops": [
+        "泰山风景名胜区"
+      ]
     },
     {
       "tourId": "73e455ab-6b29-4a02-9a93-ec96b67e5b65",
@@ -2150,7 +2250,11 @@
       "tier": "L3",
       "knowledgeSource": "builtin",
       "tierLabel": "已验证（人工策展或创作者确认）",
-      "suppressedByTier": false
+      "suppressedByTier": false,
+      "duplicatePairs": [],
+      "umbrellaStops": [
+        "泰山风景名胜区"
+      ]
     },
     {
       "tourId": "73e455ab-6b29-4a02-9a93-ec96b67e5b65",
@@ -2202,7 +2306,11 @@
       "tier": "L3",
       "knowledgeSource": "builtin",
       "tierLabel": "已验证（人工策展或创作者确认）",
-      "suppressedByTier": false
+      "suppressedByTier": false,
+      "duplicatePairs": [],
+      "umbrellaStops": [
+        "泰山风景名胜区"
+      ]
     },
     {
       "tourId": "73e455ab-6b29-4a02-9a93-ec96b67e5b65",
@@ -2261,7 +2369,9 @@
       "tier": "L3",
       "knowledgeSource": "builtin",
       "tierLabel": "已验证（人工策展或创作者确认）",
-      "suppressedByTier": false
+      "suppressedByTier": false,
+      "duplicatePairs": [],
+      "umbrellaStops": []
     },
     {
       "tourId": "1baca791-416e-4c72-8fed-3f59001369bf",
@@ -2337,7 +2447,18 @@
       "tier": "L1",
       "knowledgeSource": "none",
       "tierLabel": "无路线知识",
-      "suppressedByTier": false
+      "suppressedByTier": false,
+      "duplicatePairs": [
+        {
+          "keep": "1日精华游",
+          "drop": "文学巡礼线",
+          "identical": true,
+          "exempted": true
+        }
+      ],
+      "umbrellaStops": [
+        "黄山"
+      ]
     },
     {
       "tourId": "1baca791-416e-4c72-8fed-3f59001369bf",
@@ -2443,7 +2564,18 @@
       "tier": "L1",
       "knowledgeSource": "none",
       "tierLabel": "无路线知识",
-      "suppressedByTier": true
+      "suppressedByTier": true,
+      "duplicatePairs": [
+        {
+          "keep": "1日精华游",
+          "drop": "文学巡礼线",
+          "identical": true,
+          "exempted": true
+        }
+      ],
+      "umbrellaStops": [
+        "黄山"
+      ]
     },
     {
       "tourId": "1baca791-416e-4c72-8fed-3f59001369bf",
@@ -2535,7 +2667,18 @@
       "tier": "L1",
       "knowledgeSource": "none",
       "tierLabel": "无路线知识",
-      "suppressedByTier": true
+      "suppressedByTier": true,
+      "duplicatePairs": [
+        {
+          "keep": "1日精华游",
+          "drop": "文学巡礼线",
+          "identical": true,
+          "exempted": true
+        }
+      ],
+      "umbrellaStops": [
+        "黄山"
+      ]
     },
     {
       "tourId": "1baca791-416e-4c72-8fed-3f59001369bf",
@@ -2611,7 +2754,18 @@
       "tier": "L1",
       "knowledgeSource": "none",
       "tierLabel": "无路线知识",
-      "suppressedByTier": false
+      "suppressedByTier": false,
+      "duplicatePairs": [
+        {
+          "keep": "1日精华游",
+          "drop": "文学巡礼线",
+          "identical": true,
+          "exempted": true
+        }
+      ],
+      "umbrellaStops": [
+        "黄山"
+      ]
     }
   ]
 }

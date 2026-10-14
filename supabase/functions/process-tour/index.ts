@@ -16,6 +16,7 @@ import { capabilitiesFor, TIER_LABEL } from "./knowledge-tier.ts";
 import { blockingIssues, buildRouteLegs, estimateRouteDuration, planGraphStops, repairPlanStops, routeGraphIssues, routeGraphNotes, routeLegsText } from "./route-graph.ts";
 import { resolveCoreDestination } from "./destination.ts";
 import { isNonSitePOI, rejectReasonForPOI } from "./poi-filter.ts";
+import { dedupeRoutes } from "./route-dedup.ts";
 import { elevationProfile } from "./elevation.ts";
 import { attachScenicTags as attachScenicTagsModule, buildAnchors as buildAnchorsModule, scanAnchorSubs as scanAnchorSubsModule } from "./anchors.ts";
 import { REGION_RADIUS, SUB_DEDUP_M, SUB_TOTAL_CAP } from "./anchors.ts";
@@ -747,17 +748,21 @@ Deno.serve(async (req: Request) => {
             };
           }).filter(r => r.stops.length > 0);
 
-          // 去重：stops 集合完全相同才视为重复，保留先出现的（1日精华优先）
-          // v70.4：文学巡礼线（自由选点）不参与去重——它是主题叙事路线，价值在 narrative，
-          // 站点与 1日精华重叠是预期行为（黄山实测：AI 自由选的 8 站与 1日 top8 同集合被误杀）
-          const seenKeys = new Set<string>();
-          const dedupedRoutes: any[] = [];
-          for (const r of allRoutes) {
-            if (r._free) { dedupedRoutes.push(r); continue; }
-            const key = [...r.stops].sort().join("|");
-            if (!seenKeys.has(key)) { seenKeys.add(key); dedupedRoutes.push(r); }
+          // v90：重复路线去重。旧实现只认"排序后集合完全相等"，既漏掉近似重复，
+          // 也与文档宣称的"重叠 >70%"不一致。相似度必须用 Jaccard（交集/并集），
+          // 不能用包含率：2日全景游按构造就是 [...1日核心站点, ...第二景区站点]，
+          // 必然完全包含 1日线，按包含率现网 18 组路线对里 12 组会"重叠 100%"，
+          // 那样会把多日线全部删掉。实测 Jaccard：真重复 100%，合法包含关系最高 80%。
+          const dedup = dedupeRoutes(allRoutes);
+          for (const dup of dedup.dropped) {
+            warnings.push(`♻️ 路线"${dup.dropLabel}"与"${dup.keepLabel}"站点集合${dup.identical ? "完全相同" : `重复度 ${Math.round(dup.similarity * 100)}%`}，已去掉后一条`);
           }
-          routes = dedupedRoutes;
+          for (const dup of dedup.suspicious) {
+            // v70.4 的结论保留：文学巡礼线价值在叙事，不因撞站被删。
+            // 但撞成完全相同必须让创作者看见，否则等于把"AI 抄了一遍 1日线"藏起来。
+            warnings.push(`⚠️ 路线"${dup.dropLabel}"与"${dup.keepLabel}"站点集合${dup.identical ? "完全相同" : `重复度 ${Math.round(dup.similarity * 100)}%`}，未自动删除（自由选点路线），请核实是否应改为按情节线索选点`);
+          }
+          routes = dedup.routes;
         }
         return routes;
       })(),
