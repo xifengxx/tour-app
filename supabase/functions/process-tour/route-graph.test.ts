@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildRouteGraph, buildRouteLegs, estimateRouteDuration, planGraphStops, routeGraphSegments, routeGraphIssues, routeGraphNotes } from "./route-graph.ts";
+import { buildRouteGraph, buildRouteLegs, elevationDeltaM, estimateRouteDuration, inferTransferMode, minModeForTransfer, parseElevationM, planGraphStops, routeGraphSegments, routeGraphIssues, routeGraphNotes, routeLegsText, SCENIC_SHUTTLE_MAX_M } from "./route-graph.ts";
 import type { DestinationRouteKnowledge } from "./route-knowledge-types.ts";
 import { CURATED_TRAILS, orderStopsByTrail } from "./trail-routes.ts";
 
@@ -102,6 +102,15 @@ describe("route graph", () => {
     expect(issues).toEqual(expect.arrayContaining([
       expect.objectContaining({ type: "trail-backtrack" }),
     ]));
+  });
+
+  it("整条步道反向串联是合法下撤，不报顺序回退", () => {
+    // 恒山 1日线曾按下山方向串联，若把它误判为回退，P1-2 闸门会拦下正确路线。
+    const reversed = routeGraphIssues(["主峰", "中亭", "入口"], graphLocs, knowledge);
+    expect(reversed.some(i => i.type === "trail-backtrack")).toBe(false);
+    // 但真正的折返仍要报出来：入口→主峰→中亭 是上山后再下山回半山。
+    const zigzag = routeGraphIssues(["入口", "主峰", "中亭"], graphLocs, knowledge);
+    expect(zigzag).toEqual(expect.arrayContaining([expect.objectContaining({ type: "trail-backtrack" })]));
   });
 
   it("发现两个徒步区被交错访问", () => {
@@ -218,7 +227,14 @@ describe("route graph", () => {
       ...graphLocs,
       loc("far-park", "外围游客中心", 117.0, 38.0),
     ], transferKnowledge);
-    expect(transferLegs.at(-1)).toMatchObject({ mode: "car", note: expect.stringContaining("需接驳") });
+    // P1-3: 不再输出笼统的"需接驳"，而是给出山路里程与车程，
+    // 让 AI 无法把跨片区位移复述成"乘景区观光车"。
+    expect(transferLegs.at(-1)).toMatchObject({
+      mode: "car",
+      note: expect.stringContaining("山路约"),
+      roadMinutes: expect.any(Number),
+      inferred: true,
+    });
   });
 
   it("缺少坐标或匹配资料时不崩溃并回退到徒步", () => {
@@ -233,12 +249,148 @@ describe("route graph", () => {
       { fromId: "a", toId: "b", fromName: "A", toName: "B", mode: "walk", duration: "1小时20分钟" },
       { fromId: "b", toId: "c", fromName: "B", toName: "C", mode: "shuttle", distanceM: 8000 },
     ], 5);
+    // P1-3: 8km 直线摆渡按 1.6 绕行系数折 12.8km 山路、35km/h 均速 → 22 分钟，
+    // 旧实现隐含"直线 55km/h"低估为 25→实为严重低估山地车程。
     expect(duration).toEqual({
-      movementMinutes: 105,
+      movementMinutes: 102,
       visitMinutes: 80,
-      totalMinutes: 185,
+      totalMinutes: 182,
       estimatedLegs: 1,
     });
+  });
+
+  it("交通方式按直线距离分层，car 只由距离决定", () => {
+    expect(inferTransferMode(1200)).toBe("walk");
+    expect(inferTransferMode(3000)).toBe("walk");
+    expect(inferTransferMode(3001)).toBe("shuttle");
+    expect(inferTransferMode(SCENIC_SHUTTLE_MAX_M)).toBe("shuttle");
+    expect(inferTransferMode(SCENIC_SHUTTLE_MAX_M + 1)).toBe("car");
+    expect(inferTransferMode(36710)).toBe("car");
+    expect(inferTransferMode(null)).toBe("walk"); // 缺坐标时保守按徒步，不编造车程
+  });
+
+  it("海拔文本解析不被区间与说明文字带偏", () => {
+    expect(parseElevationM("4506-4680米")).toBe(4506); // 曾被解析成 -4680
+    expect(parseElevationM("约2900米")).toBe(2900);
+    expect(parseElevationM("1918.3")).toBe(1918.3);
+    expect(parseElevationM("海拔3100米（相对高差1000米）")).toBe(3100);
+    expect(parseElevationM("")).toBeNull();
+    expect(parseElevationM("1:50000")).toBeNull(); // 无单位且非纯数字比例，拒绝
+    expect(parseElevationM("4506m")).toBe(4506);
+    // 异常高差整段作废，不拿去做交通判定
+    expect(elevationDeltaM("4506-4680米", "约2900米")).toBe(-1606);
+    expect(elevationDeltaM("8000米", "10米")).toBeNull();
+  });
+
+  it("索道段不因海拔文本区间被误判成公路下撤", () => {
+    const cableLocs = [
+      { ...loc("boardwalk", "玉龙雪山冰川公园栈道", 100.2596, 27.0985), elevation: "4506-4680米" },
+      { ...loc("blue", "玉龙雪山国家级风景名胜区蓝月谷", 100.1946, 27.0973), elevation: "约2900米" },
+    ];
+    const legs = buildRouteLegs(["boardwalk", "blue"], cableLocs, {
+      ...knowledge,
+      edges: [{ from: "玉龙雪山冰川公园栈道", to: "玉龙雪山国家级风景名胜区蓝月谷", mode: "cableway", duration: "10分钟", source: "manual" }],
+      trails: [],
+    });
+    expect(legs[0]).toMatchObject({ mode: "cableway", edgeMode: "cableway" });
+    // 索道段不追加"下撤"提示，避免和资料的 cableway 表述冲突。
+    expect(legs[0].note || "").not.toContain("禁止写成连续徒步");
+  });
+
+  it("跨市位移不得标成景区观光车（丽江虎跳峡线上事故回归）", () => {
+    // 线上实况：主题游 拉市海 → 香格里拉虎跳峡 直线 36.71km，
+    // 旧逻辑 (>3km → shuttle) 产出 narrative「乘观光车/摆渡车，直线约37公里」。
+    const farLocs = [
+      loc("lashihai", "丽江拉市海湿地公园", 100.13, 26.87),
+      loc("hutiaoxia", "香格里拉虎跳峡", 100.11, 27.19),
+    ];
+    const legs = buildRouteLegs(["lashihai", "hutiaoxia"], farLocs, { ...knowledge, edges: [] });
+    expect(legs[0]).toMatchObject({ mode: "car", inferred: true });
+    expect(legs[0].note).toContain("车程");
+    expect(legs[0].roadMinutes).toBeGreaterThan(60);
+    const text = routeLegsText(legs);
+    expect(text).toContain("专车/出租车");
+    expect(text).toContain("禁止描述为景区观光车短驳或索道直达");
+    // 主题游允许长串联，但标注方式必须正确，不能再被静默放行
+    const issues = routeGraphIssues(["lashihai", "hutiaoxia"], farLocs, { ...knowledge, edges: [] }, { allowLongTransfers: true });
+    expect(issues.some(i => i.type === "long-transfer" && i.message.includes("无车程估算"))).toBe(false);
+  });
+
+  it("大落差平面短距离不得判为连续徒步（泰山日观峰→岱庙回归）", () => {
+    // 线上实况：日观峰 1536m → 岱庙 150m，直线 7.12km，旧 8km 阈值完全漏报。
+    const steepLocs = [
+      { ...loc("riguan", "日观峰", 117.19, 36.26), elevation: "1536m" },
+      { ...loc("miao", "岱庙", 117.13, 36.2), elevation: "150m" },
+    ];
+    // 大落差 = "不可当作平面徒步段"，升级为 shuttle；car 只由平面距离决定
+    // （山上未必有公路，把 1606m 落差判成"包车"会产出另一个错误叙述）。
+    expect(minModeForTransfer(7120, 1386)).toBe("shuttle");
+    expect(minModeForTransfer(7120, 400)).toBe("shuttle");
+    expect(minModeForTransfer(2000, 1386)).toBe("walk"); // 短距离爬升仍是徒步段
+    expect(minModeForTransfer(19000, 1000)).toBe("car");  // 距离本身已跨片区
+    const legs = buildRouteLegs(["riguan", "miao"], steepLocs, { ...knowledge, edges: [] });
+    expect(legs[0]).toMatchObject({ mode: "shuttle", elevationDeltaM: expect.any(Number) });
+    expect(legs[0].elevationDeltaM).toBeLessThan(-1000);
+    expect(legs[0].note).toContain("禁止写成连续徒步");
+  });
+
+  it("资料标注与物理量冲突时对所有路线类型上报", () => {
+    // auto-research 把 19km 跨片区写成 walk 时，不能再因为"有资料边"就免检。
+    const conflictKnowledge: DestinationRouteKnowledge = {
+      ...knowledge,
+      trails: [{ id: "t", zoneId: "north", aliases: ["示例山"], stops: [{ name: "甲" }, { name: "乙" }] }],
+      edges: [{ from: "甲", to: "乙", mode: "walk" }],
+    };
+    const conflictLocs = [loc("甲", "甲", 116.0, 39.0), loc("乙", "乙", 116.2, 38.85)];
+    const legs = buildRouteLegs(["甲", "乙"], conflictLocs, conflictKnowledge);
+    expect(legs[0].mode).not.toBe("walk");
+    expect(legs[0].edgeMode).toBe("walk");
+    const issues = routeGraphIssues(["甲", "乙"], conflictLocs, conflictKnowledge, { allowLongTransfers: true });
+    expect(issues).toEqual(expect.arrayContaining([
+      expect.objectContaining({ type: "long-transfer", message: expect.stringContaining("资料标注为「徒步」") }),
+    ]));
+  });
+
+  it("目的地没有任何路线知识时仍然必须体检", () => {
+    // 这是"每加一条新导览就出新问题"的关键机制缺口：新目的地必然没有知识，
+    // 旧实现在 trails 为空时直接 return []，新导览从来没被校验过一次。
+    const noKnowledge: DestinationRouteKnowledge = {
+      destinationName: "新目的地", aliases: ["新目的地"],
+      zones: [], trails: [], edges: [], source: "none", confidence: 0,
+    };
+    const far = [
+      { id: "a", name: "山腰寺", lat: 30.0, lng: 118.0 },
+      { id: "b", name: "邻县古镇", lat: 30.25, lng: 118.2 },
+    ];
+    expect(routeGraphIssues(["a", "b"], far, noKnowledge)).toEqual([
+      expect.objectContaining({ type: "long-transfer", message: expect.stringContaining("未经核实") }),
+    ]);
+    // 步行段资料缺失但物理上必须机动化时，措辞要说清是"默认按步行"而非"资料主张步行"
+    const synthetic = [
+      { id: "a", name: "山腰寺", lat: 30.0, lng: 118.0 },
+      { id: "b", name: "山顶", lat: 30.002, lng: 118.002 },
+    ];
+    const syntheticKnowledge: DestinationRouteKnowledge = {
+      ...noKnowledge,
+      trails: [{ id: "t", aliases: ["新目的地"], stops: [{ name: "山腰寺" }, { name: "山顶" }] }],
+    };
+    expect(buildRouteLegs(["a", "b"], synthetic, syntheticKnowledge)[0]).toMatchObject({
+      mode: "walk", edgeMode: "walk", edgeSynthetic: true, inferred: true,
+    });
+  });
+
+  it("黄山两日线混入 28km 外徽州古村能被自动捕获（线上事故回归）", () => {
+    const noKnowledge: DestinationRouteKnowledge = {
+      destinationName: "黄山", aliases: ["黄山"], zones: [], trails: [], edges: [], source: "none", confidence: 0,
+    };
+    // 坐标取自线上黄山导览 locations 表真实值（27.71km 直线）
+    const huangshan = [
+      { id: "hou", name: "猴子观海", lat: 30.144546, lng: 118.170502 },
+      { id: "chengkan", name: "呈坎", lat: 29.914335, lng: 118.280803 },
+    ];
+    const issues = routeGraphIssues(["hou", "chengkan"], huangshan, noKnowledge);
+    expect(issues[0].message).toContain("专车/出租车");
+    expect(issues[0].message).toContain("直线约 28km");
   });
 
   it("发现每日行程超过容量上限", () => {
