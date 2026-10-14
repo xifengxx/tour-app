@@ -20,7 +20,7 @@ import { isNonSitePOI, rejectReasonForPOI } from "./poi-filter.ts";
 import { dedupeRoutes } from "./route-dedup.ts";
 import { elevationProfile } from "./elevation.ts";
 import { attachScenicTags as attachScenicTagsModule, buildAnchors as buildAnchorsModule, scanAnchorSubs as scanAnchorSubsModule } from "./anchors.ts";
-import { REGION_RADIUS, SUB_DEDUP_M, SUB_TOTAL_CAP } from "./anchors.ts";
+import { cleanScenicName, REGION_RADIUS, SUB_DEDUP_M, SUB_TOTAL_CAP } from "./anchors.ts";
 
 // 规范化内容层结构：DeepSeek 分批生成时可能对部分点返回扁平结构（novel: "文本"）而非
 // 嵌套结构（novel: {text: "文本"}）——实测青城山第二 chunk（地区景点）就返回了扁平结构，
@@ -463,6 +463,27 @@ Deno.serve(async (req: Request) => {
     if (trailGroupNames.length) warnings.push(`🥾 已知多山线路分区：${trailGroupNames.join("/")}`);
     const primaryTrailScenicName = getPrimaryTrailScenicName(destName, routeKnowledge.trails);
     const coreScenicName = primaryTrailScenicName || coreAnchor?.scenicName || (destName || "");
+    // v96.2：统一"同一景区的多套标签"。AI 提取阶段给山上点打的是口语名（"恒山"、
+    // "恒山风景名胜区"），目的地兜底锚点用的却是全名"北岳恒山"，两套标签永不相交。
+    // 恒山线上实测：一日核心池因此只剩 2 个县城点（浑河/浑源县），真正的主山点
+    // 全部落进"主景区"池被推去第二天。清洗名互相包含即同一景区的叫法变体，统一之。
+    // 只做文本包含、不做地理聚类——避免把 12km 内的真正独立景区一起吞掉。
+    if (coreScenicName) {
+      const coreClean = cleanScenicName(coreScenicName);
+      if (coreClean.length >= 2) {
+        let folded = 0;
+        for (const l of locs) {
+          const sc = String(l.scenic || "");
+          if (!sc || sc === coreScenicName || sc === "独立") continue;
+          const scClean = cleanScenicName(sc);
+          if (scClean.length >= 2 && (coreClean.includes(scClean) || scClean.includes(coreClean))) {
+            l.scenic = coreScenicName;
+            folded++;
+          }
+        }
+        if (folded) warnings.push(`🏷 统一 ${folded} 个"${coreScenicName}"的景区标签变体（AI 叫法与锚点全名分池会割裂一日线路）`);
+      }
+    }
     // 主景区须为真实景区（≥2 个子点）。"独立"是兜底标签不是景区——若让它当主景区，2日 day-2
     // 会被要求"只含独立景区站点"，把九寨沟/四姑娘山等远点全塞进来。无主景区时留空，2日 day-2 继续覆盖核心景区。
     const countByScenic = new Map<string, number>();
