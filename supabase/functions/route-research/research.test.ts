@@ -74,12 +74,33 @@ describe("route research", () => {
     expect(result?.trails[0].stops[1].lng).toBeUndefined();
   });
 
-  it("提示词要求引用证据并限制最高置信度", () => {
+  it("坐标可追溯性单独标记，自评置信度不再向模型索取", () => {
+    const result = normalizeResearchResult("武功山", {
+      trails: [{
+        aliases: ["武功山"],
+        // 至少 3 站才会被接受（少于 3 站直接判为无效结果）
+        stops: [{ name: "金顶" }, { name: "吊马桩", lat: 27.4, lng: 114.2 }, { name: "发云界" }],
+        evidence: ["金顶 @27.47809,114.13560"],
+      }],
+    }, 1);
+    // 来自外部 POI 证据 → 可追溯；模型自己填的数字不算证据
+    expect(result?.trails[0].stops[0]).toMatchObject({ evidenceBound: true });
+    expect(result?.trails[0].stops[1]).toMatchObject({ evidenceBound: false });
+    // 可信度由证据事实计算：这份只有一半坐标可追溯、无显式交通边的结果不可能拿高分
+    // 逐项：来源 0.55、坐标 2/3、可追溯 1/3、无设施噪声 1、结构 0.5
+    // → 0.55*0.35 + 0.67*0.2 + 0.33*0.15 + 1*0.15 + 0.5*0.15 ≈ 0.60
+    // 旧公式只看 evidenceCount=1 会给 0.6+0.05 = 0.65，与内容质量无关
+    expect(result!.confidence).toBeCloseTo(0.6, 2);
+  });
+
+  it("提示词要求引用证据，并明确不采信模型自评置信度", () => {
     const prompt = buildResearchPrompt("北岳恒山", "山西省大同市", { lng: 113.73, lat: 39.67 }, [
       { provider: "wikipedia", title: "恒山", text: "恒山主峰天峰岭。", url: "https://example.com" },
     ]);
     expect(prompt[0].content).toContain("不要虚构景点");
-    expect(prompt[1].content).toContain("confidence 最高 0.80");
+    expect(prompt[1].content).toContain("模型自评不作数");
+    expect(prompt[1].content).toContain("每个 zone 都要给出一条对应 trail");
+    expect(prompt[1].content).not.toContain("\"confidence\"");
     expect(prompt[1].content).toContain("【来源1·wikipedia】");
   });
 });

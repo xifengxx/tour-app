@@ -9,6 +9,7 @@ import MapSearchModal from '../components/MapSearchModal';
 import ProcessingPhase from '../components/ProcessingPhase';
 import TourEditInput from '../components/TourEditInput';
 import TourEditReview from '../components/TourEditReview';
+import { sectionsForDb } from '../lib/routeSections';
 import { MapPinned, CloudOff, RefreshCw } from 'lucide-react';
 
 const DEFAULT_LAYERS = [
@@ -301,6 +302,8 @@ export default function TourEdit() {
           routes.map((r, i) => ({
             id: r.id, tour_id: uuid, day_label: r.day,
             title: r.title, stops: r.stops, legs: r.legs || [],
+            // v93：落库用 stopIds 字段名，与 process-tour 写进去的形状一致
+            sections: sectionsForDb(r.sections || []),
             narrative: r.narrative || '', sort_order: i,
           }))
         );
@@ -443,6 +446,7 @@ export default function TourEdit() {
         {phase === 'review' && !loading && tour && (locations.length > 0 || routes.length > 0) && (
           <TourEditReview
             locations={locations} routes={routes} contentLayers={contentLayers}
+            processReport={tour.processReport}
             editingLoc={editingLoc} editingLayer={editingLayer} isPublic={isPublic}
             onSetPhase={setPhase} setIsPublic={setIsPublic}
             onShowMapSearch={() => setShowMapSearch(true)}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { orderStopsGeographic, planRoutes } from "./routes.ts";
+import { buildThemeSections, filterRouteStops, isRouteStopEligible, orderStopsGeographic, planRoutes } from "./routes.ts";
 
 const point = (id: string, scenic: string, tags: string[] = [], importance = 3, lng = 116, lat = 39) => ({ id, name: id, scenic, tags, importance, lng, lat });
 
@@ -198,4 +198,162 @@ describe("orderStopsGeographic", () => {
     expect(ordered.at(-1)).toBe("noCoord");
     expect(ordered).toContain("gate");
   });
+});
+describe("planRoutes 能力授权（v89 分层）", () => {
+  const zoneA = { id: "zA", name: "A区" };
+  const zoneB = { id: "zB", name: "B区" };
+  const locs = [
+    point("A区索道上站", "核心", [], 7, 114.10, 27.40),
+    point("A区观景台", "核心", [], 6, 114.11, 27.41),
+    point("B区草甸", "核心", [], 5, 114.13, 27.42),
+    point("B区寺庙", "核心", [], 4, 114.14, 27.43),
+    point("核心东", "核心", [], 3, 114.12, 27.41),
+    point("核心西", "核心", [], 2, 114.115, 27.405),
+    point("后山瀑布", "后山", [], 4, 114.16, 27.45),
+    point("后山索道", "后山", [], 3, 114.17, 27.46),
+    point("外围纪念馆", "独立", ["地区景点"], 5, 114.20, 27.50),
+  ];
+  const full = { multiDay: true, themeTour: true, zoneDriven: true, trailOrder: true, assertTransport: true };
+  // v93：主题游不再受分层限制（分区结构只声明"这几个就近景区可连着玩"，
+  // 不声明跨区连续动线），所以 researched 档只剩多日线被抑制
+  const researched = { multiDay: false, themeTour: true, zoneDriven: false, trailOrder: true, assertTransport: false };
+  const ctxOf = (over: Record<string, unknown> = {}) => ({
+    coreScenicName: "核心", mainScenicName: "后山", destName: "示例山", isNovelBased: false,
+    novelName: "", hasRegionTour: true, zones: [zoneA, zoneB], ...over,
+  });
+
+  it("已验证知识仍产出 1日/2日/主题游（不削弱现有能力）", () => {
+    const suppressed: string[] = [];
+    const plans = planRoutes(locs, ctxOf({
+      capabilities: full, onSuppressed: (plan: string) => suppressed.push(plan),
+    }));
+    expect(plans.map(p => p.label)).toEqual(["1日精华游", "2日全景游", "主题游"]);
+    expect(suppressed).toEqual([]);
+  });
+
+  it("未核实知识不再产出 2日全景游与主题游", () => {
+    const suppressed: { plan: string; reason: string }[] = [];
+    const plans = planRoutes(locs, ctxOf({
+      capabilities: researched, onSuppressed: (plan, reason) => suppressed.push({ plan, reason }),
+    }));
+    expect(plans.map(p => p.label)).toEqual(["1日精华游", "主题游"]);
+    expect(suppressed.map(p => p.plan)).toEqual(["2日全景游"]);
+    expect(suppressed[0].reason).toContain("未经核实");
+  });
+
+  it("未核实分区不再把 1 日线压到 5 站", () => {
+    // 线上实况：auto-research 给玉龙雪山造的分区把 13 个点全归进"冰川公园"，
+    // zoneDriven 选点只剩 4 站；关闭 zoneDriven 后按重要性取满一日容量。
+    const researchedPlans = planRoutes(locs, ctxOf({ capabilities: researched }));
+    const verifiedPlans = planRoutes(locs, ctxOf({ capabilities: full }));
+    expect(researchedPlans[0].allow!.length).toBeGreaterThan(5);
+    expect(verifiedPlans[0].allow!.length).toBeLessThanOrEqual(5);
+  });
+
+  it("没有第二景区也没有分区时不虚构多日线", () => {
+    const plans = planRoutes(locs, ctxOf({ mainScenicName: "", zones: [], capabilities: full }));
+    expect(plans.map(p => p.label)).toEqual(["1日精华游", "主题游"]);
+  });
+
+  it("小说源导览的文学巡礼线不受能力授权影响", () => {
+    const withNovel = planRoutes(locs, ctxOf({ capabilities: researched, isNovelBased: true, novelName: "示例小说" }));
+    const withoutNovel = planRoutes(locs, ctxOf({ capabilities: researched, isNovelBased: false, novelName: "" }));
+    expect(withNovel.map(p => p.label)).toEqual(["1日精华游", "主题游", "文学巡礼线"]);
+    expect(withNovel[2].allow).toBeNull(); // 文学线由 AI 自由选点，不锁站点
+    expect(withoutNovel.map(p => p.label)).toEqual(["1日精华游", "主题游"]);
+  });
+
+  it("缺省不传 capabilities 时保持既有行为（向后兼容）", () => {
+    const plans = planRoutes(locs, ctxOf());
+    expect(plans.map(p => p.label)).toEqual(["1日精华游", "2日全景游", "主题游"]);
+  });
+});
+
+describe("路线站点资格（景区伞形名）", () => {
+  it("伞形景区名不能作为游览站", () => {
+    // 现网实况：这三个都是景区名被高德定位到行政/质心点，却出现在路线站点序列里
+    expect(isRouteStopEligible({ name: "泰山风景名胜区", tags: [] }, { destName: "泰山" })).toBe(false);
+    expect(isRouteStopEligible({ name: "黄山", tags: [] }, { destName: "黄山" })).toBe(false);
+    expect(isRouteStopEligible({ name: "天门山国家森林公园", tags: [] }, { destName: "天门山" })).toBe(false);
+    expect(isRouteStopEligible({ name: "武功山", tags: ["景区泛指"] }, { destName: "武功山" })).toBe(false);
+  });
+
+  it("带景区前缀的真实地标不被误杀", () => {
+    expect(isRouteStopEligible({ name: "泰山风景名胜区-碧霞祠", tags: [] }, { destName: "泰山" })).toBe(true);
+    expect(isRouteStopEligible({ name: "日观峰", tags: [] }, { destName: "泰山" })).toBe(true);
+    expect(isRouteStopEligible({ name: "岱庙", tags: [] }, { destName: "泰山" })).toBe(true);
+    expect(isRouteStopEligible({ name: "玉龙雪山国家级风景名胜区蓝月谷", tags: [] }, { destName: "玉龙雪山" })).toBe(true);
+    expect(isRouteStopEligible({ name: "嵩山国家重点风景名胜区峻极峰", tags: [] }, { destName: "嵩山" })).toBe(true);
+  });
+
+  it("策展步道声明的入口/换乘点获得豁免（恒山首站别名就是目的地名）", () => {
+    const protectedNames = new Set(["北岳恒山", "恒山", "游客中心"]);
+    expect(isRouteStopEligible({ name: "北岳恒山", tags: ["景区泛指"] }, { destName: "北岳恒山", protectedNames })).toBe(true);
+    // 没有步道保护时仍然排除
+    expect(isRouteStopEligible({ name: "北岳恒山", tags: ["景区泛指"] }, { destName: "北岳恒山" })).toBe(false);
+  });
+
+  it("filterRouteStops 剔除伞形点并报告点名，未知 id 原样保留", () => {
+    const byId = new Map<string, any>([
+      ["d1", { id: "d1", name: "红门宫", tags: [] }],
+      ["d2", { id: "d2", name: "泰山风景名胜区", tags: [] }],
+      ["d3", { id: "d3", name: "中天门", tags: [] }],
+    ]);
+    const { kept, dropped } = filterRouteStops(["d1", "d2", "d3", "d-unknown"], byId, { destName: "泰山" });
+    expect(kept).toEqual(["d1", "d3", "d-unknown"]);
+    expect(dropped).toEqual(["泰山风景名胜区"]);
+  });
+
+  it("文学巡礼线经资格闸后不再混入伞形点，且不会清空整条路线", () => {
+    const byId = new Map<string, any>([
+      ["h1", { id: "h1", name: "黄山", tags: ["景区泛指"] }],
+      ["h2", { id: "h2", name: "黄山-迎客松", tags: [] }],
+      ["h3", { id: "h3", name: "黄山风景区-光明顶", tags: [] }],
+    ]);
+    const { kept, dropped } = filterRouteStops(["h1", "h2", "h3"], byId, { destName: "黄山" });
+    expect(kept).toEqual(["h2", "h3"]);
+    expect(dropped).toEqual(["黄山"]);
+  });
+
+describe("主题游分区结构（v93）", () => {
+  const corePool = [
+    point("核心A", "核心", [], 5, 114.10, 27.40),
+    point("核心B", "核心", [], 4, 114.11, 27.41),
+  ];
+  const clusters = [
+    { rep: point("蓝月谷", "独立", ["地区景点"], 4, 114.20, 27.50), locs: [
+      point("蓝月谷", "独立", ["地区景点"], 4, 114.20, 27.50),
+      point("白水河", "独立", ["地区景点"], 3, 114.21, 27.51),
+    ] },
+    { rep: point("云杉坪", "独立", ["地区景点"], 3, 114.40, 27.60), locs: [
+      point("云杉坪", "独立", ["地区景点"], 3, 114.40, 27.60),
+    ] },
+  ];
+
+  it("一簇 = 一个片区，代表点在前，成员是片区内具体玩法点", () => {
+    const sections = buildThemeSections([...corePool, ...clusters[0].locs, ...clusters[1].locs], { destName: "示例山", coreScenicName: "核心" }, corePool, clusters);
+    expect(sections.map(s => s.name)).toEqual(["核心", "蓝月谷", "云杉坪"]);
+    expect(sections[0].kind).toBe("核心景区");
+    expect(sections[1]).toMatchObject({ kind: "周边景点", allow: ["蓝月谷", "白水河"] });
+    // 片区总数受上限约束，不会把 60km 半径内所有散点全塞进主题游
+    expect(sections.reduce((n, s) => n + s.allow.length, 0)).toBeLessThanOrEqual(20);
+  });
+
+  it("planRoutes 的主题游带分区，且 allow 是各分区拼接结果", () => {
+    const plans = planRoutes([
+      ...Array.from({ length: 6 }, (_, i) => point(`核心${i}`, "核心", [], 6 - i, 114.10 + i * 0.002, 27.40)),
+      point("蓝月谷", "独立", ["地区景点"], 4, 114.20, 27.50),
+      point("白水河", "独立", ["地区景点"], 3, 114.205, 27.505),
+      point("云杉坪", "独立", ["地区景点"], 3, 114.30, 27.60),
+      point("牦牛坪", "独立", ["地区景点"], 3, 114.305, 27.605),
+    ], { coreScenicName: "核心", mainScenicName: "", destName: "示例山", isNovelBased: false, novelName: "", hasRegionTour: true, zones: [] });
+    const theme = plans.find(p => p.label === "主题游");
+    expect(theme?.sections?.length).toBeGreaterThan(1);
+    expect(theme?.allow).toEqual(theme!.sections!.flatMap(s => s.allow));
+    // 每个片区的站点都必须是路线站点的子集，前端才能只用一份 stops 做地图连线
+    for (const sec of theme!.sections!) {
+      expect(sec.allow.every(id => theme!.allow!.includes(id))).toBe(true);
+    }
+  });
+});
 });

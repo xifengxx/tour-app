@@ -1,17 +1,23 @@
+import { useMemo } from 'react';
 import { Check, Globe, Lock, Pencil, RefreshCw, MapPin, Route as RouteIcon, MapPinned, Footprints, Plus } from 'lucide-react';
 import { ImportanceStars } from './ContentCard';
+import ProcessReport, { RouteIssueList } from './ProcessReport';
+import RouteSectionsEditor from './RouteSectionsEditor';
+import { issuesForRoute, summarizeReport } from '../lib/routeReport';
 
 /**
  * 导览编辑 · 第三阶段：审核/编辑 AI 生成的地点、内容与路线。
  * 从 TourEdit.jsx 拆分，纯受控组件（状态与 handler 由父组件持有）。
  */
 export default function TourEditReview({
-  locations, routes, contentLayers, editingLoc, editingLayer, isPublic,
+  locations, routes, contentLayers, processReport, editingLoc, editingLayer, isPublic,
   onSetPhase, setIsPublic, onShowMapSearch, onSetEditingLoc, onSetEditingLayer,
   updateLocation, removeLocation, updateLayerContent,
   addRoute, updateRoute, removeRoute, toggleRouteStop, onReprocess,
 }) {
   const inputCls = "bg-background text-foreground rounded-lg px-3 py-2 text-xs border border-border outline-none";
+  // P1-1：把 Edge Function 的质量报告接进审核页，缺陷与它描述的路线同屏。
+  const reportSummary = useMemo(() => summarizeReport(processReport, routes), [processReport, routes]);
   return (
     <div className="space-y-4">
       {/* Step indicator · 壹贰叁 */}
@@ -26,18 +32,29 @@ export default function TourEditReview({
 
       {/* 公开/私密切换 + 编辑基本信息 */}
       <div className="flex items-center gap-2 mb-3 flex-wrap">
+        {/* P1-2 闸门：存在阻断级路线问题时禁止直接发布，核实前不给公开入口 */}
         <button
           onClick={() => setIsPublic(!isPublic)}
+          disabled={!reportSummary.canPublish}
+          title={reportSummary.canPublish ? '' : `存在 ${reportSummary.blockingCount} 个阻断级路线问题，核实后才能发布`}
+          aria-describedby={reportSummary.canPublish ? undefined : 'publish-gate-hint'}
           className={`flex items-center gap-1.5 text-xs px-3 py-2 rounded-lg border transition-colors ${
-            isPublic
-              ? 'bg-pine/10 border-pine/30 text-pine'
-              : 'bg-black/[0.04] border-border text-muted-foreground'
+            !reportSummary.canPublish
+              ? 'bg-muted/50 border-border text-muted-foreground/60 cursor-not-allowed'
+              : isPublic
+                ? 'bg-pine/10 border-pine/30 text-pine'
+                : 'bg-black/[0.04] border-border text-muted-foreground'
           }`}
         >
           {isPublic
             ? <><Globe className="h-3.5 w-3.5" /> 已公开（所有人可见）</>
             : <><Lock className="h-3.5 w-3.5" /> 私密（仅自己可见）</>}
         </button>
+        {!reportSummary.canPublish && (
+          <span id="publish-gate-hint" className="text-[11px] text-destructive">
+            需先核实 {reportSummary.blockingCount} 个阻断级路线问题，才能设为公开
+          </span>
+        )}
         <button
           onClick={() => onSetPhase('input')}
           className="flex items-center gap-1.5 text-xs px-3 py-2 rounded-lg border border-border bg-black/[0.04] text-muted-foreground hover:bg-black/[0.08] transition-colors"
@@ -142,11 +159,19 @@ export default function TourEditReview({
         </section>
       )}
 
+      {/* AI 处理报告（P1-1）：此前 process_report 前端零引用，已诊断的缺陷无人可见 */}
+      <ProcessReport summary={reportSummary} />
+
       {/* Routes section */}
       <section className="bg-card rounded-lg p-5 border border-border">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-foreground font-serif font-bold text-sm flex items-center gap-1.5">
             <RouteIcon className="h-4 w-4 text-dai" /> 游览路线 ({routes.length})
+            {reportSummary.routeIssues.some(r => r.issues.length) && (
+              <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-destructive/10 text-destructive font-sans">
+                有路线待核实
+              </span>
+            )}
           </h2>
           <button onClick={addRoute} className="px-3 py-1.5 bg-primary text-primary-foreground rounded-lg text-xs flex items-center gap-1 hover:bg-primary/90 transition-colors">
             <Plus className="h-3 w-3" /> 添加路线
@@ -188,6 +213,10 @@ export default function TourEditReview({
                   途经: {route.stops.map(id => locations.find(l => l.id === id)?.name || id).join(' → ')}
                 </div>
               )}
+              {/* v93：主题游分区可编辑。分组是系统判的，人必须能改，
+                  否则"把判断权交给创作者"只落在告警上，落不到操作上 */}
+              <RouteSectionsEditor route={route} locations={locations} onChange={patch => updateRoute(route.id, patch)} />
+              <RouteIssueList issues={issuesForRoute(reportSummary, route)} />
             </div>
           ))
         )}

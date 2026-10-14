@@ -8,8 +8,12 @@ const SB_ANON = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 
 /**
  * Waiting screen during AI processing.
- * 轮询 tours.status：done → 跳转审核；error → 显示失败 + 重试；
+ * 轮询 tours.status：done / needs_review → 跳转审核；error → 显示失败 + 重试；
  * processing → 继续等待。避免处理失败时无限死等。
+ *
+ * needs_review（P1-2 闸门）必须和 done 一样结束轮询：它代表"内容已写好，
+ * 但存在阻断级路线问题需创作者核实"。若漏掉这个分支，前端会一路死等到
+ * 4 分钟超时并显示"处理超时"，把一个正常完成的导览报成失败。
  */
 export default function ProcessingPhase({
   draftTourId,
@@ -27,6 +31,7 @@ export default function ProcessingPhase({
   const [pollCount, setPollCount] = useState(0);
   const [elapsed, setElapsed] = useState(0);
   const [error, setError] = useState(null);
+  const [needsReview, setNeedsReview] = useState(false);
   const startTimeRef = useRef(Date.now());
   const intervalRef = useRef(null);
   const timerRef = useRef(null);
@@ -101,7 +106,8 @@ export default function ProcessingPhase({
           setError(reason ? `AI 处理失败：${reason}` : 'AI 处理失败：服务器端出错，请重新处理');
           return;
         }
-        if (status === 'done') {
+        if (status === 'done' || status === 'needs_review') {
+          if (status === 'needs_review') setNeedsReview(true);
           if (intervalRef.current) clearInterval(intervalRef.current);
           if (timerRef.current) clearInterval(timerRef.current);
           doneTimeoutRef.current = setTimeout(() => onCheckDoneRef.current(), 800);
@@ -254,6 +260,12 @@ export default function ProcessingPhase({
           </div>
         </div>
       </section>
+
+      {needsReview && (
+        <p role="status" className="text-gamboge text-xs text-center leading-relaxed">
+          处理已完成，但闸门发现路线存在需要核实的问题，即将进入审核页。
+        </p>
+      )}
 
       <div className="flex gap-2">
         <button

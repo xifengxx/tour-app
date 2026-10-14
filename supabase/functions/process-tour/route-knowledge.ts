@@ -1,6 +1,7 @@
 import { SR_KEY, SUPABASE_URL, hdr } from "./config.ts";
 import { CURATED_TRAILS } from "./trail-routes.ts";
 import { researchRouteKnowledge } from "../route-research/research.ts";
+import { capabilitiesFor } from "./knowledge-tier.ts";
 import type { DestinationRouteKnowledge, DestinationRouteKnowledgeRow, RouteEdge, RouteZone } from "./route-knowledge-types.ts";
 import type { TrailRoute } from "./route-knowledge-types.ts";
 
@@ -29,23 +30,35 @@ function knowledgeMatches(row: DestinationRouteKnowledgeRow, destName: string) {
   });
 }
 
+const TIER_RANK = { L3: 3, L2: 2, L1: 1 } as const;
+
 export function selectRouteKnowledge(
   rows: DestinationRouteKnowledgeRow[],
   destName: string,
 ): DestinationRouteKnowledge {
-  const hit = rows
+  const candidates = rows
     .filter(row => knowledgeMatches(row, destName) && Array.isArray(row.model?.trails) && row.model!.trails!.length > 0)
-    .sort((a, b) => Number(b.confidence || 0) - Number(a.confidence || 0))[0];
+    .map(row => {
+      // 排序先看"来源是否有权威"，再看"这份知识本身完不完整"，最后才看遗留的
+      // confidence 字段（历史行里它是按证据条数算的，不可信，只兜底）。
+      const shaped: DestinationRouteKnowledge = {
+        destinationName: row.destination_name || destName,
+        aliases: row.aliases || [],
+        zones: row.model?.zones || [],
+        trails: row.model!.trails!,
+        edges: row.model?.edges || [],
+        source: row.source || "database",
+        confidence: Number(row.confidence || 0),
+      };
+      return { row, shaped, auth: capabilitiesFor(shaped) };
+    })
+    .sort((a, b) =>
+      TIER_RANK[b.auth.tier] - TIER_RANK[a.auth.tier]
+      || b.auth.quality.score - a.auth.quality.score
+      || Number(b.row.confidence || 0) - Number(a.row.confidence || 0));
+  const hit = candidates[0];
   if (!hit) return builtinKnowledge(destName);
-  return {
-    destinationName: hit.destination_name || destName,
-    aliases: hit.aliases || [],
-    zones: hit.model?.zones || [],
-    trails: hit.model!.trails!,
-    edges: hit.model?.edges || [],
-    source: hit.source || "database",
-    confidence: Number(hit.confidence || 0.8),
-  };
+  return { ...hit.shaped, quality: hit.auth.quality };
 }
 
 // v78：路线知识从“代码里的策展常量”升级为可替换数据层。数据库优先，内置数据只是兜底。

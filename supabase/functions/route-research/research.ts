@@ -1,4 +1,5 @@
 import { deepseek } from "../process-tour/ai.ts";
+import { scoreKnowledge } from "../process-tour/knowledge-quality.ts";
 import { gaode } from "../process-tour/gaode-search.ts";
 import { gaodeAroundScenics, JUNK_RE, landmarkKey } from "../process-tour/gaode-scan.ts";
 
@@ -156,7 +157,7 @@ export function buildResearchPrompt(destination: string, region: string, center:
     { role: "system", content: "你是景区动线研究员。只返回JSON。不要虚构景点；不要输出无法与来源或公认地理事实对应的站点顺序。" },
     {
       role: "user",
-      content: `目的地：${destination}（${region || "地区未填"}）\n中心：${center ? `${center.lat},${center.lng}` : "无"}\n\n外部证据：\n${evidenceText}\n\n请抽取真实、静态、可复用的目的地路线知识。规则：\n1. zones 用于独立徒步区/主景区；单景区可为空数组。\n2. trails 是实际游览顺序，不是地图候选点集合；必须遵循入口→山腰/核心→山顶→出口/换乘的动线。\n3. edges 写真实交通衔接（步行/索道/观光车/专车）；不要把跨区长距离车行写成徒步。\n4. 每条 trail 的 evidence 保留 1-3 条最关键来源句；没有证据的不要编造。\n5. aliases 覆盖目的地常用名；每个 trail.aliases 至少包含目的地或其景区名。\n6. confidence 最高 0.80，来源不足时降低。\n\nJSON: {"destination_name":"${destination}","aliases":[],"zones":[{"id":"","name":"","aliases":[]}],"trails":[{"id":"","aliases":[],"scenicName":"","zoneId":"","stops":[{"name":"","aliases":[],"required":true}],"notes":"","evidence":["来源句"]}],"edges":[{"from":"","to":"","mode":"walk","duration":"","note":""}],"confidence":0.0}`,
+      content: `目的地：${destination}（${region || "地区未填"}）\n中心：${center ? `${center.lat},${center.lng}` : "无"}\n\n外部证据：\n${evidenceText}\n\n请抽取真实、静态、可复用的目的地路线知识。规则：\n1. zones 用于独立徒步区/主景区；单景区可为空数组。\n2. trails 是实际游览顺序，不是地图候选点集合；必须遵循入口→山腰/核心→山顶→出口/换乘的动线。\n3. edges 写真实交通衔接（步行/索道/观光车/专车）；不要把跨区长距离车行写成徒步。\n4. 每条 trail 的 evidence 保留 1-3 条最关键来源句；没有证据的不要编造。\n5. aliases 覆盖目的地常用名；每个 trail.aliases 至少包含目的地或其景区名。\n5b. 每个 zone 都要给出一条对应 trail（zoneId 必须引用 zones 里声明过的 id）。只声明分区不给动线，等于该分区的所有地点无法绑定。\n6. 不要输出 confidence：可信度由系统按坐标覆盖率、证据可追溯比例、设施噪声与显式交通边覆盖率计算，模型自评不作数。\n\nJSON: {"destination_name":"${destination}","aliases":[],"zones":[{"id":"","name":"","aliases":[]}],"trails":[{"id":"","aliases":[],"scenicName":"","zoneId":"","stops":[{"name":"","aliases":[],"required":true}],"notes":"","evidence":["来源句"]}],"edges":[{"from":"","to":"","mode":"walk","duration":"","note":""}]}`,
     },
   ];
 }
@@ -187,7 +188,14 @@ function parseEvidenceCoords(evidence: unknown[]) {
   return coords;
 }
 
-export function normalizeResearchResult(destination: string, raw: any, evidenceCount: number): ResearchResult | null {
+/**
+ * 归一化模型抽取结果并计算可信度。
+ *
+ * 第三个参数保留仅为兼容既有调用方：v91 起可信度不再数"抓回几段证据"，
+ * 而由 scoreKnowledge 按坐标覆盖率/证据可追溯比例/设施噪声/结构/交通边覆盖计算，
+ * 所以这里刻意不使用它（旧算法把一条无关的武汉东湖维基条目也算成 +0.05）。
+ */
+export function normalizeResearchResult(destination: string, raw: any, _evidenceCount: number): ResearchResult | null {
   const aliases = [...new Set([destination, ...(Array.isArray(raw?.aliases) ? raw.aliases.map(String) : [])].filter(Boolean))];
   const rawZones: any[] = Array.isArray(raw?.zones) ? raw.zones : [];
   const zones = rawZones
@@ -210,6 +218,7 @@ export function normalizeResearchResult(destination: string, raw: any, evidenceC
           lat?: number;
           lng?: number;
           required?: boolean;
+          evidenceBound?: boolean;
         } | null => {
           const name = stopName(stop);
           if (!name) return null;
@@ -220,13 +229,17 @@ export function normalizeResearchResult(destination: string, raw: any, evidenceC
             ...(Array.isArray(stop?.aliases) ? stop.aliases.map(String) : []),
           ].map(value => landmarkKey(value, destination)).filter(Boolean));
           const matched = evidenceCoords.find(coord => coordKeys.has(landmarkKey(coord.nameKey, destination)));
-          const lat = Number(stop?.lat ?? matched?.lat);
-          const lng = Number(stop?.lng ?? matched?.lng);
+          const modelLat = Number(stop?.lat);
+          const lat = Number.isFinite(modelLat) ? modelLat : Number(matched?.lat);
+          const lng = Number.isFinite(modelLat) ? Number(stop?.lng) : Number(matched?.lng);
           return {
             name,
             aliases: Array.isArray(stop?.aliases) ? stop.aliases.map(String).filter(Boolean) : undefined,
             lat: Number.isFinite(lat) ? lat : undefined,
             lng: Number.isFinite(lng) ? lng : undefined,
+            // 坐标来自外部 POI 证据（高德/OSM）才算"可追溯"；模型自己填的数字不算。
+            // 这个区分是质量评分的输入之一：模型可以给一个根本没核过的坐标。
+            evidenceBound: !Number.isFinite(modelLat) && !!matched,
             // 有外部 POI 坐标的路线点可以作为确定性补全种子；
             // 纯模型名称仍不强制注入，避免把未证实地点写进导览。
             required: stop?.required === true || !!matched,
@@ -271,8 +284,16 @@ export function normalizeResearchResult(destination: string, raw: any, evidenceC
     .filter((e: { from: string; to: string }) => e.from && e.to)
     .slice(0, 80);
 
-  const strength = Math.min(evidenceCount, 3);
-  const confidence = Math.min(0.8, 0.6 + strength * 0.05 + (trails[0].stops.length >= 5 ? 0.02 : 0));
+  // v91：置信度改为可解释的证据评分，替换旧的"数证据条数"公式
+  // （0.6 + 0.05 × min(条数,3) + 0.02）。实测那次研究里三条证据中有一条是
+  // 武汉东湖的维基条目，与玉龙雪山毫无关系，旧公式照样 +0.05 还给 0.75。
+  // 新算法看的是：坐标覆盖率、可追溯比例、设施噪声、结构完整度、显式交通边覆盖率。
+  const quality = scoreKnowledge({
+    destinationName: String(raw?.destination_name || destination),
+    aliases, zones, trails, edges, source: "auto-research", confidence: 0,
+  });
+  // 自动研究仍然是未核实来源，天花板压在 0.8，不会盖过人工策展与创作者确认。
+  const confidence = Math.min(0.8, quality.score);
   return {
     destination_name: String(raw?.destination_name || destination),
     aliases,

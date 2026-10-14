@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import RouteBar from '../components/RouteBar';
 import ContentCard from '../components/ContentCard';
 import ElevationProfile from '../components/ElevationProfile';
+import ThemeSections from '../components/ThemeSections';
 import DetailModal from '../components/DetailModal';
 import ShareModal from '../components/ShareModal';
 import CommentsModal from '../components/CommentsModal';
@@ -581,6 +582,12 @@ export default function TourView() {
                 <p className="font-kai text-xs text-muted-foreground leading-relaxed bg-background rounded-lg p-3 border-l-2 border-dai max-h-24 overflow-y-auto">{activeRoute.narrative}</p>
               </div>
             )}
+            {/* v93：主题游按片区呈现（片区 → 片区内游览点），与线性行程区分开 */}
+            <ThemeSections
+              sections={activeRoute?.sections}
+              locationsById={locByIdRef.current}
+              onSelectSpot={(id) => { const loc = locByIdRef.current[id]; if (loc) selectLoc(loc); }}
+            />
             {activeRoute?.legs?.length > 0 && (
               <div className="px-4 pb-2">
                 <p className="text-[11px] leading-relaxed text-muted-foreground bg-background rounded-lg p-2 border border-border/60 max-h-16 overflow-y-auto">

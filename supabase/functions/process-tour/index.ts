@@ -9,11 +9,15 @@ import { regeo } from "./gaode-validation.ts";
 import { gaodeNearbyCulturalPOIs, isDestinationUmbrella, JUNK_RE, semanticDedupLocations } from "./gaode-scan.ts";
 import { AMUSE_RE, FACILITY_RE, gaode, gaodeRegionScenics } from "./gaode-search.ts";
 import { haversineM } from "./geo.ts";
-import { orderStopsGeographic, planRoutes as planRoutesModule } from "./routes.ts";
+import { filterRouteStops, isRouteStopEligible, orderStopsGeographic, planRoutes as planRoutesModule } from "./routes.ts";
 import { applyTrailGroups, getPrimaryTrailScenicName, getTrailNotes, injectTrailSeeds, orderStopsByTrail } from "./trail-routes.ts";
 import { loadOrResearchRouteKnowledge } from "./route-knowledge.ts";
-import { buildRouteLegs, estimateRouteDuration, planGraphStops, routeGraphIssues, routeGraphNotes, routeLegsText } from "./route-graph.ts";
+import { capabilitiesFor, TIER_LABEL } from "./knowledge-tier.ts";
+import { qualityGaps } from "./knowledge-quality.ts";
+import { blockingIssues, buildRouteLegs, estimateRouteDuration, planGraphStops, repairPlanStops, routeGraphIssues, routeGraphNotes, routeLegsText } from "./route-graph.ts";
 import { resolveCoreDestination } from "./destination.ts";
+import { isNonSitePOI, rejectReasonForPOI } from "./poi-filter.ts";
+import { dedupeRoutes } from "./route-dedup.ts";
 import { elevationProfile } from "./elevation.ts";
 import { attachScenicTags as attachScenicTagsModule, buildAnchors as buildAnchorsModule, scanAnchorSubs as scanAnchorSubsModule } from "./anchors.ts";
 import { REGION_RADIUS, SUB_DEDUP_M, SUB_TOTAL_CAP } from "./anchors.ts";
@@ -124,7 +128,7 @@ function regionMatch(geo: { province: string; city: string | string[]; district?
 }
 
 const DEDUP_M = 150;
-const INFRA_RE = /车站$|停车场|售票|游客中心|服务(?:中心|区|站|处)|管理处|管委会|监测|接待|讲解|卫生间|厕所|公交站|地铁站|候车|入口$|出口$|门店|商店|超市|银行|加油站/;
+// P1-4: INFRA_RE 移至 poi-filter.ts，供全部五个地点入口复用（此前只在首层提取生效）。
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: cors() });
@@ -209,8 +213,9 @@ Deno.serve(async (req: Request) => {
       // Use Gaode's official name if available
       const displayName = c.name && c.name !== l.name ? c.name : l.name;
       // 首层提取拒绝服务设施；不用 FACILITY_RE，避免误杀“金龙峡栈道”这类真实游览点。
-      if (INFRA_RE.test(displayName) || JUNK_RE.test(displayName) || AMUSE_RE.test(displayName)) {
-        return { warn: `⚠️ "${displayName}" 是服务/商业设施，已跳过`, loc: null as any };
+      const poiReject = rejectReasonForPOI(displayName);
+      if (poiReject) {
+        return { warn: `⚠️ "${displayName}" 是${poiReject}，已跳过`, loc: null as any };
       }
       return { warn: null, loc: { id: l.id, name: displayName, lat: c.lat, lng: c.lng, elevation: l.elevation || "", importance: l.importance || 3, tags: l.tags || [] } };
     });
@@ -304,7 +309,7 @@ Deno.serve(async (req: Request) => {
               const natural = /峰|岭|口|峡|栈道|洞|亭|台|谷|岩|石|松|门|府/.test(p.name);
               return (cultural || natural) && p.rating >= (cultural ? 3.5 : 3.0);
             })
-            .filter(p => !INFRA_RE.test(p.name) && !JUNK_RE.test(p.name) && !AMUSE_RE.test(p.name))
+            .filter(p => !isNonSitePOI(p.name))
             .filter(p => ![...locs, ...validRepaired].some(q => String(q.name) === p.name || haversineM(q, p) < DEDUP_M))
             .sort((a, b) => {
               const rank = (n: string) => /庙$|殿$|宫$|祠$/.test(n) ? 3 : /寺$|观$/.test(n) ? 2 : /峰|岭|口|峡|栈道|洞|亭|台|谷|岩|石|松|门|府/.test(n) ? 1 : 0;
@@ -349,7 +354,7 @@ Deno.serve(async (req: Request) => {
           const c = await gaode(name, destRegion, destLoc || undefined);
           if (!c || !c.lat) return null;
           // v70：AI 提议点同样过设施/餐饮/游乐过滤——"老院子饭庄(永定大道)""普光禅寺(公交站)"曾直接并入
-          if (FACILITY_RE.test(c.name) || JUNK_RE.test(c.name) || AMUSE_RE.test(c.name) || /公交站|地铁站/.test(c.name)) return null;
+          if (FACILITY_RE.test(c.name) || isNonSitePOI(c.name)) return null;
           if (locs.some(l => haversineM(l, c) < 5000)) return null; // 距核心太近 → 非独立地区点
           return { lng: c.lng, lat: c.lat, name: c.name || name };
         });
@@ -363,6 +368,9 @@ Deno.serve(async (req: Request) => {
         }
         // regionScenics 补足（名称级去重，防核心点如"天门山国家森林公园"被重复并入）
         for (const p of regionScenics) {
+          // P1-4：高德"地区知名景点"结果同样必须过滤非游览点。
+          // 这一路此前完全没有过滤，导致「玄岳门(公交站)」这类 POI 直接入库并排进路线。
+          if (isNonSitePOI(p.name)) continue;
           if (regionFinal.some(q => haversineM(q, p) < 1000)) continue; // 同坐标（如武陵源/张家界国家森林公园）只留一个
           if (nameSeen.has(p.name)) continue;
           if (locs.some(l => String(l.name) === p.name)) continue; // 与核心地点同名（如"天门山国家森林公园"）→ 不重复并入
@@ -460,6 +468,30 @@ Deno.serve(async (req: Request) => {
     // 这类步道/换乘事实；恒山实测会继续产出上下锯齿。
     const trailSeedNames = injectTrailSeeds(locs, destName, coreScenicName, routeKnowledge.trails);
     if (trailSeedNames.length) warnings.push(`🥾 已知步道补全 +${trailSeedNames.length} 个：${trailSeedNames.join("/")}`);
+    // P1-4：非游览点总闸。五个地点入口（AI 提取 / AI 核心补全 / AI 地区提议 /
+    // 高德地区知名景点 / 锚点子景点扫描）历史上各自维护过滤规则，
+    // 高德"地区知名景点"那一路完全没有过滤，导致「玄岳门(公交站)」「两期岩体穿插关系」
+    // 这类条目入库并被排进路线。这里在唯一汇合点统一兜底，
+    // 但豁免策展步道上已确认的站点：已验证知识优先于启发式规则。
+    const trailStopKeys = new Set<string>();
+    for (const trail of routeKnowledge.trails || []) {
+      for (const stop of trail.stops || []) {
+        for (const alias of [stop.name, ...(stop.aliases || [])]) {
+          const key = String(alias || "").trim().toLowerCase();
+          if (key) trailStopKeys.add(key);
+        }
+      }
+    }
+    const nonSiteLocs = locs.filter(l =>
+      !l.regionOnly && isNonSitePOI(l.name) && !trailStopKeys.has(String(l.name || "").trim().toLowerCase()));
+    if (nonSiteLocs.length) {
+      const drop = new Set(nonSiteLocs);
+      for (const l of nonSiteLocs) warnings.push(`🧹 "${l.name}" 不是可游览地点，已从路线与地图中移除`);
+      const kept = locs.filter(l => !drop.has(l));
+      kept.forEach((l, i) => (l.sort_order = i));
+      locs.length = 0;
+      locs.push(...kept);
+    }
     // 所有来源（AI、高德、地区合并、子景点扫描、步道补全）都进入同一语义清洗层。
     // 泛指地点保留在地图数据里但带“景区泛指”标签；路线组成和补全层都不会把它当徒步站。
     const semanticMerged = semanticDedupLocations(locs, destName);
@@ -479,6 +511,10 @@ Deno.serve(async (req: Request) => {
     const slugToDbId = new Map(locs.map(l => [l.id, `${scope}-${l.id}`]));
     // 数据库 id 视图的地点列表（供地理排序用：stops 存的是 db id）
     const dbLocs = locs.map(l => ({ ...l, id: slugToDbId.get(l.id) || l.id }));
+    // 路线站点资格判据（v88）：景区伞形名/景区泛指点不能作为游览站，
+    // 但策展步道明确列为入口/换乘点的除外（恒山首站「游客中心」别名就是「北岳恒山」）。
+    const dbLocById = new Map(dbLocs.map((l: any) => [l.id, l]));
+    const stopEligibility = { destName, protectedNames: trailStopKeys };
     const trailNotes = getTrailNotes(destName, dbLocs, routeKnowledge.trails);
     const orderStops = (stopIds: string[], source: any[]) => {
       // v81：优先用真实路线图做“整段分区 + 段内步道顺序”，避免太室山/少室山这类
@@ -503,20 +539,74 @@ Deno.serve(async (req: Request) => {
     // 4. Routes — 确定性站点规划：1日精华游(必有) + 2日全景游(前山+后山) + 主题游(4热核心+统一地区景点) + 文学巡礼线(小说源)
     // 路线「组成」由 planRoutes 代码决定（AI 屡次不遵守景区分区规则）；站内顺序 v71 起由代码地理最近邻
     // 确定（AI 无坐标信息，锯齿动线实测恒山），DeepSeek 只写 narrative。
+    // v89：能力授权。路线知识只有"人工策展/创作者确认"才允许决定天数划分与跨片区串联；
+    // auto-research 抽出来的 zones/trails 未经核实，只能用来排序，不能用来编造多日行程。
+    const { tier, capabilities, quality } = capabilitiesFor(routeKnowledge);
     const isNovelBased = !!(tour.source?.title || tour.source?.novelTitle);
     const novelName = String(tour.source?.title || tour.source?.novelTitle || '');
     const corePoolSize = locs.filter(l => !(l.tags || []).includes("地区景点") && l.scenic === coreScenicName).length;
-    const plans = planRoutesModule(locs, { coreScenicName, mainScenicName, destName, destLoc, isNovelBased, novelName, hasRegionTour, zones: routeKnowledge.zones });
+    const suppressedPlans: { plan: string; reason: string }[] = [];
+    const plans = planRoutesModule(locs, {
+      coreScenicName, mainScenicName, destName, destLoc, isNovelBased, novelName, hasRegionTour,
+      zones: routeKnowledge.zones,
+      capabilities,
+      onSuppressed: (plan, reason) => suppressedPlans.push({ plan, reason }),
+    });
+    for (const sp of suppressedPlans) {
+      warnings.push(`🔐 未生成${sp.plan}：${sp.reason}。创作者确认一条路线后即可解锁。`);
+    }
+    if (routeKnowledge.zones.length && !capabilities.zoneDriven) {
+      warnings.push(`🔐 1日精华游未采用未经核实的分区选点，改按核心池重要性取点`);
+    }
     // 站内顺序在调 AI 前排定，planText 即最终动线，AI 的 narrative 按此顺序展开
     for (const p of plans) {
       if (!p.allow) continue;
-      if (p.preordered && p.dayPlan) {
+      if (p.sections?.length) {
+        // 主题游按分区各自排序后再拼接：整体排序会把不同景区的点交错，
+        // 分组结构就白做了。
+        for (const sec of p.sections) sec.allow = orderStops(sec.allow, locs);
+        p.allow = p.sections.flatMap(sec => sec.allow);
+      } else if (p.preordered && p.dayPlan) {
         for (const day of p.dayPlan) day.allow = orderStops(day.allow, locs);
         p.allow = p.dayPlan.flatMap(day => day.allow);
       } else {
         p.allow = orderStops(p.allow, locs);
       }
     }
+
+    // P1-2 闸门（修复阶段）。必须在 AI 生成 narrative 之前执行：
+    // 如果等写库前再砍站，narrative 里"全程依次经过 X、Y、Z"会与站点数组不一致，
+    // 那种文本缺陷比路线缺陷更难被发现，并且会直接显示在详情页上。
+    // 主题游按设计串联 60km 内的独立景点，长距离接驳是预期行为，不参与长距离阻断。
+    const planRepairNotes: string[] = [];
+    for (const p of plans) {
+      if (!p.allow) continue;
+      const allowLongTransfers = p.label === "主题游";
+      if (p.sections?.length) {
+        // 分区各自按"一天"校验与修复：一个景区排不下就削它自己的站点，
+        // 不会像整条拼接那样把别的景区一起削掉。
+        for (const sec of p.sections) {
+          const repaired = repairPlanStops(sec.allow, locs, routeKnowledge, { allowLongTransfers: true, dayLabel: "1日", maxDailyHours: 10 });
+          sec.allow = repaired.stopIds;
+          for (const r of repaired.repairs) planRepairNotes.push(`♻️ 主题游·${sec.name}：${r.message}`);
+        }
+        p.allow = p.sections.flatMap(sec => sec.allow).filter((id, i, all) => all.indexOf(id) === i);
+        if (!p.allow.length) suppressedPlans.push({ plan: p.label, reason: "各分区在容量修复后都没有剩余站点" });
+      } else if (p.preordered && p.dayPlan) {
+        // 逐日校验容量：2 日线的总量阈值会被"第 1 天 12 小时 + 第 2 天 3 小时"蒙混过去
+        for (const day of p.dayPlan) {
+          const repaired = repairPlanStops(day.allow, locs, routeKnowledge, { allowLongTransfers, dayLabel: day.label });
+          day.allow = repaired.stopIds;
+          for (const r of repaired.repairs) planRepairNotes.push(`♻️ ${p.label}·${day.label}${day.title ? `「${day.title}」` : ""}${r.message}`);
+        }
+        p.allow = p.dayPlan.flatMap(day => day.allow);
+      } else {
+        const repaired = repairPlanStops(p.allow, locs, routeKnowledge, { allowLongTransfers, dayLabel: p.label });
+        p.allow = repaired.stopIds;
+        for (const r of repaired.repairs) planRepairNotes.push(`♻️ 路线"${p.label}"${r.message}`);
+      }
+    }
+    warnings.push(...planRepairNotes);
     // 每条路线单独生成交通 legs：1日/2日只描述本线衔接，主题游的长距离接驳不污染普通徒步线。
     const routeTrafficHints = new Map(plans.map(plan => [plan.label, plan.allow ? routeLegsText(buildRouteLegs(plan.allow, locs, routeKnowledge)) : ""]));
     const graphNotes = routeGraphNotes(plans.flatMap(p => p.allow || []), dbLocs, routeKnowledge);
@@ -526,11 +616,15 @@ Deno.serve(async (req: Request) => {
         ? p.allow.map(id => { const l = locs.find(x => x.id === id); return l ? `${id}: ${l.name}` : id; }).join(", ")
         : "（文学巡礼线：自由选点）";
       const traffic = routeTrafficHints.get(p.label);
+      const sectionText = p.sections?.map(sec => {
+        const secStops = sec.allow.map(id => { const l = locs.find(x => x.id === id); return l ? `${id}: ${l.name}` : id; }).join(", ");
+        return `【${sec.name}】（${sec.kind}）— 该景区内的游览点: ${secStops}`;
+      }).join("\n   ");
       const dayText = p.dayPlan?.map(day => {
         const dayStops = day.allow.map(id => { const l = locs.find(x => x.id === id); return l ? `${id}: ${l.name}` : id; }).join(", ");
         return `${day.label}「${day.title}」 — 指定站点: ${dayStops}`;
       }).join("\n   ");
-      return `${i + 1}. ${p.label}「${p.title}」 — 指定站点: ${stopsTxt}${dayText ? `\n   按日分组（必须严格执行）:\n   ${dayText}` : ""}${traffic ? `\n   交通衔接（narrative 必须按此执行）: ${traffic}` : ""}`;
+      return `${i + 1}. ${p.label}「${p.title}」 — 指定站点: ${stopsTxt}${sectionText ? `\n   按景区分组（主题游必须按分组写：先说明主题与这些景区为什么值得连着玩，再逐景区写怎么玩）:\n   ${sectionText}` : ""}${dayText ? `\n   按日分组（必须严格执行）:\n   ${dayText}` : ""}${traffic ? `\n   交通衔接（narrative 必须按此执行）: ${traffic}` : ""}`;
     }).join("\n");
 
     const [contentById, routes] = await Promise.all([
@@ -599,12 +693,23 @@ Deno.serve(async (req: Request) => {
         for (let attempt = 0; attempt < 2 && routes.length < plans.length; attempt++) {
           const rr = await deepseek([
             { role: "system", content: "你是旅游路线规划师。只返回JSON。" },
-            { role: "user", content: `${destName}路线。**每条路线的站点及其顺序已由系统按地理动线排定，stops 必须严格按给定顺序逐字输出（这是实际游览顺序，已保证不走回头路），严禁增删替换或调整顺序；文学巡礼线除外（可自由选点与排序）。**\n\n${planText}\n\n${trailNotes ? `参考真实动线：${trailNotes}\n\n` : ""}${graphNotes ? `路线衔接：${graphNotes}\n\n` : ""}要求：\n1. 每条路线按上面的指定站点生成完整行程（从入口/索道进 → 逐点游览 → 出口/索道出）。\n2. narrative 各写 150-300 字完整行程描述：从哪个入口/索道进、每段用什么交通（徒步/索道/观光车）、依次经过哪些地点、从哪里出。narrative 中必须写地点的中文名（如"玉京峰"），严禁写 id 代号。narrative 的游览顺序必须与给定站点顺序一致。山地路线从半山下降到山脚庙宇/游客中心/停车场，或从游客中心前往外围峡谷/悬空景点时，必须写清换乘观光车、摆渡车或专车，不要把长距离位移写成连续徒步。\n3. **2日全景游 narrative 必须明确「第1天前山」「第2天后山」各去哪**；主题游写明主题与串联逻辑。\n4. day_label 必须是上面给定的标签（1日精华游/2日全景游/主题游/文学巡礼线）。\n5. 地点少时压缩天数，严禁编造不存在的多日行程。\n6. stops 数组顺序必须与 narrative 中的实际游览顺序一致（入口/索道在前，依次游览，出口/索道在后）；stops 只能从上面指定 id 中逐字复制。\n7. 路线条数必须与上述完全一致（${plans.length} 条），缺一不可。\nJSON: {"routes":[{"day_label":"","title":"","stops":["id1","id2"],"narrative":"完整行程描述"}]}` },
+            { role: "user", content: `${destName}路线。**每条路线的站点及其顺序已由系统按地理动线排定，stops 必须严格按给定顺序逐字输出（这是实际游览顺序，已保证不走回头路），严禁增删替换或调整顺序；文学巡礼线除外（可自由选点与排序）。**\n\n${planText}\n\n${trailNotes ? `参考真实动线：${trailNotes}\n\n` : ""}${graphNotes ? `路线衔接：${graphNotes}\n\n` : ""}要求：\n1. 每条路线按上面的指定站点生成完整行程（从入口/索道进 → 逐点游览 → 出口/索道出）。\n2. narrative 各写 150-300 字完整行程描述：从哪个入口/索道进、每段用什么交通（徒步/索道/观光车）、依次经过哪些地点、从哪里出。narrative 中必须写地点的中文名（如"玉京峰"），严禁写 id 代号。narrative 的游览顺序必须与给定站点顺序一致。山地路线从半山下降到山脚庙宇/游客中心/停车场，或从游客中心前往外围峡谷/悬空景点时，必须写清换乘观光车、摆渡车或专车，不要把长距离位移写成连续徒步。\n3. **2日全景游 narrative 必须明确「第1天前山」「第2天后山」各去哪**；主题游写明主题与串联逻辑。\n4. day_label 必须是上面给定的标签（1日精华游/2日全景游/主题游/文学巡礼线）。\n5. 地点少时压缩天数，严禁编造不存在的多日行程。\n6. stops 数组顺序必须与 narrative 中的实际游览顺序一致（入口/索道在前，依次游览，出口/索道在后）；stops 只能从上面指定 id 中逐字复制。\n7. 路线条数必须与上述完全一致（${plans.length} 条），缺一不可。\n主题游额外要求：按上面给的"按景区分组"输出 sections 数组，每项 {name, text}，name 用给定的景区名原样，text 写 60-120 字"这个景区里怎么玩"；不要把不同景区的点混写成一条连续步行线，景区之间如需乘车就照交通衔接写。\nJSON: {"routes":[{"day_label":"","title":"","stops":["id1","id2"],"narrative":"完整行程描述","sections":[{"name":"","text":""}]}]}` },
           ], { temperature: 0.2 });
           // Route stop validation: resolve + 确定性兜底。
           // 注意：不能按数组下标取 plan（AI 返回 routes 的顺序常与 plans 不一致 → 会张冠李戴，
           // 2日 混入 西岭雪山 就是顺序错位导致的）。按 day_label 模糊匹配 plan，找不到才回退下标。
           // day_label/title/stops 全部以 plan 为准（路线组成 100% 确定），AI 只贡献 narrative 与站内相对顺序。
+          // v88：文学巡礼线是自由选点，既可能全部无法 resolve，也可能选中的全是
+          // 景区伞形点被资格闸清空。两种情况都必须回退到核心可游览点，
+          // 否则小说源导览会静默少一条路线（routes < plans）。
+          const coreFallbackStops = (label: string, reason: string): string[] => {
+            const fallback = locs.filter(l => !(l.tags || []).includes("地区景点") && isRouteStopEligible(l, stopEligibility))
+              .slice().sort((a, b) => (b.importance || 3) - (a.importance || 3)).slice(0, 4);
+            const fallbackIds = fallback.map(l => slugToDbId.get(l.id)).filter((id): id is string => !!id);
+            const ordered = orderStops(fallbackIds, dbLocs);
+            if (ordered.length) warnings.push(`♻️ 路线"${label}"${reason}，回退核心 ${ordered.length} 站`);
+            return ordered;
+          };
           const aiRoutes = rr.routes || [];
           const allRoutes = plans.map((plan, i: number) => {
             const ai = aiRoutes.find((x: any) => {
@@ -641,35 +746,60 @@ Deno.serve(async (req: Request) => {
               // v70.3：自由选点全部无法 resolve 时不静默丢路线（黄山实测 routes 3/4）——
               // 回退到核心高重要性 4 站，保证小说源导览必有文学巡礼线
               if (!stops.length) {
-                const fallback = locs.filter(l => !(l.tags || []).includes("地区景点"))
-                  .slice().sort((a, b) => (b.importance || 3) - (a.importance || 3)).slice(0, 4);
-                const fallbackIds = fallback.map(l => slugToDbId.get(l.id)).filter((id): id is string => !!id);
-                stops = orderStops(fallbackIds, dbLocs);
-                if (stops.length) warnings.push(`♻️ 路线"${plan.label}"AI 选点无法匹配，回退核心 ${stops.length} 站`);
+                stops = coreFallbackStops(plan.label, "AI 选点无法匹配");
               }
             }
+            // v88：统一站点资格闸。文学巡礼线由 AI 自由选点，绕过了 planRoutes 的
+            // 伞形名过滤，这里在写库前收口，任何一条路线都不可能再带上景区伞形点。
+            const sanitized = filterRouteStops(stops, dbLocById, stopEligibility);
+            if (sanitized.dropped.length) {
+              warnings.push(`🚫 路线"${plan.label}"剔除景区伞形/泛指点 ${sanitized.dropped.length} 个：${sanitized.dropped.join("/")}`);
+            }
+            stops = sanitized.kept;
+            if (!stops.length && !plan.allow) stops = coreFallbackStops(plan.label, "AI 选点全是景区伞形名");
+            // v93：主题游的分区结构落库。AI 若按分组写了小节文案就并进来，
+            // 没写就留空字符串，前端退化为"只列景区与其内景点"，不影响可用性。
+            const aiSections = Array.isArray(ai.sections) ? ai.sections : [];
+            const sections = (plan.sections || []).map(sec => {
+              const kept = sec.allow.filter(id => stops.includes(id));
+              const hit = aiSections.find((x: any) => {
+                const name = String(x?.name || "").trim();
+                return !!name && (sec.name.includes(name) || name.includes(sec.name));
+              });
+              return {
+                key: sec.key, name: sec.name, kind: sec.kind,
+                stopIds: kept.length ? kept : sec.allow.filter(id => stops.includes(id)),
+                text: typeof hit?.text === "string" ? hit.text.trim().slice(0, 400) : "",
+              };
+            }).filter(sec => sec.stopIds.length);
+
             return {
               id: `${scope}-r${i + 1}`,
               day_label: plan.label,
               title: plan.title,
               stops,
+              sections,
               narrative: typeof ai.narrative === "string" ? ai.narrative : "",
               sort_order: i,
               _free: !plan.allow, // v70.4：自由选点路线（文学巡礼线）标记，去重时跳过
             };
           }).filter(r => r.stops.length > 0);
 
-          // 去重：stops 集合完全相同才视为重复，保留先出现的（1日精华优先）
-          // v70.4：文学巡礼线（自由选点）不参与去重——它是主题叙事路线，价值在 narrative，
-          // 站点与 1日精华重叠是预期行为（黄山实测：AI 自由选的 8 站与 1日 top8 同集合被误杀）
-          const seenKeys = new Set<string>();
-          const dedupedRoutes: any[] = [];
-          for (const r of allRoutes) {
-            if (r._free) { dedupedRoutes.push(r); continue; }
-            const key = [...r.stops].sort().join("|");
-            if (!seenKeys.has(key)) { seenKeys.add(key); dedupedRoutes.push(r); }
+          // v90：重复路线去重。旧实现只认"排序后集合完全相等"，既漏掉近似重复，
+          // 也与文档宣称的"重叠 >70%"不一致。相似度必须用 Jaccard（交集/并集），
+          // 不能用包含率：2日全景游按构造就是 [...1日核心站点, ...第二景区站点]，
+          // 必然完全包含 1日线，按包含率现网 18 组路线对里 12 组会"重叠 100%"，
+          // 那样会把多日线全部删掉。实测 Jaccard：真重复 100%，合法包含关系最高 80%。
+          const dedup = dedupeRoutes(allRoutes);
+          for (const dup of dedup.dropped) {
+            warnings.push(`♻️ 路线"${dup.dropLabel}"与"${dup.keepLabel}"站点集合${dup.identical ? "完全相同" : `重复度 ${Math.round(dup.similarity * 100)}%`}，已去掉后一条`);
           }
-          routes = dedupedRoutes;
+          for (const dup of dedup.suspicious) {
+            // v70.4 的结论保留：文学巡礼线价值在叙事，不因撞站被删。
+            // 但撞成完全相同必须让创作者看见，否则等于把"AI 抄了一遍 1日线"藏起来。
+            warnings.push(`⚠️ 路线"${dup.dropLabel}"与"${dup.keepLabel}"站点集合${dup.identical ? "完全相同" : `重复度 ${Math.round(dup.similarity * 100)}%`}，未自动删除（自由选点路线），请核实是否应改为按情节线索选点`);
+          }
+          routes = dedup.routes;
         }
         return routes;
       })(),
@@ -679,6 +809,7 @@ Deno.serve(async (req: Request) => {
     // 都写入 process_report；只有主题游允许长距离接驳（它本来就串联 60km 内独立景点）。
     let routeGraphIssueCount = 0;
     let routeDurationMinutes = 0;
+    const gateBlocking: { label: string; message: string }[] = [];
     for (const route of routes) {
       const legs = buildRouteLegs(route.stops, dbLocs, routeKnowledge);
       route.legs = legs;
@@ -686,8 +817,12 @@ Deno.serve(async (req: Request) => {
       const issues = routeGraphIssues(route.stops, dbLocs, routeKnowledge, {
         allowLongTransfers: route.day_label === "主题游",
         dayLabel: route.day_label,
+        // 主题游是 N 个可连着玩的景区，按 N 日计容量；
+        // 按 1 日算会把正常的分组主题游全判成超容量（v93）。
+        dayCount: route.sections?.length && route.day_label === "主题游" ? route.sections.length : undefined,
       });
       routeGraphIssueCount += issues.length;
+      for (const issue of blockingIssues(issues)) gateBlocking.push({ label: route.day_label, message: issue.message });
       for (const issue of issues) warnings.push(`🧭 路线「${route.day_label}」${issue.message}`);
     }
 
@@ -721,16 +856,34 @@ Deno.serve(async (req: Request) => {
         if (prof) routeProfiles.set(route.id, prof);
       }
     }));
-    await postRows("routes", routes.map(r => ({ id: r.id, tour_id: tourId, day_label: r.day_label, title: r.title, stops: r.stops, legs: r.legs || [], prof: routeProfiles.get(r.id) || [], narrative: r.narrative, sort_order: r.sort_order })));
+    await postRows("routes", routes.map(r => ({ id: r.id, tour_id: tourId, day_label: r.day_label, title: r.title, stops: r.stops, sections: r.sections || [], legs: r.legs || [], prof: routeProfiles.get(r.id) || [], narrative: r.narrative, sort_order: r.sort_order })));
 
     // Quality report
     const report = {
       locations: locs.length,
       routes: routes.length,
-      plans: plans.length, // v70.3 诊断：计划路线数 vs 实际路线数
+      plans: plans.length, // v70.3 诊断：计划路线数 vs 实际路线数（v89 起会随能力授权收敛）
       corePool: corePoolSize, mainScenic: mainScenicName, coreScenic: coreScenicName,
-      routeKnowledge: { source: routeKnowledge.source, confidence: routeKnowledge.confidence, destination: routeKnowledge.destinationName },
+      // 主题游分区结构概览（v93）
+      themeSections: routes.filter((r: any) => r.day_label === "主题游")
+        .map((r: any) => ({ route: r.day_label, groups: (r.sections || []).map((s: any) => ({ name: s.name, kind: s.kind, stops: s.stopIds.length })) })),
+      routeKnowledge: {
+        source: routeKnowledge.source, confidence: routeKnowledge.confidence, destination: routeKnowledge.destinationName,
+        tier, capabilities,
+        // v91：可解释的完整度评分。旧 confidence 只数"抓回几段文本"，
+        // 实测一次研究把武汉东湖的维基条目当成玉龙雪山证据也照样加分。
+        quality, gaps: qualityGaps(quality),
+      },
+      suppressedPlans,
+      knowledgeTier: tier, knowledgeTierLabel: TIER_LABEL[tier],
       routeGraph: { checked: routes.length, issues: routeGraphIssueCount, estimatedMinutes: Math.round(routeDurationMinutes) },
+      // 闸门结论：blocking 非空 → needs_review（内容照常落库，创作者可编辑，但不能直接发布）
+      gate: {
+        blocking: gateBlocking,
+        repairs: planRepairNotes.length,
+        routes: routes.length,
+        plans: plans.length,
+      },
       warnings: warnings.length > 0 ? warnings : undefined,
       rejected: (lr.locations || []).length - extractedBeforeDedup, // regeo/坐标校验被拒
       deduped: extractedBeforeDedup - afterExtractDedup, // 坐标去重数（在地区/子景点并入前计算）
@@ -744,8 +897,20 @@ Deno.serve(async (req: Request) => {
       }).catch(() => {});
     }
     // v70：成功时清掉旧错误、质量报告（含全部告警）落库，审核页可见
-    await setStatus(tourId, "done", null, { ...report, at: new Date().toISOString() });
-    return json({ success: true, ...report });
+    // 闸门：路线内容始终写库（不丢创作者的数据），但阻断"直接可发布"。
+    // 只有 advisory（资料缺覆盖、系统已按物理量推断）时照常 done，避免新目的地全被拦死。
+    const finalStatus = gateBlocking.length ? "needs_review" : "done";
+    // 闸门拦截了一个**已经公开**的导览：本轮已 deleteRows + 重写 routes，
+    // 不撤公开就会把没过检的路线直接推给终端游客。这里自动转回私有并在报告里写明原因，
+    // 创作者核实后可重新发布。宁可退回私有，也不把已知有缺陷的动线留在公开展示位。
+    const wasPublic = !!tour.is_public;
+    const unpublish = gateBlocking.length && wasPublic;
+    if (unpublish) {
+      warnings.push(`🔒 导览原为公开状态，因存在 ${gateBlocking.length} 个阻断级路线问题已自动转为私有，核实后可重新发布`);
+    }
+    const finalReport = { ...report, gate: { ...report.gate, unpublished: unpublish }, warnings: warnings.length ? warnings : undefined, at: new Date().toISOString() };
+    await setStatus(tourId, finalStatus, null, finalReport, unpublish ? { is_public: false } : undefined);
+    return json({ success: true, status: finalStatus, unpublished: unpublish, ...report });
   } catch (e: any) {
     console.error(e);
     // v70：失败原因落库——此前只返回给 pg_net 触发器（被丢弃），前端只能显示"服务器端出错"

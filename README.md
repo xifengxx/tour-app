@@ -53,8 +53,12 @@ tour-app/
 │   ├── anchors.ts       # 景区锚点和子景点归属
 │   └── routes.ts        # 确定性路线规划
 ├── public/data/         # 静态导览 JSON（衡山、华山）
-├── scripts/             # 数据导入脚本
-│   └── insert-tour.mjs      # 标准化 Supabase 写入脚本
+├── scripts/             # 数据与质检脚本
+│   ├── insert-tour.mjs      # 标准化 Supabase 写入
+│   ├── test-gaode.mjs       # 高德解析与路线规则断言（无需密钥的部分可离线跑）
+│   ├── dry-run-pipeline.mjs # 全管线 dry-run，支持 --mode A/B 对比
+│   ├── audit-routes.ts      # 路线质量体检：重算现网路线的交通分段/结构问题/分级与重复
+│   └── reprocess-tours.ts   # 存量导览重跑（默认 dry-run，--apply 才写库并自动备份）
 ├── APP-DOCS.md          # 开发文档（完整流程、密钥、故障排查）
 ├── DESIGN.md            # 设计规范（Claude/Anthropic 风格：羊皮纸+陶土+衬线）
 └── supabase-migration.sql
@@ -68,6 +72,7 @@ tour-app/
 - 新增导览（自动化流程）
 - AI 自动处理架构：**[docs/AI-AUTO-PROCESSING.md](./docs/AI-AUTO-PROCESSING.md)**
 - 数据写入方法对比
+- 路线质量体检与存量重跑：`scripts/audit-routes.ts`、`scripts/reprocess-tours.ts`
 - 常见问题与解决方案
 - 本次优化记录：**[docs/OPTIMIZATION-2026-09.md](./docs/OPTIMIZATION-2026-09.md)**
 - 安全与已接受风险：**[SECURITY.md](./SECURITY.md)**

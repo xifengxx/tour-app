@@ -1,0 +1,208 @@
+{
+  "destinationName": "玉龙雪山",
+  "aliases": [
+    "玉龙雪山",
+    "玉龙雪山国家级风景名胜区",
+    "丽江玉龙雪山",
+    "玉龙雪山景区"
+  ],
+  "zones": [
+    {
+      "id": "zone_glacier_park",
+      "name": "冰川公园",
+      "aliases": [
+        "玉龙雪山冰川公园",
+        "大索道冰川公园"
+      ]
+    },
+    {
+      "id": "zone_blue_moon_valley",
+      "name": "蓝月谷",
+      "aliases": [
+        "玉龙雪山蓝月谷",
+        "白水河蓝月谷"
+      ]
+    },
+    {
+      "id": "zone_yak_meadow",
+      "name": "牦牛坪",
+      "aliases": [
+        "牦牛坪景区",
+        "牦牛坪索道"
+      ]
+    }
+  ],
+  "trails": [
+    {
+      "id": "trail_glacier_park",
+      "aliases": [
+        "玉龙雪山",
+        "冰川公园",
+        "玉龙雪山冰川公园游览线",
+        "玉龙雪山大索道线"
+      ],
+      "scenicName": "冰川公园",
+      "zoneId": "zone_glacier_park",
+      "stops": [
+        {
+          "name": "玉龙雪山国家级风景名胜区游客服务中心",
+          "aliases": [
+            "游客中心站",
+            "新游客服务中心"
+          ],
+          "evidenceBound": false,
+          "required": true
+        },
+        {
+          "name": "索道候车厅",
+          "aliases": [
+            "大索道候车厅"
+          ],
+          "evidenceBound": false,
+          "required": true
+        },
+        {
+          "name": "玉龙雪山国家级风景名胜区冰川公园",
+          "aliases": [
+            "冰川公园",
+            "大索道上站"
+          ],
+          "evidenceBound": false,
+          "required": true
+        }
+      ],
+      "notes": "从游客中心乘索道至冰川公园，原路返回。",
+      "evidence": [
+        "丽江雪山观光火车为中华人民共和国云南省丽江市的一条有轨电车线路，主要服务于玉龙雪山观光旅游，于2025年2月12日开通初期运营。",
+        "线路主要为玉龙雪山观光设立，南起山脚的游客中心站，北至山上的玉龙雪山站，全线沿674国道设置，全长20.465km，共设有5座车站，全部为地面站。"
+      ]
+    },
+    {
+      "id": "trail_blue_moon_valley",
+      "aliases": [
+        "玉龙雪山",
+        "蓝月谷",
+        "玉龙雪山蓝月谷游览线",
+        "蓝月谷步行线"
+      ],
+      "scenicName": "蓝月谷",
+      "zoneId": "zone_blue_moon_valley",
+      "stops": [
+        {
+          "name": "蓝月谷导览驿站",
+          "aliases": [
+            "蓝月谷游客服务点"
+          ],
+          "lat": 27.12624,
+          "lng": 100.24754,
+          "evidenceBound": true,
+          "required": true
+        },
+        {
+          "name": "蓝月谷二级坝旅游厕所",
+          "aliases": [
+            "蓝月谷二级坝"
+          ],
+          "lat": 27.12561,
+          "lng": 100.24812,
+          "evidenceBound": true,
+          "required": true
+        },
+        {
+          "name": "玉龙雪山国家级风景名胜区蓝月谷",
+          "aliases": [
+            "蓝月谷"
+          ],
+          "lat": 27.09892,
+          "lng": 100.2595,
+          "evidenceBound": true,
+          "required": true
+        }
+      ],
+      "notes": "蓝月谷内部步行游览，可乘游览车辅助。",
+      "evidence": [
+        "玉龙雪山国家级风景名胜区蓝月谷 @27.09892,100.25950",
+        "蓝月谷导览驿站 @27.12624,100.24754",
+        "蓝月谷二级坝旅游厕所 @27.12561,100.24812"
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "from": "玉龙雪山国家级风景名胜区游客服务中心",
+      "to": "索道候车厅",
+      "mode": "cableway",
+      "duration": "约5分钟",
+      "note": "游客中心内步行至索道候车厅"
+    },
+    {
+      "from": "索道候车厅",
+      "to": "玉龙雪山国家级风景名胜区冰川公园",
+      "mode": "cableway",
+      "duration": "约20分钟",
+      "note": "乘大索道上山至冰川公园"
+    },
+    {
+      "from": "玉龙雪山国家级风景名胜区游客服务中心",
+      "to": "蓝月谷导览驿站",
+      "mode": "shuttle",
+      "duration": "约15分钟",
+      "note": "景区观光车接驳至蓝月谷"
+    },
+    {
+      "from": "蓝月谷导览驿站",
+      "to": "玉龙雪山国家级风景名胜区蓝月谷",
+      "mode": "walk",
+      "duration": "约10分钟",
+      "note": "步行进入蓝月谷核心区"
+    },
+    {
+      "from": "玉龙雪山国家级风景名胜区游客服务中心",
+      "to": "牦牛坪下部站",
+      "mode": "cableway",
+      "duration": "约30分钟",
+      "note": "景区观光车接驳至牦牛坪索道下站"
+    },
+    {
+      "from": "牦牛坪下部站",
+      "to": "牦牛坪",
+      "mode": "cableway",
+      "duration": "约20分钟",
+      "note": "乘牦牛坪索道上山"
+    }
+  ],
+  "source": "auto-research",
+  "confidence": 0.64,
+  "quality": {
+    "score": 0.64,
+    "grade": "weak",
+    "parts": {
+      "sourceTrust": 0.55,
+      "coordCoverage": 0.5,
+      "evidenceCoverage": 0.5,
+      "sitePurity": 0.83,
+      "structureCompleteness": 1
+    },
+    "transportCoverage": 0.5,
+    "stops": 6,
+    "trails": 2,
+    "edges": 6
+  },
+  "generatedAt": "2026-10-14T09:35:41.286Z",
+  "evidence": [
+    {
+      "provider": "wikipedia",
+      "title": "丽江雪山观光火车",
+      "url": "https://zh.wikipedia.org/wiki/%E4%B8%BD%E6%B1%9F%E9%9B%AA%E5%B1%B1%E8%A7%82%E5%85%89%E7%81%AB%E8%BD%A6"
+    },
+    {
+      "provider": "wikipedia",
+      "title": "东湖 (武汉)",
+      "url": "https://zh.wikipedia.org/wiki/%E4%B8%9C%E6%B9%96%20(%E6%AD%A6%E6%B1%89)"
+    },
+    {
+      "provider": "amap",
+      "title": "周边景点"
+    }
+  ]
+}

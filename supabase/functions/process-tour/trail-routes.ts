@@ -1,5 +1,6 @@
 import { haversineM } from "./geo.ts";
 import { landmarkKey } from "./gaode-scan.ts";
+import { isNonSitePOI, isTransferPOI } from "./poi-filter.ts";
 import type { TrailRoute, TrailStop } from "./route-knowledge-types.ts";
 
 export type { TrailRoute, TrailStop } from "./route-knowledge-types.ts";
@@ -177,8 +178,16 @@ export function injectTrailSeeds(
   const selected = selectTrail(destName, locs, trails);
   if (!selected) return [];
   const added: string[] = [];
-  for (const stop of selected.route.stops) {
-    if (!stop.required || !stop.lat || !stop.lng) continue;
+  const stops = selected.route.stops;
+  stops.forEach((stop, stopIndex) => {
+    if (!stop.required || !stop.lat || !stop.lng) return;
+    // v90：步道种子同样要过非游览点判据。此前认为"种子来自策展知识所以安全"，
+    // 这个假设被实测推翻了：auto-research 给玉龙雪山抽的 6 个步道点里有 4 个是设施
+    // （游客服务中心 / 索道候车厅 / 二级坝旅游厕所 / 游览车候车厅），
+    // 全部带坐标且被标 required，不设这道闸会把公共厕所当景点注入并排进路线。
+    // 但入口/换乘设施（游客中心、索道站）确实是动线节点，"从游客中心乘索道进入"
+    // 需要一个起点，所以只在该步道的第一个站点放行。
+    if (isNonSitePOI(stop.name) && !(stopIndex === 0 && isTransferPOI(stop.name))) return;
     // 语义键必须先于模糊名称匹配。“武功山风景名胜区金顶”和“金顶”是同一地标；
     // 而“武功山金顶帐篷”只是营地，不能因名称包含“金顶”就抢走或复刻金顶站点。
     const stopKeys = trailAliases(stop).map(alias => landmarkKey(alias, destName)).filter(Boolean);
@@ -186,7 +195,7 @@ export function injectTrailSeeds(
       const locKey = landmarkKey(l.name, destName);
       return !!locKey && stopKeys.includes(locKey);
     });
-    if (semanticHit || locs.some(l => scoreCandidate(l, stop))) continue;
+    if (semanticHit || locs.some(l => scoreCandidate(l, stop))) return;
     const id = `trail-${locs.length}`;
     locs.push({
       id,
@@ -203,7 +212,7 @@ export function injectTrailSeeds(
       sort_order: locs.length,
     });
     added.push(stop.name);
-  }
+  });
   return added;
 }
 

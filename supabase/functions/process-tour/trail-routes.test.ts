@@ -112,3 +112,56 @@ describe("curated trail routes", () => {
     expect(ordered.slice(oneDay.length)).toEqual(["shaolin", "talin", "sanhuangzhai", "shaoshiStele"]);
   });
 });
+
+describe("步道种子补全只接受游览点（v90）", () => {
+  // 取自本地 research-knowledge.ts 对玉龙雪山的真实 auto-research 产出：
+  // 6 个步道点里 4 个是设施（游客服务中心/索道候车厅/二级坝旅游厕所/游览车候车厅），
+  // 且都带坐标、都被标 required。修复前它们会被当作景点注入导览并排进路线。
+  const blueMoonTrail = {
+    id: "trail_blue_moon_valley",
+    aliases: ["玉龙雪山", "蓝月谷"],
+    scenicName: "蓝月谷",
+    zoneId: "zone_blue_moon_valley",
+    stops: [
+      { name: "蓝月谷导览驿站", lat: 27.12624, lng: 100.24754, required: true },
+      { name: "蓝月谷二级坝旅游厕所", lat: 27.12561, lng: 100.24812, required: true },
+      { name: "蓝月谷游览车-候车厅", lat: 27.1259, lng: 100.2479, required: true },
+      { name: "蓝月谷湖心观景处", lat: 27.1245, lng: 100.246, required: true },
+    ],
+  };
+  const entranceTrail = {
+    id: "trail_glacier_park",
+    aliases: ["玉龙雪山", "冰川公园"],
+    scenicName: "冰川公园",
+    zoneId: "zone_glacier_park",
+    // selectTrail 要求至少 2 个站点能命中已有地点才信任这条步道，因此
+    // 冰川公园与观景台都要有对应 loc；游客服务中心与厕所故意没有。
+    stops: [
+      { name: "玉龙雪山国家级风景名胜区游客服务中心", lat: 27.09752, lng: 100.25875, required: true },
+      { name: "索道候车厅", lat: 27.12717, lng: 100.23471, required: true },
+      { name: "冰川公园售票处", lat: 27.1299, lng: 100.2311, required: true },
+      { name: "玉龙雪山国家级风景名胜区冰川公园", lat: 27.13, lng: 100.23, required: true },
+      { name: "冰川公园观景台", lat: 27.1305, lng: 100.2295, required: true },
+    ],
+  };
+
+  it("中段设施点不再被注入为景点", () => {
+    const locs = [loc("valley", "玉龙雪山国家级风景名胜区蓝月谷", 100.247, 27.126)];
+    const added = injectTrailSeeds(locs, "蓝月谷", "蓝月谷", [blueMoonTrail]);
+    expect(added).not.toContain("蓝月谷二级坝旅游厕所");
+    expect(added).not.toContain("蓝月谷游览车-候车厅");
+    expect(locs.some((l: any) => /厕所|候车厅/.test(l.name))).toBe(false);
+  });
+
+  it("步道首站的入口/换乘设施可以补全，中段设施点不注入", () => {
+    const locs = [
+      loc("park", "玉龙雪山国家级风景名胜区冰川公园", 100.23, 27.13),
+      loc("view", "冰川公园观景台", 100.2295, 27.1305),
+    ];
+    const added = injectTrailSeeds(locs, "冰川公园", "冰川公园", [entranceTrail]);
+    expect(added).toContain("玉龙雪山国家级风景名胜区游客服务中心"); // 首站：动线起点
+    expect(added).not.toContain("索道候车厅");   // 中段登乘点由交通边表达
+    expect(added).not.toContain("冰川公园售票处"); // 售票设施不注入
+    expect(locs.filter((l: any) => /候车厅|售票处/.test(l.name))).toEqual([]);
+  });
+});
