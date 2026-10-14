@@ -14,7 +14,8 @@
 //
 // 只读：全程仅 SELECT，不写库、不改文件（除 --json 显式指定的输出）。
 
-import { blockingIssues, buildRouteLegs, estimateRouteDuration, repairPlanStops, routeGraphIssues, routeLegsText } from "../supabase/functions/process-tour/route-graph.ts";
+import { blockingIssues, buildRouteLegs, estimateRouteDuration, matchLocsToGraph, buildRouteGraph, repairPlanStops, routeGraphIssues, routeLegsText } from "../supabase/functions/process-tour/route-graph.ts";
+import { qualityGaps, scoreKnowledge } from "../supabase/functions/process-tour/knowledge-quality.ts";
 import { isRouteStopEligible } from "../supabase/functions/process-tour/routes.ts";
 import { tierCapabilities, tierForSource, TIER_LABEL } from "../supabase/functions/process-tour/knowledge-tier.ts";
 import { findDuplicateRoutes } from "../supabase/functions/process-tour/route-dedup.ts";
@@ -111,7 +112,7 @@ const MODE_RANK: Record<string, number> = { walk: 0, cableway: 1, shuttle: 1, ot
 
 const tours = await select<Tour>("tours?select=id,title,created_at,status,destination,process_report&order=created_at.desc" + (Deno.args.includes("--all") ? "" : "&is_public=eq.true"));
 const rows: any[] = [];
-const summary = { tours: 0, tierL3: 0, tierL2: 0, tierL1: 0, wouldSuppressMultiDay: 0, wouldSuppressTheme: 0, routes: 0, storedLegs: 0, missingLegs: 0, modeChanged: 0, upgraded: 0, downgraded: 0, issues: 0, longDay: 0, legacyUmbrellaStops: 0, legacyUmbrellaRoutes: 0, blocking: 0, gateBlockedRoutes: 0, repairableByReorder: 0, duplicatePairs: 0, toursWithDuplicates: 0 };
+const summary = { tours: 0, tierL3: 0, tierL2: 0, tierL1: 0, wouldSuppressMultiDay: 0, wouldSuppressTheme: 0, routes: 0, storedLegs: 0, missingLegs: 0, modeChanged: 0, upgraded: 0, downgraded: 0, issues: 0, longDay: 0, legacyUmbrellaStops: 0, legacyUmbrellaRoutes: 0, blocking: 0, gateBlockedRoutes: 0, repairableByReorder: 0, duplicatePairs: 0, toursWithDuplicates: 0, boundStops: 0, routeStops: 0 };
 // 无知识路径下的"改判"不代表线上会变好：那些目的地在生产上有 auto-research/策展边，
 // 只是 destination_route_knowledge 受 RLS 保护、本脚本用 anon key 读不到。
 // 混进主计数会把工具读数误导成"降级了 N 条路线"，所以单独统计。
@@ -126,6 +127,8 @@ for (const tour of tours) {
   const coreDest = resolveCoreDestination(tour, String(tour.destination?.name || ""));
   const knowledge = knowledgeFor(coreDest);
   const hasKnowledge = knowledge.source !== "none";
+  const stopIdsOfAll = (await select<RouteRow>(`routes?select=stops&tour_id=eq.${tour.id}&order=sort_order`))
+    .flatMap((r: any) => r.stops || []);
   // 分级判定优先采用 process_report 记录的**当次实际知识来源**：
   // anon key 读不到 destination_route_knowledge，本脚本重建时只能给出 builtin/none，
   // 而线上真实走的是 auto-research 还是 curated，报告里已经写明。
@@ -142,6 +145,15 @@ for (const tour of tours) {
   if (tier === "L3") summary.tierL3++; else if (tier === "L2") summary.tierL2++; else summary.tierL1++;
   summary.tours++;
   if (!hasKnowledge) noKnowledge.tours++;
+  // 知识绑定率：有多少路线站点真的能对应到知识图上的节点。
+  // 这是"有知识"与"知识可用"的区别 —— 玉龙雪山实测 edges 有 5 条，
+  // 但只有 2 条能连上相邻站点对，其余等于死数据。
+  const graph = buildRouteGraph(knowledge);
+  const boundIds = [...matchLocsToGraph(stopIdsOfAll, locs as any[], graph).keys()];
+  summary.routeStops += stopIdsOfAll.length;
+  summary.boundStops += boundIds.length;
+  const quality = knowledge.trails.length ? scoreKnowledge(knowledge) : null;
+
   console.log(`\n── ${tour.title}  (${tour.created_at.slice(0, 10)} / 知识=${effectiveKnowledge.source}${recorded ? "" : "（报告未记录，按重建推断）"} → ${tier} ${TIER_LABEL[tier]}, ${locs.length} 地点)`);
 
   // 重复路线是"少而重复"的质量问题：现网三清山两条 10 站完全相同的路线就是这么发出去的。
@@ -158,6 +170,11 @@ for (const tour of tours) {
     for (const d of dupPairs) {
       console.log(`       ⛔ 重复路线：「${d.dropLabel}」与「${d.keepLabel}」站点集合${d.identical ? "完全相同" : `重复度 ${Math.round(d.similarity * 100)}%`} → ${d.exempted ? "自由选点路线，重跑不会删除，需人工核实是否应改按情节线索选点" : "重跑会去掉后一条"}`);
     }
+  }
+
+  if (quality) {
+    console.log(`   知识完整度 ${quality.score}（${quality.grade}）｜交通边覆盖 ${quality.transportCoverage}｜本次路线站点绑定 ${boundIds.length}/${stopIdsOfAll.length}`);
+    for (const g of qualityGaps(quality)) console.log(`     缺口：${g}`);
   }
 
   for (const route of routes) {
@@ -242,6 +259,8 @@ for (const tour of tours) {
       durationMinutes: duration.totalMinutes,
       narrativeInstruction: routeLegsText(next),
       tier, knowledgeSource: effectiveKnowledge.source, tierLabel: TIER_LABEL[tier], suppressedByTier,
+      bindingRate: stopIdsOfAll.length ? boundIds.length / stopIdsOfAll.length : null,
+      knowledgeQuality: quality ? quality.score : null,
       duplicatePairs: dupPairs.map(d => ({ keep: d.keepLabel, drop: d.dropLabel, identical: d.identical, exempted: d.exempted })),
       umbrellaStops: umbrellaStops.map((l: any) => l.name),
     });

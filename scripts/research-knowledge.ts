@@ -16,7 +16,9 @@
 //     scripts/research-knowledge.ts 玉龙雪山 云南 --out scripts/out/knowledge/玉龙雪山.json
 
 import { researchRouteKnowledge } from "../supabase/functions/route-research/research.ts";
+import { scoreKnowledge } from "../supabase/functions/process-tour/knowledge-quality.ts";
 import { capabilitiesFor, TIER_LABEL } from "../supabase/functions/process-tour/knowledge-tier.ts";
+import { qualityGaps } from "../supabase/functions/process-tour/knowledge-quality.ts";
 import type { DestinationRouteKnowledge } from "../supabase/functions/process-tour/route-knowledge-types.ts";
 
 const [dest, region = "", ...rest] = Deno.args;
@@ -52,11 +54,21 @@ const knowledge: DestinationRouteKnowledge = {
   trails: result.trails,
   edges: result.edges,
   source: "auto-research",
+  // result.confidence 已由 normalizeResearchResult 按证据事实算出（v91），
+  // 模型自评级在归一化阶段就被丢弃。
   confidence: result.confidence,
 };
 const { tier, capabilities } = capabilitiesFor(knowledge);
 
-console.log(`\n抽取结果：zones ${result.zones.length} / trails ${result.trails.length} / edges ${result.edges.length} / 置信度 ${result.confidence}`);
+console.log(`\n抽取结果：zones ${result.zones.length} / trails ${result.trails.length} / edges ${result.edges.length}`);
+const quality = (knowledge.quality ??= scoreKnowledge(knowledge));
+console.log(`完整度 ${quality.score}（${quality.grade}）　分项：来源 ${quality.parts.sourceTrust} ｜ 坐标覆盖 ${quality.parts.coordCoverage} ｜ 证据可追溯 ${quality.parts.evidenceCoverage} ｜ 无设施噪声 ${quality.parts.sitePurity} ｜ 结构 ${quality.parts.structureCompleteness} ｜ 交通边覆盖 ${quality.transportCoverage}`);
+const gaps = qualityGaps(quality);
+if (gaps.length) {
+  console.log("待补齐：");
+  for (const g of gaps) console.log(`  · ${g}`);
+}
+console.log(`落库时 confidence 使用 ${quality.score}（自动研究上限 0.8，不会盖过人工策展）`);
 console.log(`能力分层：${tier} ${TIER_LABEL[tier]} → 多日线 ${capabilities.multiDay ? "允许" : "不允许"}、主题游 ${capabilities.themeTour ? "允许" : "不允许"}、分区选点 ${capabilities.zoneDriven ? "允许" : "不允许"}、交通断言 ${capabilities.assertTransport ? "允许" : "不允许"}`);
 
 const modes: Record<string, number> = {};

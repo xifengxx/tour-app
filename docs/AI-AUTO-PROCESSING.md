@@ -147,8 +147,10 @@ npx supabase functions deploy process-tour --project-ref qxunedraoviaonjdanag --
 | 2026-09-04 v85 | 新增地名语义清洗层：同一地标的不同官方写法合并，目的地伞形名标记为 `景区泛指` 且不进入徒步路线；店铺、道路名在地区合并和路线组成层过滤；路线补全不再把语义相邻但性质不同的 POI（如“金顶帐篷”）当成同一站点；单条已知步道也可接管核心景区池。 |
 | 2026-10-13 v86a | 路线海拔剖面：`elevation.ts` 沿站点插值采样 OpenTopoData 写入 `routes.prof`；`destination.ts` 从标题解析真实景区核心名；地理编码优先行政区（提交 `2cecd30`/`22d3d28`/`ca2b0f1`） |
 | 2026-10-13 v87 | 地图海拔联动叠加层：`ElevationProfile` 与路线进度圆点联动；`planRoutes` 按知识层 `zones` 拆分路线池；索道显式边同时覆盖正反向，修「索道上、徒步下」 |
+| 2026-10-14 v88 | 路线质量收口（详见下文「路线质量收口（v88-v89）」）：交通方式改由直线距离**分层 + 高差**决定且资料显式边保持权威；车程按绕行系数与山区均速估算；`routeGraphIssues` 不再在无知识目的地整体短路、主题游不再整体豁免长距离检查、整体反向视为合法下撤；新增 `poi-filter.ts` 统一五路入口的非游览点判据与总闸；`process_report` 首次接入审核页（`ProcessReport`/`RouteIssueList`）；新增 `scripts/audit-routes.ts` 路线质量体检与回归基线 |
 | 2026-10-14 v89 | 路线知识能力分层：`knowledge-tier.ts` 把知识来源映射成能力授权（L1/L2/L3），未核实知识不再支撑 2日全景游、主题游与分区选点；`planRoutes` 通过 `capabilities` + `onSuppressed` 降级产出并把原因写进 `report.suppressedPlans`；审核页说明分级与解锁方式。实测现网 34 条路线有 13 条（38%）本就不该自动生成 |
-| 2026-10-14 v88 | 路线质量收口（详见下文「路线质量收口（v88）」）：交通方式改由直线距离**分层 + 高差**决定且资料显式边保持权威；车程按绕行系数与山区均速估算；`routeGraphIssues` 不再在无知识目的地整体短路、主题游不再整体豁免长距离检查、整体反向视为合法下撤；新增 `poi-filter.ts` 统一五路入口的非游览点判据与总闸；`process_report` 首次接入审核页（`ProcessReport`/`RouteIssueList`）；新增 `scripts/audit-routes.ts` 路线质量体检与回归基线 |
+| 2026-10-14 v90 | 重复路线检测与存量重跑：`route-dedup.ts` 用 Jaccard ≥0.9 判重（不能用包含率，2日线按构造完全包含 1日线）；自由选点撞站改为上报不删除；`scripts/reprocess-tours.ts` 带 dry-run/备份/--confirm 范围复核/串行四道安全闸；`research-knowledge.ts` 离线复现真实知识（只读、不写库），实测暴露证据噪声、厕所被当景点注入、设施节点派生别名冒充游览点三类缺陷并修复 |
+| 2026-10-14 v91 | 可信度改为可解释评分：`knowledge-quality.ts` 按来源权威度/坐标覆盖/证据可追溯/设施噪声/结构打分；交通断言要求显式边覆盖 ≥0.6 的相邻站点对；知识选路先分级再完整度；体检增加知识绑定率指标（玉龙雪山实测 21 站仅 2 站可绑定到知识节点） |
 
 ## 测试记录
 
@@ -674,9 +676,8 @@ deno run ... scripts/audit-routes.ts --json scripts/out/route-audit-baseline.jso
 - **闸门未做路线降级**：只实现了"重排 + 按容量砍站"两类自动修复，
   没有实现 2日→1日、删除整条主题游这类降级。v89 分层落地后，多日线在缺知识时
   已不会生成，降级的剩余收益主要在"有 L3 知识但当天行程仍排不下"的情形。
-- **伪 confidence 仍在用于知识挑选**：`0.6 + 0.05 × min(证据数,3) + 0.02` 只数证据条数、
-  不检验内容。v89 的分层已经接管"能力授权"，但 `selectRouteKnowledge` 排序仍按 confidence 取值，
-  应改为按 (分级, 证据完整度) 排序，并把 confidence 字段本身换成可解释的证据打分。
+- ~~伪 confidence~~ 已完成（v91）。遗留：历史行里存的仍是旧算法算出的数值，
+  重跑或重新研究时才会覆盖。
 - ~~重复路线检测~~ 已完成（v90，见上文）。存量 2 组重复需重跑才会收敛。
 - **非山岳目的地没有知识入口**：`loadOrResearchRouteKnowledge` 只在
   `destinationType === "mountain"` 时触发自动研究，古城/湖泊/园林类目的地恒为 L1。
@@ -754,3 +755,54 @@ deno run ... scripts/audit-routes.ts --json scripts/out/route-audit-baseline.jso
 - 之前用原始 `destination.name`（丽江）查知识，而线上 `process-tour` 用的是从标题解析出的
   `resolveCoreDestination`（玉龙雪山），导致知识永远匹配不上、读数偏低
 - `--knowledge` 现在既接受"目的地 → 知识"bundle，也接受 research 工具直接导出的单个对象
+
+### 可信度改为可解释评分，并量化知识绑定率（v91）
+
+`confidence = 0.6 + 0.05 × min(证据条数,3) + 0.02` 被替换为 `knowledge-quality.ts`
+的分项评分：
+
+| 分项 | 权重 | 含义 |
+|---|---|---|
+| `sourceTrust` | 0.35 | 来源权威度：人工撰写/确认 1.0｜内置策展 0.8｜机器抽取 0.55｜未知 0.3 |
+| `coordCoverage` | 0.20 | 有坐标的站点比例 |
+| `evidenceCoverage` | 0.15 | 坐标能追溯到外部 POI 证据的站点比例（模型自己填的不算） |
+| `sitePurity` | 0.15 | 步道中不含厕所/售票处等非游览设施（索道候车厅、游客中心属登乘点，不算噪声） |
+| `structureCompleteness` | 0.15 | 有 trails、有 ≥3 站步道、有 zones、有动线备注 |
+
+`transportCoverage` 单独计算：显式交通边覆盖了多少**相邻站点对**。
+`buildRouteGraph` 为 trail 相邻站生成的默认 walk 边（`source: "trail:*"`）不算覆盖，
+因为它只表示"资料没说别的交通方式"。
+
+与 `knowledge-tier` 的分工是刻意的，两个数字不能合并：
+
+- `tier` 回答"来源有没有权威" → 决定能力授权（能不能出多日线、能不能断言交通方式）
+- `quality` 回答"这份知识完不完整" → 决定选路排序、缺口提示与是否解锁交通断言
+
+机器抽取的一行可以坐标很全（quality 高）但依然不该授权多日线（tier L2）。
+
+落地细节：
+
+- `normalizeResearchResult` 给每个站点打 `evidenceBound`（坐标来自外部 POI 证据而非模型自填），
+  `confidence` 改由评分产出，自动研究仍封顶 0.8
+- 提示词不再向模型索取 `confidence`，并明确"模型自评不作数"
+- `selectRouteKnowledge` 排序改为 **先分级、再完整度、最后才看遗留 confidence 字段**
+  （历史行那个字段是按条数算的虚高值，不能继续当唯一依据）
+- `assertTransport` 需要 `transportCoverage ≥ 0.6`，不只是 `edges.length > 0`
+- `process_report.routeKnowledge` 增加 `quality` 与 `gaps`，`audit-routes.ts` 增加**绑定率**指标
+
+同一次玉龙雪山研究连跑两次的实测对比（也再次说明未核实知识不能授权多日线）：
+
+```
+第一次：zones 4 / trails 2 / edges 5，坐标覆盖 1.0，交通边覆盖 0.5 → 0.67 usable
+第二次：zones 3 / trails 2 / edges 6，坐标覆盖 0.5，交通边覆盖 0.5 → 0.64 weak
+旧公式两次都给 0.75
+绑定率：路线 21 个站点里只有 2 个能对应到知识图节点
+```
+
+最后那行是这一节最重要的数字：**"有知识"和"知识可用"是两件事**。
+research 写出了 6 条索道/观光车边，但站点名与实际入库地点对不上，绝大部分是死数据。
+之前我默认前者等于后者，这个假设不成立。
+- **知识绑定率偏低**：v91 实测玉龙雪山 21 个路线站点只有 2 个能对应到知识图节点，
+  research 写出的 6 条索道/观光车边大部分连不上相邻站点对。
+  现在这被 transportCoverage / bindingRate 显式度量并阻断 assertTransport，
+  但要让 L3 名副其实，还需要站点名与高德地点之间的规范化匹配（含别名派生与行政区前缀剥离）。
