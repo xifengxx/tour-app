@@ -566,7 +566,7 @@ Deno.serve(async (req: Request) => {
     if (routeKnowledge.zones.length && !capabilities.zoneDriven) {
       warnings.push(`🔐 1日精华游未采用未经核实的分区选点，改按核心池重要性取点`);
     }
-    // 站内顺序在调 AI 前排定，planText 即最终动线，AI 的 narrative 按此顺序展开
+    // 站内顺序在调 AI 前排定，planTextFor 即最终动线，AI 的 narrative 按此顺序展开
     for (const p of plans) {
       if (!p.allow) continue;
       if (p.sections?.length) {
@@ -628,21 +628,21 @@ Deno.serve(async (req: Request) => {
     const routeTrafficHints = new Map(plans.map(plan => [plan.label, plan.allow ? routeLegsText(buildRouteLegs(plan.allow, locs, routeKnowledge, { sections: plan.sections?.map(sec => sec.allow) })) : ""]));
     const graphNotes = routeGraphNotes(plans.flatMap(p => p.allow || []), dbLocs, routeKnowledge);
     // 每条路线的指定站点清单（文学巡礼线无 allow，AI 自由选）
-    const planText = plans.map((p, i) => {
+    const planTextFor = (p: any, i: number) => {
       const stopsTxt = p.allow
-        ? p.allow.map(id => { const l = locs.find(x => x.id === id); return l ? `${id}: ${l.name}` : id; }).join(", ")
+        ? p.allow.map((id: string) => { const l = locs.find(x => x.id === id); return l ? `${id}: ${l.name}` : id; }).join(", ")
         : "（文学巡礼线：自由选点）";
       const traffic = routeTrafficHints.get(p.label);
-      const sectionText = p.sections?.map(sec => {
-        const secStops = sec.allow.map(id => { const l = locs.find(x => x.id === id); return l ? `${id}: ${l.name}` : id; }).join(", ");
+      const sectionText = p.sections?.map((sec: any) => {
+        const secStops = sec.allow.map((id: string) => { const l = locs.find(x => x.id === id); return l ? `${id}: ${l.name}` : id; }).join(", ");
         return `【${sec.name}】（${sec.kind}）— 该景区内的游览点: ${secStops}`;
       }).join("\n   ");
-      const dayText = p.dayPlan?.map(day => {
-        const dayStops = day.allow.map(id => { const l = locs.find(x => x.id === id); return l ? `${id}: ${l.name}` : id; }).join(", ");
+      const dayText = p.dayPlan?.map((day: any) => {
+        const dayStops = day.allow.map((id: string) => { const l = locs.find(x => x.id === id); return l ? `${id}: ${l.name}` : id; }).join(", ");
         return `${day.label}「${day.title}」 — 指定站点: ${dayStops}`;
       }).join("\n   ");
       return `${i + 1}. ${p.label}「${p.title}」 — 指定站点: ${stopsTxt}${sectionText ? `\n   按景区分组（主题游必须按分组写：先说明主题与这些景区为什么值得连着玩，再逐景区写怎么玩）:\n   ${sectionText}` : ""}${dayText ? `\n   按日分组（必须严格执行）:\n   ${dayText}` : ""}${traffic ? `\n   交通衔接（narrative 必须按此执行）: ${traffic}` : ""}`;
-    }).join("\n");
+    };
 
     const [contentById, routes] = await Promise.all([
       // 3. Content：按 ~5 个分批、并发生成（子景点并入后 locs 可达 25-40）。
@@ -707,28 +707,30 @@ Deno.serve(async (req: Request) => {
       // 4. Routes：与内容并行（只用 locs/id，不依赖内容）
       (async () => {
         let routes: any[] = [];
-          // v95：路线生成也要处理输出截断。内容层早就有"截断→拆半重试"，
-          // 但路线层没有，导致地点多的导览（黄山 17 点）整条被打进 status=error，
-          // 失败原因只有一句 finish_reason=length。
-          const buildRouteMessages = (compact: boolean) => [
+          // v95→v96.1：路线文案改为逐路线生成（每条一次 AI 调用）。
+          // v95 的"整批截断→精简文案重试一次"线上实测仍会失败：恒山在主题游必出后
+          // 路线从 1 条变 2 条，主题游带全部 stops 与逐分区 sections 文案，
+          // 精简文案的输出仍然超 8192 token，一条路线的截断把整条导览打成 status=error。
+          // 与 v70 内容层重写同一结论：容错粒度必须等于失败域——单路线失败降级为
+          // "narrative 留空、站点与分区照常产出"，并如实写进 warnings，禁止静默。
+          const buildRouteMessagesFor = (plan: any, i: number, compact: boolean) => [
             { role: "system", content: "你是旅游路线规划师。只返回JSON。" },
-            { role: "user", content: `${destName}路线。**每条路线的站点及其顺序已由系统按地理动线排定，stops 必须严格按给定顺序逐字输出（这是实际游览顺序，已保证不走回头路），严禁增删替换或调整顺序；文学巡礼线除外（可自由选点与排序）。**\n\n${planText}\n\n${trailNotes ? `参考真实动线：${trailNotes}\n\n` : ""}${graphNotes ? `路线衔接：${graphNotes}\n\n` : ""}要求：\n1. 每条路线按上面的指定站点生成完整行程（从入口/索道进 → 逐点游览 → 出口/索道出）。\n2. narrative 各写 ${compact ? "60-100" : "150-300"} 字完整行程描述：从哪个入口/索道进、每段用什么交通（徒步/索道/观光车）、依次经过哪些地点、从哪里出。narrative 中必须写地点的中文名（如"玉京峰"），严禁写 id 代号。narrative 的游览顺序必须与给定站点顺序一致。山地路线从半山下降到山脚庙宇/游客中心/停车场，或从游客中心前往外围峡谷/悬空景点时，必须写清换乘观光车、摆渡车或专车，不要把长距离位移写成连续徒步。\n3. **2日全景游 narrative 必须明确「第1天前山」「第2天后山」各去哪**；主题游写明主题与串联逻辑。\n4. day_label 必须是上面给定的标签（1日精华游/2日全景游/主题游/文学巡礼线）。\n5. 地点少时压缩天数，严禁编造不存在的多日行程。\n6. stops 数组顺序必须与 narrative 中的实际游览顺序一致（入口/索道在前，依次游览，出口/索道在后）；stops 只能从上面指定 id 中逐字复制。\n7. 路线条数必须与上述完全一致（${plans.length} 条），缺一不可。\n主题游额外要求：按上面给的"按景区分组"输出 sections 数组，每项 {name, text}，name 用给定的景区名原样，text 写 ${compact ? "20-40" : "60-120"} 字"这个景区里怎么玩"；不要把不同景区的点混写成一条连续步行线，景区之间如需乘车就照交通衔接写。\nJSON: {"routes":[{"day_label":"","title":"","stops":["id1","id2"],"narrative":"完整行程描述","sections":[{"name":"","text":""}]}]}` },
+            { role: "user", content: `${destName}路线。**本条路线的站点及其顺序已由系统按地理动线排定，stops 必须严格按给定顺序逐字输出（这是实际游览顺序，已保证不走回头路），严禁增删替换或调整顺序；文学巡礼线除外（可自由选点与排序）。**\n\n${planTextFor(plan, i)}\n\n${trailNotes ? `参考真实动线：${trailNotes}\n\n` : ""}${graphNotes ? `路线衔接：${graphNotes}\n\n` : ""}要求：\n1. 按上面的指定站点生成完整行程（从入口/索道进 → 逐点游览 → 出口/索道出）。\n2. narrative 写 ${compact ? "60-100" : "150-300"} 字完整行程描述：从哪个入口/索道进、每段用什么交通（徒步/索道/观光车）、依次经过哪些地点、从哪里出。narrative 中必须写地点的中文名（如"玉京峰"），严禁写 id 代号。narrative 的游览顺序必须与给定站点顺序一致。山地路线从半山下降到山脚庙宇/游客中心/停车场，或从游客中心前往外围峡谷/悬空景点时，必须写清换乘观光车、摆渡车或专车，不要把长距离位移写成连续徒步。\n3. **2日全景游 narrative 必须明确「第1天前山」「第2天后山」各去哪**；主题游写明主题与串联逻辑。\n4. day_label 必须是给定标签「${plan.label}」。\n5. 地点少时压缩天数，严禁编造不存在的多日行程。\n6. stops 数组顺序必须与 narrative 中的实际游览顺序一致（入口/索道在前，依次游览，出口/索道在后）；stops 只能从上面指定 id 中逐字复制。\n7. 只输出这一条路线：routes 数组长度必须为 1。\n${plan.label === "主题游" ? `主题游额外要求：按上面给的"按景区分组"输出 sections 数组，每项 {name, text}，name 用给定的景区名原样，text 写 ${compact ? "20-40" : "60-120"} 字"这个景区里怎么玩"；不要把不同景区的点混写成一条连续步行线，景区之间如需乘车就照交通衔接写。\n` : ""}JSON: {"routes":[{"day_label":"","title":"","stops":["id1","id2"],"narrative":"完整行程描述","sections":[{"name":"","text":""}]}]}` },
           ];
-          const requestRoutes = async () => {
-            try {
-              return await deepseek(buildRouteMessages(false), { temperature: 0.2 });
-            } catch (e: any) {
-              if (!e.truncated) throw e;
-              warnings.push(`⚠️ 路线文案输出被截断，改用精简文案重试（${plans.length} 条路线）`);
-              return await deepseek(buildRouteMessages(true), { temperature: 0.2 });
+          const requestRoutePlan = async (plan: any, i: number): Promise<any | null> => {
+            for (const compact of [false, true]) {
+              try {
+                const rr = await deepseek(buildRouteMessagesFor(plan, i, compact), { temperature: 0.2 });
+                const one = (rr.routes || [])[0] || null;
+                if (one) return one;
+                warnings.push(`⚠️ 路线"${plan.label}"AI 返回为空${compact ? "（精简文案后仍为空）" : "，改用精简文案重试"}`);
+              } catch (e: any) {
+                const reason = e.truncated ? "输出超 max_tokens 截断" : e.message;
+                warnings.push(`⚠️ 路线"${plan.label}"文案生成${compact ? `仍失败（${reason}），narrative 留空、站点与分区照常产出` : `失败：${reason}，改用精简文案重试`}`);
+              }
             }
+            return null;
           };
-
-        for (let attempt = 0; attempt < 2 && routes.length < plans.length; attempt++) {
-          const rr = await requestRoutes();
-          // Route stop validation: resolve + 确定性兜底。
-          // 注意：不能按数组下标取 plan（AI 返回 routes 的顺序常与 plans 不一致 → 会张冠李戴，
-          // 2日 混入 西岭雪山 就是顺序错位导致的）。按 day_label 模糊匹配 plan，找不到才回退下标。
           // day_label/title/stops 全部以 plan 为准（路线组成 100% 确定），AI 只贡献 narrative 与站内相对顺序。
           // v88：文学巡礼线是自由选点，既可能全部无法 resolve，也可能选中的全是
           // 景区伞形点被资格闸清空。两种情况都必须回退到核心可游览点，
@@ -741,49 +743,31 @@ Deno.serve(async (req: Request) => {
             if (ordered.length) warnings.push(`♻️ 路线"${label}"${reason}，回退核心 ${ordered.length} 站`);
             return ordered;
           };
-          const aiRoutes = rr.routes || [];
-          const allRoutes = plans.map((plan, i: number) => {
-            const ai = aiRoutes.find((x: any) => {
-              const lbl = String(x?.day_label || "").trim();
-              return lbl && (lbl.includes(plan.label) || plan.label.includes(lbl));
-            }) || aiRoutes[i] || {};
+          const composeRoute = (plan: any, i: number, ai: any): any => {
             const rawStops: string[] = (Array.isArray(ai.stops) ? ai.stops : [])
               .map((s: any) => s && typeof s === "object" ? (s.poi ?? s.id ?? s.name) : s)
               .filter(Boolean);
             const resolved = rawStops.map((s: string) => resolveStop(s)).filter((s): s is string => !!s);
             const unresolved = rawStops.filter((_, j) => !resolved[j]);
             if (unresolved.length > 0) {
-              warnings.push(`⚠️ 路线"${ai.title || ai.day_label || `路线${i+1}`}"有 ${unresolved.length} 个站点无法匹配：${unresolved.join(', ')}`);
+              warnings.push(`⚠️ 路线"${plan.label}"有 ${unresolved.length} 个站点无法匹配：${unresolved.join(', ')}`);
             }
             let stops: string[] = [];
             if (plan.allow) {
-              const allowDb = plan.allow.map(id => slugToDbId.get(id)).filter((id): id is string => !!id);
+              const allowDb = plan.allow.map((id: string) => slugToDbId.get(id)).filter((id: string): id is string => !!id);
               const allowSet = new Set(allowDb);
               const keep = resolved.filter(s => allowSet.has(s));
               const extra = resolved.filter(s => !allowSet.has(s));
-              const missing = allowDb.filter(id => !keep.includes(id));
-              if (missing.length || extra.length) {
-                if (missing.length) warnings.push(`♻️ 路线"${plan.label}"补齐缺失站点 ${missing.length} 个`);
-                if (extra.length) warnings.push(`⚠️ 路线"${plan.label}"剔除多出站点 ${extra.length} 个`);
-              }
-              // v71：站点集合仍由代码确定（keep ∪ allowDb，Set 兜底去重——天门山 1日 AI 曾把
-              // 入口/出口重复），顺序以地理最近邻为准，AI 顺序不再参与
-              // 分区计划已经按“第1天/第2天”排好；routeGraphStops 若再全局排序会把日界打散。
-              // v94：站点顺序只在 plan 阶段决定一次。这里原先又排一遍，
-              // 而 orderStops 对输入顺序敏感（integrateUnmatchedStops 与最近邻的平票
-              // 都按先出现者排），于是 plan 阶段校验用的顺序和最终写库的顺序不一致——
-              // 线上实测同一批 9 个站点，plan 阶段 car 段=0、写库阶段=1。
-              // 校验必须针对真正会被写出去的东西，所以这里直接采用 plan 的顺序。
+              const missing = allowDb.filter((id: string) => !keep.includes(id));
+              if (missing.length) warnings.push(`♻️ 路线"${plan.label}"AI 缺写站点 ${missing.length} 个（以 plan 为准补齐）`);
+              if (extra.length) warnings.push(`⚠️ 路线"${plan.label}"AI 多出站点 ${extra.length} 个：${extra.join("/")}（不在指定集合，已忽略）`);
+              // v94：站点顺序只在 plan 阶段决定一次，写库阶段不再重排——
+              // 校验必须针对真正会被写出去的东西。
               stops = [...allowDb];
             } else {
               stops = resolved; // 文学巡礼线：AI 自由选点
-              // v70.3 诊断：文学巡礼线选点结果总是记进报告（线上 3/4 路线问题定位用）
               warnings.push(`📖 路线"${plan.label}"AI 自由选点 resolve ${resolved.length} 站（raw ${rawStops.length} 站）`);
-              // v70.3：自由选点全部无法 resolve 时不静默丢路线（黄山实测 routes 3/4）——
-              // 回退到核心高重要性 4 站，保证小说源导览必有文学巡礼线
-              if (!stops.length) {
-                stops = coreFallbackStops(plan.label, "AI 选点无法匹配");
-              }
+              if (!stops.length) stops = coreFallbackStops(plan.label, "AI 选点无法匹配");
             }
             // v88：统一站点资格闸。文学巡礼线由 AI 自由选点，绕过了 planRoutes 的
             // 伞形名过滤，这里在写库前收口，任何一条路线都不可能再带上景区伞形点。
@@ -816,8 +800,12 @@ Deno.serve(async (req: Request) => {
               sort_order: i,
               _free: !plan.allow, // v70.4：自由选点路线（文学巡礼线）标记，去重时跳过
             };
-          }).filter(r => r.stops.length > 0);
-
+          };
+          const builtRoutes = await mapLimit(plans.map((plan, i) => ({ plan, i })), 2, async ({ plan, i }: any) => {
+            const ai = await requestRoutePlan(plan, i);
+            return composeRoute(plan, i, ai || {});
+          });
+          const allRoutes = builtRoutes.filter((r: any) => r.stops.length > 0);
           // v90：重复路线去重。旧实现只认"排序后集合完全相等"，既漏掉近似重复，
           // 也与文档宣称的"重叠 >70%"不一致。相似度必须用 Jaccard（交集/并集），
           // 不能用包含率：2日全景游按构造就是 [...1日核心站点, ...第二景区站点]，
@@ -833,7 +821,6 @@ Deno.serve(async (req: Request) => {
             warnings.push(`⚠️ 路线"${dup.dropLabel}"与"${dup.keepLabel}"站点集合${dup.identical ? "完全相同" : `重复度 ${Math.round(dup.similarity * 100)}%`}，未自动删除（自由选点路线），请核实是否应改为按情节线索选点`);
           }
           routes = dedup.routes;
-        }
         return routes;
       })(),
     ]);
