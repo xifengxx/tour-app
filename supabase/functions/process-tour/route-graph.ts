@@ -693,18 +693,6 @@ export function routeGraphIssues(
         level: "advisory",
         message: `${leg.fromName} → ${leg.toName} ${claimed}，但${why}，实际需改用「${MODE_TEXT[leg.mode]}」`,
       });
-    } else if (leg.mode === "car" && !options.allowLongTransfers) {
-      // v94：核心路线（1日/2日）里出现"必须开车"的段，说明路线组成错了，
-      // 不是交通方式待核实。这是结构不变量，不是又一个魔法阈值。
-      // 线上实测：v89 关掉未核实的分区选点后，1日精华游按重要性取满 10 站，
-      // 把 19km 外、独立售票的"丽江玉水寨"等三个 4A 点吸进了"玉龙雪山一日精华游"，
-      // 产出 牦牛坪 → 丽江玉水寨（19km / 高差 1000m）这种必须包车的"一日游"。
-      const drop = leg.elevationDeltaM != null ? `、高差约 ${Math.abs(leg.elevationDeltaM)}m` : "";
-      issues.push({
-        type: "long-transfer",
-        level: "blocking",
-        message: `${leg.fromName} → ${leg.toName} 直线约 ${Math.round((distance || 0) / 1000)}km${drop}，需乘车跨片区，不属于本路线的游览范围`,
-      });
     } else if (leg.inferred && ((far && !options.allowLongTransfers) || bigDropNeedsTransport)) {
       const why = [distance != null ? `直线约 ${Math.round(distance / 1000)}km` : "", drop != null ? `高差约 ${drop}m` : ""]
         .filter(Boolean).join("、");
@@ -712,6 +700,14 @@ export function routeGraphIssues(
         type: "long-transfer",
         level: (distance ?? 0) > HARD_TRANSFER_M && !options.allowLongTransfers ? "blocking" : "advisory",
         message: `${leg.fromName} → ${leg.toName}（${why}）资料中无衔接方式，已推断为「${MODE_TEXT[leg.mode]}」（未经核实）`,
+      });
+    } else if (leg.mode === "car" && !options.allowLongTransfers) {
+      // 核心路线里出现必须开车的段：文案必须写明乘车与时长，但不再据此判定路线错。
+      // 它是否真的错，由下面与顺序无关的跨片区连通性判定负责。
+      issues.push({
+        type: "long-transfer",
+        level: "advisory",
+        message: `${leg.fromName} → ${leg.toName} 需乘车/包车约 ${Math.round((distance || 0) / 1000)}km，文案须写明交通方式与时长`,
       });
     }
     // 跨市/跨景区级别的位移（>30km）必须带车程估算，否则 narrative 无法写清可达性。
@@ -736,6 +732,22 @@ export function routeGraphIssues(
       level: "blocking",
       message: `预计全程 ${Math.round(duration.totalMinutes / 60 * 10) / 10} 小时（移动 ${Math.round(duration.movementMinutes / 60 * 10) / 10}h + 停留 ${Math.round(duration.visitMinutes / 60 * 10) / 10}h），超过 ${days} 日 × ${dailyHours} 小时容量`,
     });
+  }
+
+  // 与顺序无关：站点集被切成互不可达的多段 → 阻断，并指名该由哪一段离开这条路线。
+  if (!options.allowLongTransfers) {
+    const comps = crossAreaComponents(stopIds, locs, knowledge);
+    if (comps.length > 1) {
+      const nameOf = (id: string) => String(locs.find(l => l.id === id)?.name || id);
+      const sorted = [...comps].sort((a, b) => b.length - a.length);
+      for (const part of sorted.slice(1)) {
+        issues.push({
+          type: "zone-interleaved",
+          level: "blocking",
+          message: `站点集跨 ${comps.length} 个片区，${part.map(nameOf).join("、")} 与主体之间没有 ${Math.round(SCENIC_SHUTTLE_MAX_M / 1000)}km 内的衔接`,
+        });
+      }
+    }
   }
 
   const seen = new Set<string>();
@@ -969,26 +981,48 @@ function trimmability(loc: any, matched: boolean, index: number, total: number):
     + (index < total / 2 ? 3 : 0);
 }
 
-/** 跨片区段的受害端点：重要性低的先走，同分时离其余站点质心远的先走。 */
-function pickCrossAreaVictim(
-  leg: RouteLeg,
-  byId: Map<string, any>,
-  current: string[],
-): string | null {
-  const a = byId.get(leg.fromId);
-  const b = byId.get(leg.toId);
-  if (!a || !b) return null;
-  const impA = a.importance || 3;
-  const impB = b.importance || 3;
-  if (impA !== impB) return impA < impB ? leg.fromId : leg.toId;
-  const rest = current.filter(id => id !== leg.fromId && id !== leg.toId)
-    .map(id => byId.get(id)).filter((l: any) => l?.lat && l?.lng);
-  if (!rest.length) return leg.toId;
-  const cx = rest.reduce((n, l: any) => n + l.lng, 0) / rest.length;
-  const cy = rest.reduce((n, l: any) => n + l.lat, 0) / rest.length;
-  const far = (l: any) => (l.lat && l.lng ? haversineM({ lng: cx, lat: cy }, l) : Infinity);
-  return far(a) >= far(b) ? leg.fromId : leg.toId;
+/**
+ * 与顺序无关的跨片区判定：把站点两两按"景区摆渡可达"（≤SCENIC_SHUTTLE_MAX_M）连边，
+ * 若站点集被切成多个互不可达的分量，说明这条路线把不同片区强行并成了一条。
+ *
+ * 为什么不用"相邻站是否出现 car 段"：那是序列的产物而不是路线的性质。
+ * 线上实测同一批 9 个站点，一种排序里最长跳 11.6km（无 car 段），
+ * 另一种排序里出现 19km 的 car 段 —— 拿序列当判据会让同一个路线既通过又被拦。
+ */
+export function crossAreaComponents(
+  stopIds: string[],
+  locs: any[],
+  knowledge?: DestinationRouteKnowledge,
+  maxHopM = SCENIC_SHUTTLE_MAX_M,
+): string[][] {
+  const pts = stopIds.map(id => locs.find(l => l.id === id)).filter((l: any) => l && Number.isFinite(l.lat) && Number.isFinite(l.lng));
+  if (pts.length < 2) return [];
+  const parent = pts.map((_, i) => i);
+  const find = (i: number): number => parent[i] === i ? i : (parent[i] = find(parent[i]));
+  // 显式交通边（不是 trail 默认生成的 walk）表示"资料记录了这两点之间有索道/摆渡"，
+  // 距离再远也算连通。否则会把 主峰→南门 28km/30 分钟观光车 这类已验证衔接误判成跨片区。
+  const explicitPairs = new Set<string>();
+  for (const edge of knowledge?.edges || []) {
+    const a = String(edge.from || "").trim().toLowerCase();
+    const b = String(edge.to || "").trim().toLowerCase();
+    if (a && b) { explicitPairs.add(`${a}|${b}`); explicitPairs.add(`${b}|${a}`); }
+  }
+  const namesOf = (l: any) => [l.name, ...(l.aliases || [])].map((v: unknown) => String(v || "").trim().toLowerCase()).filter(Boolean);
+  const linkedByKnowledge = (a: any, b: any) =>
+    namesOf(a).some(x => namesOf(b).some(y => explicitPairs.has(`${x}|${y}`)));
+  for (let i = 0; i < pts.length; i++) {
+    for (let j = i + 1; j < pts.length; j++) {
+      if (haversineM(pts[i], pts[j]) <= maxHopM || linkedByKnowledge(pts[i], pts[j])) parent[find(i)] = find(j);
+    }
+  }
+  const groups = new Map<number, string[]>();
+  pts.forEach((l, i) => {
+    const root = find(i);
+    groups.set(root, [...(groups.get(root) || []), String(l.id)]);
+  });
+  return [...groups.values()].filter(g => g.length > 0);
 }
+
 
 /**
  * 在给定站点集合上做确定性修复，返回修复后的站点、修复动作和剩余问题。
@@ -1029,17 +1063,24 @@ export function repairPlanStops(
 
     // 跨片区车行段：削掉更"离群"的那一端（重要性低优先，其次离质心远），
     // 逐轮迭代直到核心路线里不再出现 car 段。
-    const carLeg = current.length > 3
-      ? buildRouteLegs(current, locs, knowledge).find(l => l.mode === "car")
-      : undefined;
-    if (carLeg && !options.allowLongTransfers) {
-      const victim = pickCrossAreaVictim(carLeg, byId, current);
-      if (victim) {
-        current = current.filter(id => id !== victim);
-        trimmedIds.push(victim);
-        const name = String(byId.get(victim)?.name || victim);
-        repairs.push({ type: "trimmed", message: `移除跨片区站点「${name}」（与相邻站点需 ${Math.round((carLeg.distanceM || 0) / 1000)}km 车程，不属于本路线游览范围）` });
-        continue;
+    if (!options.allowLongTransfers && current.length > 3) {
+      const comps = crossAreaComponents(current, locs, knowledge);
+      if (comps.length > 1) {
+        // 保留最大分量，从少数分量里削掉重要性最低的那个，逐轮收敛。
+        const sorted = [...comps].sort((a, b) => b.length - a.length);
+        const minority = sorted.slice(1).flat();
+        const victim = minority
+          .map(id => ({ id, imp: (byId.get(id)?.importance) || 0 }))
+          .sort((a, b) => a.imp - b.imp)[0];
+        if (victim) {
+          current = current.filter(id => id !== victim.id);
+          trimmedIds.push(victim.id);
+          repairs.push({
+            type: "trimmed",
+            message: `移除跨片区站点「${String(byId.get(victim.id)?.name || victim.id)}」（与路线主体之间没有 ${Math.round(SCENIC_SHUTTLE_MAX_M / 1000)}km 内衔接）`,
+          });
+          continue;
+        }
       }
     }
 

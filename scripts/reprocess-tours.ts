@@ -200,6 +200,8 @@ for (const tour of targets) {
     console.log(`  知识 ${report.knowledgeTier || "-"} ${report.knowledgeTierLabel || ""} · 地点 ${report.locations} · 路线 ${report.routes}（计划 ${report.plans}）· 交通问题 ${(report.routeGraph || {}).issues} · 阻断 ${(gate.blocking || []).length} · 自动修复 ${gate.repairs || 0}`);
     for (const sp of report.suppressedPlans || []) console.log(`    未生成 ${sp.plan}：${sp.reason}`);
     for (const b of gate.blocking || []) console.log(`    ⛔ ${b.label}：${b.message}`);
+    for (const d of gate.diagnostics || []) console.log(`    [plan] ${d.label} 池=${d.pool} car段=${d.carLegs} 修复=${d.repairs}`);
+    for (const w of gate.writeStage || []) console.log(`    [写库] ${w.label} 站点=${w.stops} car段=${w.carLegs}`);
     for (const w of (report.warnings || []).filter((x: string) => x.startsWith("♻️") || x.startsWith("⚠️ 路线") || x.startsWith("🧭"))) {
       console.log(`    · ${w.slice(0, 150)}`);
     }
