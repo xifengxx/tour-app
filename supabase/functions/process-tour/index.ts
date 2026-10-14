@@ -579,6 +579,7 @@ Deno.serve(async (req: Request) => {
     // 那种文本缺陷比路线缺陷更难被发现，并且会直接显示在详情页上。
     // 主题游按设计串联 60km 内的独立景点，长距离接驳是预期行为，不参与长距离阻断。
     const planRepairNotes: string[] = [];
+    const gateDiagnostics: any[] = [];
     for (const p of plans) {
       if (!p.allow) continue;
       const allowLongTransfers = p.label === "主题游";
@@ -602,6 +603,14 @@ Deno.serve(async (req: Request) => {
         p.allow = p.dayPlan.flatMap(day => day.allow);
       } else {
         const repaired = repairPlanStops(p.allow, locs, routeKnowledge, { allowLongTransfers, dayLabel: p.label });
+        // 诊断：plan 阶段的输入与修复结果。线上实测 plan 阶段未削站而写库阶段报阻断，
+        // 两阶段用同一套规则，先把两侧看到的事实都记进报告，避免继续靠推理猜。
+        gateDiagnostics.push({
+          stage: "plan", label: p.label, pool: p.allow.length,
+          carLegs: buildRouteLegs(p.allow, locs, routeKnowledge).filter(l => l.mode === "car").length,
+          repairs: repaired.repairs.length,
+          names: p.allow.map(id => locs.find(l => l.id === id)?.name ?? id),
+        });
         p.allow = repaired.stopIds;
         for (const r of repaired.repairs) planRepairNotes.push(`♻️ 路线"${p.label}"${r.message}`);
       }
@@ -738,7 +747,12 @@ Deno.serve(async (req: Request) => {
               // v71：站点集合仍由代码确定（keep ∪ allowDb，Set 兜底去重——天门山 1日 AI 曾把
               // 入口/出口重复），顺序以地理最近邻为准，AI 顺序不再参与
               // 分区计划已经按“第1天/第2天”排好；routeGraphStops 若再全局排序会把日界打散。
-              stops = plan.preordered ? [...allowDb] : orderStops([...new Set([...keep, ...allowDb])], dbLocs);
+              // v94：站点顺序只在 plan 阶段决定一次。这里原先又排一遍，
+              // 而 orderStops 对输入顺序敏感（integrateUnmatchedStops 与最近邻的平票
+              // 都按先出现者排），于是 plan 阶段校验用的顺序和最终写库的顺序不一致——
+              // 线上实测同一批 9 个站点，plan 阶段 car 段=0、写库阶段=1。
+              // 校验必须针对真正会被写出去的东西，所以这里直接采用 plan 的顺序。
+              stops = [...allowDb];
             } else {
               stops = resolved; // 文学巡礼线：AI 自由选点
               // v70.3 诊断：文学巡礼线选点结果总是记进报告（线上 3/4 路线问题定位用）
@@ -880,6 +894,11 @@ Deno.serve(async (req: Request) => {
         repairs: planRepairNotes.length,
         routes: routes.length,
         plans: plans.length,
+        diagnostics: gateDiagnostics,
+        writeStage: routes.map((r: any) => ({
+          label: r.day_label, stops: r.stops.length,
+          carLegs: (r.legs || []).filter((l: any) => l.mode === "car").length,
+        })),
       },
       warnings: warnings.length > 0 ? warnings : undefined,
       rejected: (lr.locations || []).length - extractedBeforeDedup, // regeo/坐标校验被拒

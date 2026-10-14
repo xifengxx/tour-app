@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { blockingIssues, buildRouteGraph, buildRouteLegs, elevationDeltaM, estimateRouteDuration, inferTransferMode, matchLocsToGraph, minModeForTransfer, parseElevationM, planGraphStops, routeGraphSegments, routeGraphIssues, routeGraphNotes, repairPlanStops, routeLegsText, SCENIC_SHUTTLE_MAX_M, stripFacilitySuffix } from "./route-graph.ts";
+import { blockingIssues, buildRouteGraph, buildRouteLegs, elevationDeltaM, estimateRouteDuration, inferTransferMode, matchLocsToGraph, minModeForTransfer, parseElevationM, planGraphStops, routeGraphSegments, routeGraphIssues, routeGraphNotes, repairPlanStops, routeLegsText, SCENIC_SHUTTLE_MAX_M, stripFacilitySuffix, crossAreaComponents } from "./route-graph.ts";
 import type { DestinationRouteKnowledge } from "./route-knowledge-types.ts";
 import { CURATED_TRAILS, orderStopsByTrail } from "./trail-routes.ts";
 
@@ -438,10 +438,16 @@ describe("route graph", () => {
       { id: "a", name: "山腰寺", lat: 30.0, lng: 118.0 },
       { id: "b", name: "邻县古镇", lat: 30.25, lng: 118.2 },
     ];
-    // 34km 属跨片区：新规则下是阻断级"不属于本路线"，而不是"待核实"
-    expect(routeGraphIssues(["a", "b"], far, noKnowledge)).toEqual([
-      expect.objectContaining({ type: "long-transfer", level: "blocking", message: expect.stringContaining("不属于本路线") }),
-    ]);
+    // 34km 两点分属两个片区：阻断来自与顺序无关的连通性判定，
+    // 同时那条缺资料的长跳仍作为待核实记录（两件事各自表达，不互相吞掉）
+    const noKbIssues = routeGraphIssues(["a", "b"], far, noKnowledge);
+    expect(blockingIssues(noKbIssues)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: "zone-interleaved", message: expect.stringContaining("个片区") }),
+        // 34km 还越过了 HARD_TRANSFER_M，所以"缺资料"这一条本身也升级为阻断
+        expect.objectContaining({ type: "long-transfer" }),
+      ]),
+    );
     // 步行段资料缺失但物理上必须机动化时，措辞要说清是"默认按步行"而非"资料主张步行"
     const synthetic = [
       { id: "a", name: "山腰寺", lat: 30.0, lng: 118.0 },
@@ -465,10 +471,10 @@ describe("route graph", () => {
       { id: "hou", name: "猴子观海", lat: 30.144546, lng: 118.170502 },
       { id: "chengkan", name: "呈坎", lat: 29.914335, lng: 118.280803 },
     ];
-    const issues = routeGraphIssues(["hou", "chengkan"], huangshan, noKnowledge);
-    expect(issues[0]).toMatchObject({ level: "blocking", type: "long-transfer" });
-    expect(issues[0].message).toContain("直线约 28km");
-    expect(issues[0].message).toContain("不属于本路线");
+    const blocking = blockingIssues(routeGraphIssues(["hou", "chengkan"], huangshan, noKnowledge));
+    expect(blocking).toHaveLength(1);
+    expect(blocking[0].message).toContain("呈坎");
+    expect(blocking[0].message).toContain("个片区");
     // 只有两个站点时不削站（削完就没路线了），但必须把阻断报出来
     const repaired = repairPlanStops(["hou", "chengkan"], huangshan, noKnowledge, { dayLabel: "2日全景游" });
     expect(repaired.stopIds).toEqual(["hou", "chengkan"]);
@@ -571,9 +577,7 @@ describe("设施后缀剥离匹配（v92 绑定改善）", () => {
     expect(matchLocsToGraph(["j"], locs, graph).has("j")).toBe(false);
   });
 
-describe("核心路线不含跨片区车行（v94 线上实测回归）", () => {
-  // 丽江重跑实况：v89 关掉未核实分区选点后，1日精华游按重要性取满 10 站，
-  // 把 19km 外、独立售票的 4A 景区"丽江玉水寨"吸进了"玉龙雪山一日精华游"。
+describe("跨片区判定必须与站点顺序无关（v94 线上实测修正）", () => {
   // 坐标与海拔取自线上 locations 表原值
   const yak = { id: "yak", name: "牦牛坪", lat: 27.166042, lng: 100.244457, elevation: "约3700米", importance: 4 };
   const yushui = { id: "ys", name: "丽江玉水寨", lat: 26.999757, lng: 100.201622, elevation: "约2700米", importance: 4 };
@@ -581,24 +585,37 @@ describe("核心路线不含跨片区车行（v94 线上实测回归）", () => 
     destinationName: "玉龙雪山", aliases: [], zones: [], trails: [], edges: [], source: "none", confidence: 0,
   };
 
-  it("19km 跨片区段被标为阻断级", () => {
-    const issues = routeGraphIssues(["yak", "ys"], [yak, yushui], noKnowledge, { dayLabel: "1日精华游" });
-    expect(issues[0]).toMatchObject({ type: "long-transfer", level: "blocking" });
-    expect(issues[0].message).toContain("高差约 1000m");
-  });
-
-  it("重要性相同时削掉离其余站点质心更远的那个", () => {
+  it("长距离相邻段只算待核实，不再判阻断：它是排序产物而非路线性质", () => {
+    // 线上实测：同一批 9 个站点，一种排序里最长跳 11.4km（无 car 段），
+    // 另一种排序里出现 19km 的 car 段。拿序列当判据会让同一条路线既通过又被拦。
+    // 只有这两个点时确实分属两个片区
+    expect(blockingIssues(routeGraphIssues(["yak", "ys"], [yak, yushui], noKnowledge, { dayLabel: "1日精华游" }))).toHaveLength(1);
     const inPark = [
       { id: "a", name: "玉龙雪山冰川公园栈道", lat: 27.102002, lng: 100.199865, elevation: "4506-4680米", importance: 5 },
       { id: "b", name: "玉龙雪山国家级风景名胜区蓝月谷", lat: 27.124436, lng: 100.245886, elevation: "约2900米", importance: 5 },
       { id: "c", name: "甘海子", lat: 27.090724, lng: 100.257808, elevation: "约3100米", importance: 4 },
       yak, yushui,
     ];
-    const repaired = repairPlanStops(["a", "b", "c", "yak", "ys"], inPark, noKnowledge, { dayLabel: "1日精华游" });
-    expect(repaired.stopIds).not.toContain("ys");
-    expect(repaired.stopIds).toEqual(["a", "b", "c", "yak"]);
+    // 但甘海子↔玉水寨只有 11.4km，属摆渡可达一跳：整条路线是一个连通片区，不该阻断
+    const whole = routeGraphIssues(["a", "b", "c", "yak", "ys"], inPark, noKnowledge, { dayLabel: "1日精华游" });
+    expect(blockingIssues(whole)).toEqual([]);
+    expect(whole.some(i => i.message.includes("19km") && i.level === "advisory")).toBe(true);
+  });
+
+  it("真跨片区的少数分量被削掉，文案按剩余站点生成", () => {
+    const park = [
+      { id: "p1", name: "会仙府", lat: 39.6703, lng: 113.7321, importance: 5 },
+      { id: "p2", name: "天峰岭", lat: 39.6728, lng: 113.7328, importance: 4 },
+      { id: "p3", name: "虎风口", lat: 39.6657, lng: 113.7338, importance: 4 },
+      { id: "p4", name: "悬空寺", lat: 39.6611, lng: 113.7158, importance: 5 },
+      { id: "mut", name: "应县木塔", lat: 39.7573, lng: 113.1896, importance: 3 },
+    ];
+    const ids = ["p1", "p2", "p3", "p4", "mut"];
+    expect(crossAreaComponents(ids, park, noKnowledge)).toHaveLength(2);
+    const repaired = repairPlanStops(ids, park, noKnowledge, { dayLabel: "2日全景游" });
+    expect(repaired.stopIds).toEqual(["p1", "p2", "p3", "p4"]);
+    expect(repaired.repairs[0].message).toContain("应县木塔");
     expect(blockingIssues(repaired.issues)).toEqual([]);
-    expect(repaired.repairs.map(r => r.message).join()).toContain("丽江玉水寨");
   });
 
   it("主题游允许跨片区串联，不触发这条阻断", () => {
