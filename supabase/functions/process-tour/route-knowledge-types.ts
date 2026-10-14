@@ -4,6 +4,8 @@ export type TrailStop = {
   lat?: number;
   lng?: number;
   required?: boolean;
+  /** 坐标是否来自外部证据（POI/OSM）绑定，而不是模型自己给的数字。 */
+  evidenceBound?: boolean;
 };
 
 export type TrailRoute = {
@@ -35,6 +37,23 @@ export type RouteEdge = {
   confidence?: number;
 };
 
+/** 可解释的知识完整度评分（v91）：替代"数证据条数"的伪置信度。 */
+export type KnowledgeQuality = {
+  score: number;
+  grade: "strong" | "usable" | "weak" | "unusable";
+  parts: {
+    sourceTrust: number;
+    coordCoverage: number;
+    evidenceCoverage: number;
+    sitePurity: number;
+    structureCompleteness: number;
+  };
+  transportCoverage: number;
+  stops: number;
+  trails: number;
+  edges: number;
+};
+
 export type DestinationRouteKnowledge = {
   destinationName: string;
   aliases: string[];
@@ -43,6 +62,7 @@ export type DestinationRouteKnowledge = {
   edges: RouteEdge[];
   source: string;
   confidence: number;
+  quality?: KnowledgeQuality;
 };
 
 export type DestinationRouteKnowledgeRow = {

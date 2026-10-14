@@ -76,3 +76,76 @@ describe("destination route knowledge", () => {
     expect(selectRouteKnowledge([creatorConfirmed, curated], "武功山").source).toBe("curated");
   });
 });
+
+describe("路线知识选路（v91 分级 + 完整度）", () => {
+  const richResearch = {
+    destination_name: "示例山",
+    aliases: ["示例山"],
+    model: {
+      zones: [{ id: "z1", name: "北峰" }],
+      trails: [{
+        id: "t1", aliases: ["示例山"], scenicName: "示例山",
+        notes: "索道上山",
+        stops: [
+          { name: "游客中心", lat: 27.1, lng: 100.2, required: true, evidenceBound: true },
+          { name: "索道站", lat: 27.12, lng: 100.21, required: true, evidenceBound: true },
+          { name: "北峰顶", lat: 27.13, lng: 100.22, required: true, evidenceBound: true },
+        ],
+      }],
+      edges: [
+        { from: "游客中心", to: "索道站", mode: "cableway" },
+        { from: "索道站", to: "北峰顶", mode: "walk" },
+      ],
+    },
+    source: "auto-research",
+    confidence: 0.8,
+  };
+  const thinCurated = {
+    destination_name: "示例山",
+    aliases: ["示例山"],
+    model: {
+      zones: [],
+      trails: [{ id: "t0", aliases: ["示例山"], stops: [{ name: "入口" }, { name: "山顶" }] }],
+      edges: [],
+    },
+    source: "creator-confirmed",
+    confidence: 0.85,
+  };
+
+  it("来源权威优先于完整度：机器抽取的漂亮数据不能压过人工确认", () => {
+    const knowledge = selectRouteKnowledge([richResearch, thinCurated], "示例山");
+    expect(knowledge.source).toBe("creator-confirmed");
+    // tier 判定为 L3，但这份知识太薄：交通断言不会开放
+    expect(knowledge.quality).toBeDefined();
+    expect(knowledge.quality!.transportCoverage).toBe(0);
+  });
+
+  it("同一分级内按可解释完整度排序，而不是历史 confidence 字段", () => {
+    // 两条都是 auto-research。旧行 confidence 0.8（按证据条数算的虚高值），
+    // 新行 confidence 0.3 但坐标与交通边齐全 → 应选新行。
+    const richCopy = {
+      ...richResearch,
+      confidence: 0.2,
+      model: {
+        ...richResearch.model,
+        trails: [{
+          id: "t1", aliases: ["示例山"], scenicName: "示例山", notes: "索道上山",
+          stops: richResearch.model.trails[0].stops.map((s: any) => ({ ...s })),
+        }],
+      },
+    };
+    const stale = {
+      ...richResearch,
+      confidence: 0.8,
+      model: {
+        zones: [] as unknown[],
+        trails: [{ id: "t9", aliases: ["示例山"], stops: [{ name: "只有一处" }, { name: "再一处" }] }],
+        edges: [],
+      },
+    };
+    const knowledge = selectRouteKnowledge([stale, richCopy], "示例山");
+    expect(knowledge.trails[0].id).toBe("t1");
+    expect(knowledge.quality!.parts.coordCoverage).toBe(1);
+    expect(knowledge.quality!.transportCoverage).toBeGreaterThanOrEqual(0.6);
+  });
+});

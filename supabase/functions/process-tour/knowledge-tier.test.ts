@@ -31,7 +31,7 @@ describe("knowledgeTier", () => {
     const builtin = capabilitiesFor(base({ source: "builtin", confidence: 0.5 }));
     expect(builtin.capabilities.multiDay).toBe(true);   // 前山/后山这类划分是人工知识
     expect(builtin.capabilities.zoneDriven).toBe(false); // 没有 zones
-    expect(builtin.capabilities.assertTransport).toBe(false); // 没有 edges（现网 5 个策展目的地全如此）
+    expect(builtin.capabilities.assertTransport).toBe(false); // 完全没有 edges（现网 5 个策展目的地全如此）
   });
 
   it("没有站点顺序知识就是 L1，未识别来源按未核实处理", () => {
@@ -48,14 +48,27 @@ describe("knowledgeTier", () => {
     expect(l3NoZones.capabilities.assertTransport).toBe(false); // 没有 edges（现网 5 个策展目的地全如此）
     expect(l3NoZones.capabilities.trailOrder).toBe(true);
 
-    const withEdges = capabilitiesFor(base({
+    // 交通断言还要 edges 真的连得上相邻站点对：curated 那批 0 edges、
+    // auto-research 那份 5 条边只盖住一半站点对，都不该拿到断言权。
+    const fullyWired = capabilitiesFor(base({
       source: "creator-confirmed",
       zones: [{ id: "z1", name: "北线" }],
-      edges: [{ from: "入口", to: "主峰", mode: "cableway" }],
+      trails: [{ id: "t", aliases: ["示例山"], stops: [{ name: "入口" }, { name: "中亭" }, { name: "主峰" }] }],
+      edges: [
+        { from: "入口", to: "中亭", mode: "cableway" },
+        { from: "中亭", to: "主峰", mode: "shuttle" },
+      ],
     }));
-    expect(withEdges.capabilities).toEqual({
+    expect(fullyWired.capabilities).toEqual({
       multiDay: true, themeTour: true, zoneDriven: true, trailOrder: true, assertTransport: true,
     });
+    // 只有 1/2 站点对有边：不达阈值
+    const halfWired = capabilitiesFor(base({
+      source: "creator-confirmed",
+      trails: [{ id: "t", aliases: ["示例山"], stops: [{ name: "入口" }, { name: "中亭" }, { name: "主峰" }] }],
+      edges: [{ from: "入口", to: "中亭", mode: "cableway" }],
+    }));
+    expect(halfWired.capabilities.assertTransport).toBe(false);
   });
 
   it("分层说明可直接展示给创作者", () => {

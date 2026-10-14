@@ -13,6 +13,7 @@ import { filterRouteStops, isRouteStopEligible, orderStopsGeographic, planRoutes
 import { applyTrailGroups, getPrimaryTrailScenicName, getTrailNotes, injectTrailSeeds, orderStopsByTrail } from "./trail-routes.ts";
 import { loadOrResearchRouteKnowledge } from "./route-knowledge.ts";
 import { capabilitiesFor, TIER_LABEL } from "./knowledge-tier.ts";
+import { qualityGaps } from "./knowledge-quality.ts";
 import { blockingIssues, buildRouteLegs, estimateRouteDuration, planGraphStops, repairPlanStops, routeGraphIssues, routeGraphNotes, routeLegsText } from "./route-graph.ts";
 import { resolveCoreDestination } from "./destination.ts";
 import { isNonSitePOI, rejectReasonForPOI } from "./poi-filter.ts";
@@ -540,7 +541,7 @@ Deno.serve(async (req: Request) => {
     // 确定（AI 无坐标信息，锯齿动线实测恒山），DeepSeek 只写 narrative。
     // v89：能力授权。路线知识只有"人工策展/创作者确认"才允许决定天数划分与跨片区串联；
     // auto-research 抽出来的 zones/trails 未经核实，只能用来排序，不能用来编造多日行程。
-    const { tier, capabilities } = capabilitiesFor(routeKnowledge);
+    const { tier, capabilities, quality } = capabilitiesFor(routeKnowledge);
     const isNovelBased = !!(tour.source?.title || tour.source?.novelTitle);
     const novelName = String(tour.source?.title || tour.source?.novelTitle || '');
     const corePoolSize = locs.filter(l => !(l.tags || []).includes("地区景点") && l.scenic === coreScenicName).length;
@@ -824,7 +825,13 @@ Deno.serve(async (req: Request) => {
       routes: routes.length,
       plans: plans.length, // v70.3 诊断：计划路线数 vs 实际路线数（v89 起会随能力授权收敛）
       corePool: corePoolSize, mainScenic: mainScenicName, coreScenic: coreScenicName,
-      routeKnowledge: { source: routeKnowledge.source, confidence: routeKnowledge.confidence, destination: routeKnowledge.destinationName, tier, capabilities },
+      routeKnowledge: {
+        source: routeKnowledge.source, confidence: routeKnowledge.confidence, destination: routeKnowledge.destinationName,
+        tier, capabilities,
+        // v91：可解释的完整度评分。旧 confidence 只数"抓回几段文本"，
+        // 实测一次研究把武汉东湖的维基条目当成玉龙雪山证据也照样加分。
+        quality, gaps: qualityGaps(quality),
+      },
       suppressedPlans,
       knowledgeTier: tier, knowledgeTierLabel: TIER_LABEL[tier],
       routeGraph: { checked: routes.length, issues: routeGraphIssueCount, estimatedMinutes: Math.round(routeDurationMinutes) },

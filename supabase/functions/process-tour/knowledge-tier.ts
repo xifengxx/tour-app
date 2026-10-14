@@ -12,9 +12,13 @@
 // 只有已验证的知识才允许用来决定站点集合与天数划分；
 // 未验证时降级产出并如实告知，而不是假装理解。
 
-import type { DestinationRouteKnowledge } from "./route-knowledge-types.ts";
+import { scoreKnowledge } from "./knowledge-quality.ts";
+import type { DestinationRouteKnowledge, KnowledgeQuality } from "./route-knowledge-types.ts";
 
 export type KnowledgeTier = "L3" | "L2" | "L1";
+
+/** 显式交通边至少覆盖多少比例的相邻站点对，才允许把交通方式当事实写进文案。 */
+export const TRANSPORT_COVERAGE_MIN = 0.6;
 
 export type TierCapabilities = {
   /** 允许多日划分（2日全景游：分区或第二景区装配） */
@@ -72,15 +76,25 @@ export function tierCapabilities(tier: KnowledgeTier): TierCapabilities {
   return { ...CAPABILITIES[tier] };
 }
 
-export function capabilitiesFor(knowledge?: DestinationRouteKnowledge | null): { tier: KnowledgeTier; capabilities: TierCapabilities } {
+export type KnowledgeAuthorization = {
+  tier: KnowledgeTier;
+  capabilities: TierCapabilities;
+  quality: KnowledgeQuality;
+};
+
+export function capabilitiesFor(knowledge?: DestinationRouteKnowledge | null): KnowledgeAuthorization {
   const tier = knowledgeTier(knowledge);
   const capabilities = tierCapabilities(tier);
   // L1 没有任何站点顺序知识时也不该用 trail 顺序；zone 类能力还依赖数据本身存在，
   // 这里做一次与数据实际形态的与运算，避免出现"授权了但无数据可用"的空判。
   if (!knowledge?.trails?.length) capabilities.trailOrder = false;
   if (!knowledge?.zones?.length) capabilities.zoneDriven = false;
-  if (!knowledge?.edges?.length) capabilities.assertTransport = false;
-  return { tier, capabilities };
+  // 交通断言要求的不只是"存在 edges"，而是这些边真的连得上 trail 的相邻站点。
+  // 实测玉龙雪山 auto-research 给了 5 条 edges，但只有 2 条能对上相邻站点对，
+  // 光看 edges.length 会误判成"这份知识记录了交通方式"。
+  const quality = scoreKnowledge(knowledge || { destinationName: "", aliases: [], zones: [], trails: [], edges: [], source: "none", confidence: 0 });
+  if (quality.transportCoverage < TRANSPORT_COVERAGE_MIN) capabilities.assertTransport = false;
+  return { tier, capabilities, quality };
 }
 
 export const TIER_LABEL: Record<KnowledgeTier, string> = {
