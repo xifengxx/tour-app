@@ -12,7 +12,7 @@ import { haversineM } from "./geo.ts";
 import { filterRouteStops, isRouteStopEligible, orderStopsGeographic, planRoutes as planRoutesModule } from "./routes.ts";
 import { applyTrailGroups, getPrimaryTrailScenicName, getTrailNotes, injectTrailSeeds, orderStopsByTrail } from "./trail-routes.ts";
 import { loadOrResearchRouteKnowledge } from "./route-knowledge.ts";
-import { buildRouteLegs, estimateRouteDuration, planGraphStops, routeGraphIssues, routeGraphNotes, routeLegsText } from "./route-graph.ts";
+import { blockingIssues, buildRouteLegs, estimateRouteDuration, planGraphStops, repairPlanStops, routeGraphIssues, routeGraphNotes, routeLegsText } from "./route-graph.ts";
 import { resolveCoreDestination } from "./destination.ts";
 import { isNonSitePOI, rejectReasonForPOI } from "./poi-filter.ts";
 import { elevationProfile } from "./elevation.ts";
@@ -550,6 +550,30 @@ Deno.serve(async (req: Request) => {
         p.allow = orderStops(p.allow, locs);
       }
     }
+
+    // P1-2 闸门（修复阶段）。必须在 AI 生成 narrative 之前执行：
+    // 如果等写库前再砍站，narrative 里"全程依次经过 X、Y、Z"会与站点数组不一致，
+    // 那种文本缺陷比路线缺陷更难被发现，并且会直接显示在详情页上。
+    // 主题游按设计串联 60km 内的独立景点，长距离接驳是预期行为，不参与长距离阻断。
+    const planRepairNotes: string[] = [];
+    for (const p of plans) {
+      if (!p.allow) continue;
+      const allowLongTransfers = p.label === "主题游";
+      if (p.preordered && p.dayPlan) {
+        // 逐日校验容量：2 日线的总量阈值会被"第 1 天 12 小时 + 第 2 天 3 小时"蒙混过去
+        for (const day of p.dayPlan) {
+          const repaired = repairPlanStops(day.allow, locs, routeKnowledge, { allowLongTransfers, dayLabel: day.label });
+          day.allow = repaired.stopIds;
+          for (const r of repaired.repairs) planRepairNotes.push(`♻️ ${p.label}·${day.label}${day.title ? `「${day.title}」` : ""}${r.message}`);
+        }
+        p.allow = p.dayPlan.flatMap(day => day.allow);
+      } else {
+        const repaired = repairPlanStops(p.allow, locs, routeKnowledge, { allowLongTransfers, dayLabel: p.label });
+        p.allow = repaired.stopIds;
+        for (const r of repaired.repairs) planRepairNotes.push(`♻️ 路线"${p.label}"${r.message}`);
+      }
+    }
+    warnings.push(...planRepairNotes);
     // 每条路线单独生成交通 legs：1日/2日只描述本线衔接，主题游的长距离接驳不污染普通徒步线。
     const routeTrafficHints = new Map(plans.map(plan => [plan.label, plan.allow ? routeLegsText(buildRouteLegs(plan.allow, locs, routeKnowledge)) : ""]));
     const graphNotes = routeGraphNotes(plans.flatMap(p => p.allow || []), dbLocs, routeKnowledge);
@@ -727,6 +751,7 @@ Deno.serve(async (req: Request) => {
     // 都写入 process_report；只有主题游允许长距离接驳（它本来就串联 60km 内独立景点）。
     let routeGraphIssueCount = 0;
     let routeDurationMinutes = 0;
+    const gateBlocking: { label: string; message: string }[] = [];
     for (const route of routes) {
       const legs = buildRouteLegs(route.stops, dbLocs, routeKnowledge);
       route.legs = legs;
@@ -736,6 +761,7 @@ Deno.serve(async (req: Request) => {
         dayLabel: route.day_label,
       });
       routeGraphIssueCount += issues.length;
+      for (const issue of blockingIssues(issues)) gateBlocking.push({ label: route.day_label, message: issue.message });
       for (const issue of issues) warnings.push(`🧭 路线「${route.day_label}」${issue.message}`);
     }
 
@@ -779,6 +805,13 @@ Deno.serve(async (req: Request) => {
       corePool: corePoolSize, mainScenic: mainScenicName, coreScenic: coreScenicName,
       routeKnowledge: { source: routeKnowledge.source, confidence: routeKnowledge.confidence, destination: routeKnowledge.destinationName },
       routeGraph: { checked: routes.length, issues: routeGraphIssueCount, estimatedMinutes: Math.round(routeDurationMinutes) },
+      // 闸门结论：blocking 非空 → needs_review（内容照常落库，创作者可编辑，但不能直接发布）
+      gate: {
+        blocking: gateBlocking,
+        repairs: planRepairNotes.length,
+        routes: routes.length,
+        plans: plans.length,
+      },
       warnings: warnings.length > 0 ? warnings : undefined,
       rejected: (lr.locations || []).length - extractedBeforeDedup, // regeo/坐标校验被拒
       deduped: extractedBeforeDedup - afterExtractDedup, // 坐标去重数（在地区/子景点并入前计算）
@@ -792,8 +825,20 @@ Deno.serve(async (req: Request) => {
       }).catch(() => {});
     }
     // v70：成功时清掉旧错误、质量报告（含全部告警）落库，审核页可见
-    await setStatus(tourId, "done", null, { ...report, at: new Date().toISOString() });
-    return json({ success: true, ...report });
+    // 闸门：路线内容始终写库（不丢创作者的数据），但阻断"直接可发布"。
+    // 只有 advisory（资料缺覆盖、系统已按物理量推断）时照常 done，避免新目的地全被拦死。
+    const finalStatus = gateBlocking.length ? "needs_review" : "done";
+    // 闸门拦截了一个**已经公开**的导览：本轮已 deleteRows + 重写 routes，
+    // 不撤公开就会把没过检的路线直接推给终端游客。这里自动转回私有并在报告里写明原因，
+    // 创作者核实后可重新发布。宁可退回私有，也不把已知有缺陷的动线留在公开展示位。
+    const wasPublic = !!tour.is_public;
+    const unpublish = gateBlocking.length && wasPublic;
+    if (unpublish) {
+      warnings.push(`🔒 导览原为公开状态，因存在 ${gateBlocking.length} 个阻断级路线问题已自动转为私有，核实后可重新发布`);
+    }
+    const finalReport = { ...report, gate: { ...report.gate, unpublished: unpublish }, warnings: warnings.length ? warnings : undefined, at: new Date().toISOString() };
+    await setStatus(tourId, finalStatus, null, finalReport, unpublish ? { is_public: false } : undefined);
+    return json({ success: true, status: finalStatus, unpublished: unpublish, ...report });
   } catch (e: any) {
     console.error(e);
     // v70：失败原因落库——此前只返回给 pg_net 触发器（被丢弃），前端只能显示"服务器端出错"

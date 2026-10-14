@@ -1,7 +1,13 @@
 import { hdr, SUPABASE_URL } from "./config.ts";
 
-export async function setStatus(tourId: string, status: string, processError?: string | null, processReport?: any) {
-  const body: any = { status };
+export async function setStatus(
+  tourId: string,
+  status: string,
+  processError?: string | null,
+  processReport?: any,
+  extra?: Record<string, unknown>,
+) {
+  const body: any = { status, ...(extra || {}) };
   if (processError !== undefined) body.process_error = processError;
   if (processReport !== undefined) body.process_report = processReport;
   await fetch(`${SUPABASE_URL}/rest/v1/tours?id=eq.${tourId}`, {

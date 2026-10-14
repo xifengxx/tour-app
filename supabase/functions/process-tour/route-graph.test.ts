@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildRouteGraph, buildRouteLegs, elevationDeltaM, estimateRouteDuration, inferTransferMode, minModeForTransfer, parseElevationM, planGraphStops, routeGraphSegments, routeGraphIssues, routeGraphNotes, routeLegsText, SCENIC_SHUTTLE_MAX_M } from "./route-graph.ts";
+import { buildRouteGraph, buildRouteLegs, elevationDeltaM, estimateRouteDuration, inferTransferMode, minModeForTransfer, parseElevationM, planGraphStops, routeGraphSegments, routeGraphIssues, routeGraphNotes, repairPlanStops, routeLegsText, SCENIC_SHUTTLE_MAX_M } from "./route-graph.ts";
 import type { DestinationRouteKnowledge } from "./route-knowledge-types.ts";
 import { CURATED_TRAILS, orderStopsByTrail } from "./trail-routes.ts";
 
@@ -102,6 +102,55 @@ describe("route graph", () => {
     expect(issues).toEqual(expect.arrayContaining([
       expect.objectContaining({ type: "trail-backtrack" }),
     ]));
+  });
+
+  it("闸门先尝试重排修好顺序问题，不改站点集合", () => {
+    const result = repairPlanStops(["入口", "主峰", "中亭"], graphLocs, knowledge);
+    expect(result.stopIds).toHaveLength(3);
+    expect([...result.stopIds].sort()).toEqual(["中亭", "入口", "主峰"].sort()); // 集合不变
+    expect(result.stopIds).toEqual(["入口", "中亭", "主峰"]);
+    expect(result.repairs).toEqual([expect.objectContaining({ type: "reordered" })]);
+    expect(result.issues).toEqual([]);
+    expect(result.trimmedIds).toEqual([]);
+  });
+
+  it("超容量时砍掉低重要性尾部站点，保留入口与步道站点", () => {
+    const noKnowledge: DestinationRouteKnowledge = {
+      destinationName: "示例山", aliases: ["示例山"], zones: [], trails: [], edges: [], source: "none", confidence: 0,
+    };
+    // 6 个相距约 1km 的点，用 maxDailyHours=1 压低容量预算，稳定触发 long-day
+    const many = Array.from({ length: 6 }, (_, i) => ({
+      id: `s${i}`, name: `站点${i}`, lat: 30 + i * 0.009, lng: 118,
+      importance: i === 0 ? 5 : 1, // 首站是入口，重要性最高
+    }));
+    const ids = many.map(l => l.id);
+    const result = repairPlanStops(ids, many, noKnowledge, { maxDailyHours: 1, dayLabel: "1日精华游" });
+    expect(result.stopIds.length).toBeLessThan(ids.length);
+    expect(result.stopIds[0]).toBe("s0");                      // 入口不被砍
+    expect(result.trimmedIds.every(id => id !== "s0")).toBe(true);
+    expect(result.repairs.some(r => r.type === "trimmed")).toBe(true);
+    expect(result.repairs.find(r => r.type === "trimmed").message).toContain("请确认");
+    // 砍到下限仍超容量时不假装修好，把剩余问题交给闸门
+    expect(result.issues.map(i => i.type)).toContain("long-day");
+  });
+
+  it("无法确定性修复的问题原样返回，绝不静默放行", () => {
+    const noKnowledge: DestinationRouteKnowledge = {
+      destinationName: "示例山", aliases: ["示例山"], zones: [], trails: [], edges: [], source: "none", confidence: 0,
+    };
+    const far = [
+      { id: "a", name: "甲", lat: 30.0, lng: 118.0, importance: 5 },
+      { id: "b", name: "乙", lat: 30.08, lng: 118.0, importance: 4 }, // 约 8.9km，超步行也超摆渡上限
+    ];
+    const result = repairPlanStops(["a", "b"], far, noKnowledge, { dayLabel: "1日精华游" });
+    expect(result.repairs).toEqual([]);
+    expect(result.issues.map(i => i.type)).toContain("long-transfer");
+    expect(result.stopIds).toEqual(["a", "b"]); // 站点太少不允许砍到 2 以下
+  });
+
+  it("空与单站计划直接返回，不产生修复动作", () => {
+    expect(repairPlanStops([], graphLocs, knowledge).stopIds).toEqual([]);
+    expect(repairPlanStops(["入口"], graphLocs, knowledge).repairs).toEqual([]);
   });
 
   it("整条步道反向串联是合法下撤，不报顺序回退", () => {

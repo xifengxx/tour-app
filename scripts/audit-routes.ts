@@ -14,7 +14,7 @@
 //
 // 只读：全程仅 SELECT，不写库、不改文件（除 --json 显式指定的输出）。
 
-import { buildRouteLegs, estimateRouteDuration, routeGraphIssues, routeLegsText } from "../supabase/functions/process-tour/route-graph.ts";
+import { blockingIssues, buildRouteLegs, estimateRouteDuration, repairPlanStops, routeGraphIssues, routeLegsText } from "../supabase/functions/process-tour/route-graph.ts";
 import { isRouteStopEligible } from "../supabase/functions/process-tour/routes.ts";
 import { CURATED_TRAILS } from "../supabase/functions/process-tour/trail-routes.ts";
 import type { DestinationRouteKnowledge } from "../supabase/functions/process-tour/route-knowledge-types.ts";
@@ -32,10 +32,27 @@ const jsonOut = (() => {
 
 const hdr = { apikey: ANON_KEY!, Authorization: `Bearer ${ANON_KEY!}` };
 
+// 体检脚本会被反复运行在生产网络下，TLS 握手抖动（tls handshake eof）实测出现过。
+// 单次失败就崩栈会让人误以为脚本坏了，所以做两次退避重试，并在错误里写清是网络还是权限。
 async function select<T>(path: string): Promise<T[]> {
-  const res = await fetch(`${SUPABASE_URL!}/rest/v1/${path}`, { headers: hdr });
-  if (!res.ok) throw new Error(`SELECT ${path}: ${res.status} ${await res.text()}`);
-  return res.json() as Promise<T[]>;
+  let lastError = "";
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const res = await fetch(`${SUPABASE_URL!}/rest/v1/${path}`, { headers: hdr });
+      if (res.ok) return res.json() as Promise<T[]>;
+      const body = await res.text();
+      if (res.status === 401 || res.status === 403 || res.status === 404) {
+        throw new Error(`SELECT ${path}: ${res.status} 权限或表不存在（anon key 读不到受 RLS 保护的表）：${body.slice(0, 160)}`);
+      }
+      lastError = `${res.status} ${body.slice(0, 160)}`;
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      if (message.includes("权限或表不存在")) throw e;
+      lastError = message;
+    }
+    if (attempt < 2) await new Promise(r => setTimeout(r, 400 * (attempt + 1)));
+  }
+  throw new Error(`SELECT ${path} 连续 3 次失败：${lastError}`);
 }
 
 type Tour = { id: string; title: string; created_at: string; status: string; destination: any };
@@ -80,7 +97,7 @@ const MODE_RANK: Record<string, number> = { walk: 0, cableway: 1, shuttle: 1, ot
 
 const tours = await select<Tour>("tours?select=id,title,created_at,status,destination&order=created_at.desc" + (Deno.args.includes("--all") ? "" : "&is_public=eq.true"));
 const rows: any[] = [];
-const summary = { tours: 0, routes: 0, storedLegs: 0, missingLegs: 0, modeChanged: 0, upgraded: 0, downgraded: 0, issues: 0, longDay: 0, legacyUmbrellaStops: 0, legacyUmbrellaRoutes: 0 };
+const summary = { tours: 0, routes: 0, storedLegs: 0, missingLegs: 0, modeChanged: 0, upgraded: 0, downgraded: 0, issues: 0, longDay: 0, legacyUmbrellaStops: 0, legacyUmbrellaRoutes: 0, blocking: 0, gateBlockedRoutes: 0, repairableByReorder: 0 };
 // 无知识路径下的"改判"不代表线上会变好：那些目的地在生产上有 auto-research/策展边，
 // 只是 destination_route_knowledge 受 RLS 保护、本脚本用 anon key 读不到。
 // 混进主计数会把工具读数误导成"降级了 N 条路线"，所以单独统计。
@@ -141,6 +158,17 @@ for (const tour of tours) {
       console.log(`       ⛔ 历史数据：站点里含景区伞形/泛指点 ${umbrellaStops.length} 个 → ${umbrellaStops.map((l: any) => l.name).join("/")}（新代码已排除，重跑即清理）`);
     }
 
+    // 闸门分级：blocking 会拦下发布，advisory 只提示核实。
+    // 没有这层区分就无法评估闸门上线的影响面——把告警当阻断，新目的地会全部拦死。
+    const blocking = blockingIssues(issues);
+    const repair = repairPlanStops(stopIds, locs.map((l: any) => ({ ...l, importance: l.importance })), knowledge, {
+      allowLongTransfers: route.day_label === "主题游",
+      dayLabel: route.day_label,
+    });
+    summary.blocking += blocking.length;
+    if (blocking.length) summary.gateBlockedRoutes++;
+    if (repair.repairs.length && !blockingIssues(repair.issues).length) summary.repairableByReorder++;
+
     const flag = issues.length || changed.length || umbrellaStops.length ? "⚠" : " ";
     console.log(`   ${flag} [${route.day_label}] ${stopIds.length}站  落库legs=${stored.length} 重算legs=${next.length} 变化=${changed.length} 问题=${issues.length} 预计${(duration.totalMinutes / 60).toFixed(1)}h`);
     for (const leg of changed) {
@@ -154,7 +182,8 @@ for (const tour of tours) {
       tourId: tour.id, tourTitle: tour.title, routeId: route.id, dayLabel: route.day_label,
       stops: stopIds.length, storedLegs: stored.length, nextLegs: next.map(l => ({ from: l.fromName, to: l.toName, mode: l.mode, distanceM: l.distanceM, elevationDeltaM: l.elevationDeltaM, roadMinutes: l.roadMinutes, inferred: l.inferred, edgeMode: l.edgeMode })),
       changedModes: changed.map(l => `${l.fromId}>${l.toId}:${stored.find(s => s.fromId === l.fromId)?.mode}=>${l.mode}`),
-      issues, durationMinutes: duration.totalMinutes, knowledgeSource: knowledge.source,
+      issues, blocking: blocking.map(b => b.message), autoRepairable: repair.repairs.length > 0 && !blockingIssues(repair.issues).length,
+      durationMinutes: duration.totalMinutes, knowledgeSource: knowledge.source,
       narrativeInstruction: routeLegsText(next),
     });
   }

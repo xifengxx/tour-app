@@ -38,7 +38,18 @@ export type RouteGraph = {
 export type RouteGraphIssue = {
   type: "zone-interleaved" | "trail-backtrack" | "long-transfer" | "long-day";
   message: string;
+  /**
+   * blocking = 路线本身不成立，闸门必须拦下（结构错乱、行程超容量、跨片区硬伤）。
+   * advisory = 目的地资料缺失或与物理量不一致，系统已按物理量推断出可用方案，
+   *            需要创作者核实但不该阻断发布。
+   * 这个区分是闸门能否上线的前提：把"资料未覆盖"也当阻断，
+   * 那么每一个新目的地（必然没有知识）都会被拦死，闸门就成了禁用开关。
+   */
+  level?: "blocking" | "advisory";
 };
+
+/** 单段直线超过该值且不是主题游时，按物理量判定为跨片区硬伤。 */
+export const HARD_TRANSFER_M = 30000;
 
 export type RouteGraphOptions = {
   // 主题游本来就串联核心景区和 60km 内的独立景点；长距离换乘是预期行为。
@@ -572,6 +583,7 @@ export function routeGraphIssues(
     if (positions.length >= 2 && !monotonicInc && !monotonicDec) {
       issues.push({
         type: "trail-backtrack",
+        level: "blocking",
         message: `步道「${trail.scenicName || trail.id || "未命名"}」出现顺序回退`,
       });
     }
@@ -604,6 +616,7 @@ export function routeGraphIssues(
     if (previous !== zone && firstSeen.get(zone)! < index - 0) {
       issues.push({
         type: "zone-interleaved",
+        level: "blocking",
         message: `「${zone}」被其他徒步区隔断，存在跨区往返`,
       });
     }
@@ -634,6 +647,7 @@ export function routeGraphIssues(
       const claimed = leg.edgeSynthetic ? "步道顺序默认按步行处理（资料未给交通方式）" : `资料标注为「${MODE_TEXT[leg.edgeMode]}」`;
       issues.push({
         type: "long-transfer",
+        level: "advisory",
         message: `${leg.fromName} → ${leg.toName} ${claimed}，但${why}，实际需改用「${MODE_TEXT[leg.mode]}」`,
       });
     } else if (leg.inferred && ((far && !options.allowLongTransfers) || bigDropNeedsTransport)) {
@@ -641,6 +655,7 @@ export function routeGraphIssues(
         .filter(Boolean).join("、");
       issues.push({
         type: "long-transfer",
+        level: (distance ?? 0) > HARD_TRANSFER_M && !options.allowLongTransfers ? "blocking" : "advisory",
         message: `${leg.fromName} → ${leg.toName}（${why}）资料中无衔接方式，已推断为「${MODE_TEXT[leg.mode]}」（未经核实）`,
       });
     }
@@ -648,6 +663,7 @@ export function routeGraphIssues(
     if ((distance ?? 0) > 30000 && leg.roadMinutes == null) {
       issues.push({
         type: "long-transfer",
+        level: "blocking",
         message: `${leg.fromName} → ${leg.toName} 直线超过 30km 但无车程估算，行程可行性无法校验`,
       });
     }
@@ -662,6 +678,7 @@ export function routeGraphIssues(
   if (duration.totalMinutes > days * dailyHours * 60) {
     issues.push({
       type: "long-day",
+      level: "blocking",
       message: `预计全程 ${Math.round(duration.totalMinutes / 60 * 10) / 10} 小时（移动 ${Math.round(duration.movementMinutes / 60 * 10) / 10}h + 停留 ${Math.round(duration.visitMinutes / 60 * 10) / 10}h），超过 ${days} 日 × ${dailyHours} 小时容量`,
     });
   }
@@ -856,4 +873,108 @@ export function estimateRouteDuration(legs: RouteLeg[], stopCount: number): Rout
     totalMinutes,
     estimatedLegs,
   };
+}
+
+// ── 路线闸门：确定性修复（P1-2 / v88）──────────────────────────────
+// 校验器已经能诊断出长距离缺衔接、步道回退和每日超容量，但结果只写进 warnings，
+// 路线照原样入库、status 照原样置 done。闸门必须做两件事：
+//   1. 能在不改站点集合的前提下修好的，就确定性地修好（重排）；
+//   2. 必须改动站点集合才能达标的，砍站并把原因留给创作者确认。
+//
+// 关键位置：本函数在**调用 AI 生成 narrative 之前**执行。
+// 如果放在写库前砍站，narrative 里"全程依次经过 X、Y、Z"会与站点数组不一致，
+// 那类文本缺陷比路线缺陷更难发现，也会污染详情页。
+
+export type PlanRepair = {
+  type: "reordered" | "trimmed";
+  message: string;
+};
+
+export type PlanRepairResult = {
+  stopIds: string[];
+  repairs: PlanRepair[];
+  issues: RouteGraphIssue[];
+  trimmedIds: string[];
+};
+
+export function blockingIssues(issues: RouteGraphIssue[]): RouteGraphIssue[] {
+  return issues.filter(i => (i.level ?? "advisory") === "blocking");
+}
+
+export function advisoryIssues(issues: RouteGraphIssue[]): RouteGraphIssue[] {
+  return issues.filter(i => (i.level ?? "advisory") !== "blocking");
+}
+
+// 可移除性评分：重要性低、不在步道路径上、位于序列后半段的点先被砍。
+// 入口段（前一半）和能在路线图上匹配到节点的点受保护，
+// 因为砍掉入口会让整条动线从半山开始，砍掉步道点会打断已验证的连贯性。
+function trimmability(loc: any, matched: boolean, index: number, total: number): number {
+  return (loc.importance || 3)
+    + (matched ? 8 : 0)
+    + (index < total / 2 ? 3 : 0);
+}
+
+/**
+ * 在给定站点集合上做确定性修复，返回修复后的站点、修复动作和剩余问题。
+ * 只重排或砍站，绝不新增站点，因此不会引入原计划里不存在的地点。
+ */
+export function repairPlanStops(
+  stopIds: string[],
+  locs: any[],
+  knowledge: DestinationRouteKnowledge,
+  options: RouteGraphOptions = {},
+): PlanRepairResult {
+  const repairs: PlanRepair[] = [];
+  const trimmedIds: string[] = [];
+  if (stopIds.length < 2) {
+    return { stopIds, repairs, issues: [], trimmedIds };
+  }
+  let current = [...stopIds];
+  const byId = new Map(locs.map(l => [l.id, l]));
+
+  for (let pass = 0; pass < 6; pass++) {
+    const issues = routeGraphIssues(current, locs, knowledge, options);
+    const blocking = blockingIssues(issues);
+    if (!blocking.length) return { stopIds: current, repairs, issues, trimmedIds };
+
+    const backtrack = blocking.find(i => i.type === "trail-backtrack" || i.type === "zone-interleaved");
+    if (backtrack) {
+      // 站点集合不变，只按路线图整段重排；能修好就不必砍站。
+      const reordered = planGraphStops(current, locs, knowledge);
+      if (reordered.length === current.length && reordered.join("|") !== current.join("|")) {
+        const after = blockingIssues(routeGraphIssues(reordered, locs, knowledge, options));
+        if (after.length < blocking.length) {
+          current = reordered;
+          repairs.push({ type: "reordered", message: `按路线图重排站点顺序，消除「${backtrack.message}」` });
+          continue;
+        }
+      }
+    }
+
+    const overCapacity = blocking.find(i => i.type === "long-day");
+    // 只剩 advisory（例如单纯缺资料）时不反复砍站：资料问题要靠核实解决，不靠删景点。
+    if (overCapacity && current.length > 3) {
+      const graph = buildRouteGraph(knowledge);
+      const matched = matchLocsToGraph(current, locs, graph);
+      let worstIndex = -1;
+      let worstScore = Infinity;
+      current.forEach((id, index) => {
+        const loc = byId.get(id);
+        if (!loc) return;
+        const score = trimmability(loc, matched.has(id), index, current.length);
+        if (score < worstScore) { worstScore = score; worstIndex = index; };
+      });
+      if (worstIndex >= 0) {
+        const [removed] = current.splice(worstIndex, 1);
+        const name = String(byId.get(removed)?.name || removed);
+        trimmedIds.push(removed);
+        repairs.push({ type: "trimmed", message: `超出每日容量，移除低重要性站点「${name}」（行程文案已按剩余站点生成，请确认是否需要保留该点）` });
+        continue;
+      }
+    }
+
+    // 无法用重排或砍站解决：交给创作者判断。
+    return { stopIds: current, repairs, issues, trimmedIds };
+  }
+  return { stopIds: current, repairs, issues: routeGraphIssues(current, locs, knowledge, options), trimmedIds };
 }
