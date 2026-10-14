@@ -409,9 +409,11 @@ describe("route graph", () => {
       { sections: [["gucheng"], ["hengshan"]] });
     expect(themed[0]).toMatchObject({ mode: "car", interArea: true });
     expect(themed[0].note).toContain("景区直通车");
+    expect(themed[0].note).not.toMatch(/\d/); // 边界段 note 不再带第二个数字，车程只有 ETA 一处
     const text = routeLegsText(themed);
     expect(text).toContain("跨区域接驳");
     expect(text).toContain("禁止写成连续徒步或景区观光车短驳");
+    expect(text).toContain("逐字照抄");
     // 保守车程估算不丢：容量校验仍按 car 的绕行系数与山区均速计
     expect(themed[0].roadMinutes).toBeGreaterThan(60);
 

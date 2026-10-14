@@ -266,7 +266,7 @@ const MODE_DIRECTIVE: Partial<Record<RouteEdge["mode"], string>> = {
 // （未经核知的存在性声明，原则同 v88 P1-3）。因此用中性接驳表述：
 // 列出候选方式，让 AI 依据目的地资料择一写明，禁止夸大缩位。
 const INTER_AREA_DIRECTIVE =
-  "narrative 须写明跨区域交通方式并给出时长：目的地资料表明确有景区直通车/旅游专线就写班车，否则写包车/网约车；禁止写成连续徒步或景区观光车短驳";
+  "narrative 须写明跨区域交通方式（景区直通车/旅游专线/包车择一）；车程必须逐字照抄交通衔接里给定的『约X小时车程』，禁止拿距离数字换算或把两个数字拼成新数字（线上实测把 47km+3小时 写成『37.7小时车程』）；禁止写成连续徒步或景区观光车短驳";
 
 function ensureNode(graph: RouteGraph, name: string, stop?: { lat?: number; lng?: number; aliases?: string[] }) {
   const key = normalizeName(name);
@@ -893,8 +893,10 @@ export function buildRouteLegs(
     if (dropNote) note = note ? `${note}；${dropNote}` : dropNote;
     const interArea = !!sectionBoundaries?.has(i) && mode === "car" && !dropNote;
     if (interArea) {
-      const km = Math.round((distanceM || 0) / 1000);
-      note = `跨区域接驳（直线约 ${km}km）：优先景区直通车/旅游专线，无班车则包车/网约车`;
+      // 线上实测：note 里同时有"直线约 47km"和 eta 的"约 3 小时车程"两个数字时，
+      // AI 会把它们拼成"约37.7小时车程"。跨区域段只保留 ETA 一个数字，
+      // 距离量级由 eta 本身承载（含绕行系数与山区均速的保守换算）。
+      note = "优先景区直通车/旅游专线，无班车则包车/网约车";
     }
     if (!note) {
       if (distanceM != null && mode === "car") {
