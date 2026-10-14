@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { Check, Globe, Lock, Pencil, RefreshCw, MapPin, Route as RouteIcon, MapPinned, Footprints, Plus } from 'lucide-react';
 import { ImportanceStars } from './ContentCard';
 import ProcessReport, { RouteIssueList } from './ProcessReport';
+import RouteSectionsEditor from './RouteSectionsEditor';
 import { issuesForRoute, summarizeReport } from '../lib/routeReport';
 
 /**
@@ -212,6 +213,9 @@ export default function TourEditReview({
                   途经: {route.stops.map(id => locations.find(l => l.id === id)?.name || id).join(' → ')}
                 </div>
               )}
+              {/* v93：主题游分区可编辑。分组是系统判的，人必须能改，
+                  否则"把判断权交给创作者"只落在告警上，落不到操作上 */}
+              <RouteSectionsEditor route={route} locations={locations} onChange={patch => updateRoute(route.id, patch)} />
               <RouteIssueList issues={issuesForRoute(reportSummary, route)} />
             </div>
           ))

@@ -673,6 +673,30 @@ deno run ... scripts/reprocess-tours.ts --all --apply --confirm 12              
 deno run ... scripts/audit-routes.ts --json scripts/out/route-audit-baseline.json                  # 重跑后复验
 ```
 
+### 分区可编辑（v93 收尾）
+
+分组现在是系统单方面判的，创作者只能看不能改，这和"把判断权交给创作者"的整体方向矛盾。
+补上 `src/lib/routeSections.js`（纯函数）+ `RouteSectionsEditor`：
+片区改名/改类型/上下移动、站点在片区之间移动、片区内调序、增删片区、线性路线一键"按景区分组"。
+
+不变量写进测试：**任何一次编辑后，`stops` 仍是各片区顺序拼接 + 未归组补在后面**，
+一个站点都不会被吞掉，所以地图连线、海拔剖面、交通分段、确认指纹都不会破。
+删除片区不删站点，只退回未归组；同名片区靠 key 改名而不是丢站点（否则第二个片区的
+站点归属会串到第一个片区上 —— 这是实现过程中踩到的真实坑）。
+
+### 部署顺序脚本 `scripts/deploy.sh`
+
+```bash
+scripts/deploy.sh --check     # 只读探测（默认，不变更任何东西）
+scripts/deploy.sh --deploy    # 三项前置全过才部署 process-tour
+```
+
+它守的是两个会让线上出事故的顺序问题：`routes.sections` 列不存在时新函数写该列会 400
+把导览打进 `status=error`；前端没先上线时旧前端不认识 `needs_review`，
+会把成功完成的导览一路等到 4 分钟超时报成"处理超时"。
+
+当前实测状态：`legs`、`prof` 已就位，**`sections` 尚未创建**，CLI 未登录。
+
 ### 尚未落地（下一轮）
 
 - **闸门未做路线降级**：只实现了"重排 + 按容量砍站"两类自动修复，
