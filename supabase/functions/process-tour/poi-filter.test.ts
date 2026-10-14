@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { INFRA_RE, NON_SIGHT_RE, isNonSiteLocation, isNonSitePOI, rejectReasonForPOI } from "./poi-filter.ts";
+import { INFRA_RE, NON_SIGHT_RE, isNonSiteLocation, isNonSitePOI, isTransferPOI, rejectReasonForPOI } from "./poi-filter.ts";
 
 // 全部取样自线上 locations 表里真实混进来的非游览点。
 describe("poi-filter", () => {
@@ -60,5 +60,19 @@ describe("poi-filter", () => {
       "琴台公园-古建筑(打卡点)", "武汉东湖沙滩", "应县木塔", "华严寺",
     ];
     expect(productionKeeps.filter(isNonSitePOI)).toEqual([]);
+  });
+
+  it("区分入口/换乘设施与纯服务设施", () => {
+    // 游客中心、索道站是动线节点；厕所、候车厅、售票窗口不是游览对象。
+    for (const name of ["玉龙雪山国家级风景名胜区游客服务中心", "云杉坪索道上部站", "后石坞索道", "南门停车场"]) {
+      expect(isTransferPOI(name)).toBe(true);
+    }
+    // 纯卫生/休息设施不是动线节点；候车厅属于登乘点，与索道站同类。
+    expect(isTransferPOI("蓝月谷二级坝旅游厕所")).toBe(false);
+    expect(isTransferPOI("观景台休息亭")).toBe(false);
+    expect(isTransferPOI("索道候车厅")).toBe(true);
+    // 但它们都不是"景点"：作为地点入库与排线时一律拒绝
+    expect(isNonSitePOI("索道候车厅")).toBe(true);
+    expect(isNonSitePOI("蓝月谷二级坝旅游厕所")).toBe(true);
   });
 });

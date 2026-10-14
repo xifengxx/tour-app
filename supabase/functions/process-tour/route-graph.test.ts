@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildRouteGraph, buildRouteLegs, elevationDeltaM, estimateRouteDuration, inferTransferMode, minModeForTransfer, parseElevationM, planGraphStops, routeGraphSegments, routeGraphIssues, routeGraphNotes, repairPlanStops, routeLegsText, SCENIC_SHUTTLE_MAX_M } from "./route-graph.ts";
+import { buildRouteGraph, buildRouteLegs, elevationDeltaM, estimateRouteDuration, inferTransferMode, matchLocsToGraph, minModeForTransfer, parseElevationM, planGraphStops, routeGraphSegments, routeGraphIssues, routeGraphNotes, repairPlanStops, routeLegsText, SCENIC_SHUTTLE_MAX_M } from "./route-graph.ts";
 import type { DestinationRouteKnowledge } from "./route-knowledge-types.ts";
 import { CURATED_TRAILS, orderStopsByTrail } from "./trail-routes.ts";
 
@@ -38,6 +38,33 @@ describe("route graph", () => {
     expect(graph.edges.get("入口|中亭")?.mode).toBe("walk");
     expect(graph.edges.get("主峰|南门")?.mode).toBe("shuttle");
     expect(graph.edges.get("南门|主峰")?.mode).toBe("shuttle");
+  });
+
+  it("设施节点不会用景区名派生别名冒充游览点（玉龙雪山真实知识回归）", () => {
+    // auto-research 给蓝月谷造的步道里，节点"蓝月谷游览车-候车厅"含景区名"蓝月谷"，
+    // 派生别名让地点"玉龙雪山国家级风景名胜区蓝月谷"绑到了一座候车厅上，
+    // 整段顺序改由设施点决定。资料显式声明的 aliases 不受此限制。
+    const facilityKnowledge: DestinationRouteKnowledge = {
+      destinationName: "玉龙雪山",
+      aliases: ["玉龙雪山"],
+      zones: [{ id: "blue", name: "蓝月谷" }],
+      trails: [{
+        id: "t1", zoneId: "blue", scenicName: "蓝月谷", aliases: ["玉龙雪山"],
+        stops: [{ name: "蓝月谷游览车-候车厅" }, { name: "蓝月谷导览驿站" }],
+      }],
+      edges: [],
+      source: "auto-research",
+      confidence: 0.75,
+    };
+    const graph = buildRouteGraph(facilityKnowledge);
+    const hall = [...graph.nodes.values()].find(n => n.name === "蓝月谷游览车-候车厅");
+    const station = [...graph.nodes.values()].find(n => n.name === "蓝月谷导览驿站");
+    expect(hall?.aliases || []).not.toContain("蓝月谷");
+    expect(station?.aliases || []).toContain("蓝月谷"); // 非设施节点仍可派生
+
+    const valleyLoc = [{ id: "v", name: "玉龙雪山国家级风景名胜区蓝月谷", lat: 27.126, lng: 100.247 }];
+    const matched = matchLocsToGraph(["v"], valleyLoc, graph);
+    expect(matched.get("v")?.name).toBe("蓝月谷导览驿站");
   });
 
   it("显式交通边强制覆盖同向的默认徒步边", () => {

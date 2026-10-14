@@ -1,4 +1,5 @@
 import { haversineM } from "./geo.ts";
+import { isNonSitePOI } from "./poi-filter.ts";
 import type { DestinationRouteKnowledge, RouteEdge } from "./route-knowledge-types.ts";
 
 const normalizeName = (value: unknown) =>
@@ -276,7 +277,14 @@ export function buildRouteGraph(knowledge: DestinationRouteKnowledge): RouteGrap
         for (const zone of zoneIds) node.zoneIds.add(zone);
         // “蓝月谷导览驿站”这类站点不能只匹配完整站名；同一景区内的实际 POI
         // 常叫“蓝月谷”。把短景区名作为节点别名，但游客中心这类跨区设施不扩大别名。
-        if (trail.scenicName && node.name.includes(trail.scenicName) && node.name !== trail.scenicName) {
+        // v90：设施节点不得用景区名当派生别名。
+        // 实测玉龙雪山 auto-research 知识里，节点「蓝月谷游览车-候车厅」因含景区名
+        // "蓝月谷" 被派生出该别名，于是地点"玉龙雪山国家级风景名胜区蓝月谷"绑到了一座
+        // 候车厅上，整段蓝月谷的步道顺序由一个设施点决定；而真正的索道交通边
+        // （游客服务中心→索道候车厅→冰川公园）反而一条都没绑上。
+        // 资料里显式声明的 aliases 不受此限制（那是人工/研究明确主张的等价名）。
+        if (trail.scenicName && node.name.includes(trail.scenicName)
+          && node.name !== trail.scenicName && !isNonSitePOI(node.name)) {
           node.aliases.push(trail.scenicName);
         }
       }
