@@ -199,6 +199,24 @@ describe("orderStopsGeographic", () => {
     expect(ordered).toContain("gate");
   });
 });
+describe("半径闸圆心解耦（v96.4 青城山回归）", () => {
+  it("核心池标签断裂、质心不可用时，主题游按目的地坐标判近", () => {
+    // 线上实况：青城山核心池 scenic 标签与 coreScenicName 断裂时核心质心≈(0,0)，
+    // nearCore 把都江堰这类 12km 邻居全部杀光，plans 静默只剩一日。
+    const locs = [
+      ...Array.from({ length: 6 }, (_, i) => point(`前山${i}`, "青城山前山", [], 6 - i, 103.572, 30.896)),
+      point("都江堰景区", "独立", ["地区景点"], 3, 103.6105, 31.0034),
+      point("街子古镇", "独立", ["地区景点"], 3, 103.49, 30.83),
+    ];
+    const plans = planRoutes(locs, {
+      coreScenicName: "青城后山", mainScenicName: "", destName: "青城山",
+      destLoc: { lng: 103.572, lat: 30.896 }, isNovelBased: false, novelName: "", hasRegionTour: true,
+    });
+    expect(plans.map(p => p.label)).toContain("主题游");
+    expect(plans.find(p => p.label === "主题游")!.allow.length).toBeGreaterThan(0);
+  });
+});
+
 describe("主题游簇代表身份一致（v96.3 东湖回归）", () => {
   it("簇的代表点按景区名后缀分层，且资格过滤与分区用的是同一个代表", () => {
     // 线上实测：市区簇最先入簇的点是"龟山"（tier 0），pickRep 按重要性平票后

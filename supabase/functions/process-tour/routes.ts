@@ -256,7 +256,10 @@ export function planRoutes(locs: any[], ctx: PlanRoutesContext) {
   const coherentCorePool = rawCorePool.filter(l => haversineM(routeCenter, l) <= CORE_ROUTE_RADIUS_M);
   // 小景区可能只有 1-2 个坐标点；为避免过滤层反而清空常规路线，保留原兜底。
   const routeCorePool = coherentCorePool.length >= 3 ? coherentCorePool : rawCorePool;
-  const nearCore = (l: any, maxM: number) => haversineM(cc, l) <= maxM;
+  // v96.4：半径闸的圆心与核心池质心解耦。此前 nearCore 用 cc（核心池几何中心），
+  // 当核心池因标签断裂为空时 cc≈(0,0)，整批地区点被 60km 闸杀光且 plans 静默只剩 1 条
+  // （青城山线上实测）。与 coherentCorePool 对齐：优先目的地坐标。
+  const nearCore = (l: any, maxM: number) => haversineM(routeCenter, l) <= maxM;
   if (mainPool.length) mainPool = mainPool.filter(l => isRouteSite(l) && nearCore(l, 35000));
   // 主题游的覆盖半径应与地区景点合并半径一致（60km）。此前只取 40km，
   // 会出现地点已入库（如应县木塔 47km、华严寺 60km）但没有任何路线引用的“孤岛地点”。
