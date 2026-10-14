@@ -78,6 +78,18 @@ export async function gaode(name: string, destCity: string, bias?: { lng: number
   return { lng, lat, name: cleanName(top.name) };
 }
 
+/** 用高德逆地理把目的地坐标反解为所在城市（裸省名时的市级检索兜底）。 */
+async function cityAtPoint(lng: number, lat: number): Promise<string> {
+  const r = await fetch(`https://restapi.amap.com/v3/geocode/regeo?key=${GAODE_KEY}&location=${lng},${lat}`, { signal: AbortSignal.timeout(15000) });
+  if (!r.ok) return "";
+  const d = await r.json();
+  const comp = d.regeocode?.addressComponent;
+  if (!comp) return "";
+  const city = String(comp.city || ""); // 直辖市的 city 可能是空数组
+  if (city && city !== "[]") return city;
+  return String(comp.district || comp.province || "");
+}
+
 async function regionScenicsOnce(params: string) {
   // 刻意不传 location= 偏置：实测带偏置时高德把结果聚到圆心周围，
   // "山西大同 + 恒山坐标"只返回恒山自己的子 POI（介石/财神庙/洗心亭…），
@@ -105,11 +117,17 @@ async function regionScenicsOnce(params: string) {
  * REGION_RADIUS（60km）距离闸负责过滤。
  */
 export async function gaodeRegionScenics(city: string, bias?: { lng: number; lat: number }): Promise<{ lng: number; lat: number; name: string }[]> {
-  void bias; // 保留形参兼容既有调用；见 regionScenicsOnce 注释说明为何不使用
+  void bias; // 仅用于裸省名反解城市，不作为检索偏置；见 regionScenicsOnce 注释
   const { city: rawCityOnly } = splitRegion(city);
   const rawCity = (rawCityOnly || city).replace(/[市]$/g, "");
-  const cityIsProvince = !!rawCity && PROV_EXACT.test(rawCity.replace(/省$/g, ""));
-  const query = cityIsProvince ? "" : `city=${encodeURIComponent(rawCity)}&citylimit=true&`;
+  const cityIsProvince = !rawCity || PROV_EXACT.test(rawCity.replace(/省$/g, ""));
+  // v96.4：裸省名（如青城山地区填"四川"）时市级参数为空，高德对
+  // "types=风景名胜" 的全省查询直接返回空（要求先选城市），线上实测
+  // 主题游候选为 0。改用目的地坐标逆解出所在城市（都江堰 12km 的漏检
+  // 由此产生），再走正常的市级检索。
+  let effectiveCity = cityIsProvince ? "" : rawCity;
+  if (!effectiveCity && bias) effectiveCity = (await cityAtPoint(bias.lng, bias.lat)).replace(/[市]$/g, "");
+  const query = effectiveCity ? `city=${encodeURIComponent(effectiveCity)}&citylimit=true&` : "";
   const seen = new Set<string>();
   const out: { lng: number; lat: number; name: string }[] = [];
   for (const p of await regionScenicsOnce(query).catch(() => [])) {
