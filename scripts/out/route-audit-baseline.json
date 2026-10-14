@@ -1,27 +1,30 @@
 {
-  "auditedAt": "2026-10-14T08:40:13.925Z",
+  "auditedAt": "2026-10-14T11:28:12.240Z",
   "summary": {
     "tours": 12,
     "tierL3": 2,
     "tierL2": 2,
     "tierL1": 8,
-    "wouldSuppressMultiDay": 7,
-    "wouldSuppressTheme": 6,
-    "routes": 34,
-    "storedLegs": 6,
+    "wouldSuppressMultiDay": 6,
+    "wouldSuppressTheme": 0,
+    "routes": 33,
+    "storedLegs": 5,
     "missingLegs": 28,
-    "modeChanged": 13,
-    "upgraded": 7,
+    "modeChanged": 10,
+    "upgraded": 4,
     "downgraded": 6,
-    "issues": 22,
+    "issues": 24,
     "longDay": 2,
     "legacyUmbrellaStops": 21,
     "legacyUmbrellaRoutes": 21,
-    "blocking": 4,
-    "gateBlockedRoutes": 4,
-    "repairableByReorder": 3,
+    "blocking": 6,
+    "gateBlockedRoutes": 5,
+    "repairableByReorder": 5,
     "duplicatePairs": 2,
-    "toursWithDuplicates": 2
+    "toursWithDuplicates": 2,
+    "boundStops": 17,
+    "routeStops": 252,
+    "zoneAssignedStops": 0
   },
   "routes": [
     {
@@ -29,8 +32,8 @@
       "tourTitle": "丽江玉龙雪山之旅。",
       "routeId": "77a10329-r1",
       "dayLabel": "1日精华游",
-      "stops": 4,
-      "storedLegs": 3,
+      "stops": 9,
+      "storedLegs": 8,
       "nextLegs": [
         {
           "from": "玉龙雪山冰川公园栈道",
@@ -51,102 +54,37 @@
         },
         {
           "from": "白水河",
-          "to": "甘海子",
-          "mode": "shuttle",
-          "distanceM": 4255,
-          "elevationDeltaM": 150,
-          "roadMinutes": 12,
-          "inferred": true
-        }
-      ],
-      "changedModes": [
-        "77a10329-glacier-park>77a10329-blue-moon-valley:cableway=>shuttle"
-      ],
-      "issues": [
-        {
-          "type": "long-transfer",
-          "level": "advisory",
-          "message": "玉龙雪山冰川公园栈道 → 玉龙雪山国家级风景名胜区蓝月谷（直线约 5km、高差约 1606m）资料中无衔接方式，已推断为「观光车/摆渡车」（未经核实）"
-        }
-      ],
-      "blocking": [],
-      "autoRepairable": false,
-      "durationMinutes": 100,
-      "narrativeInstruction": "玉龙雪山冰川公园栈道 → 玉龙雪山国家级风景名胜区蓝月谷：观光车/摆渡车，约 2.3 小时车程，高差约 1606m，须借助索道或景区交通下撤，禁止写成连续徒步（narrative 须写明乘坐景区观光车或摆渡车）；玉龙雪山国家级风景名胜区蓝月谷 → 白水河：徒步；白水河 → 甘海子：观光车/摆渡车，约 2 小时车程，直线约 4km，建议乘坐景区观光车（narrative 须写明乘坐景区观光车或摆渡车）",
-      "tier": "L2",
-      "knowledgeSource": "auto-research",
-      "tierLabel": "自动研究/策展顺序，未经核实",
-      "suppressedByTier": false,
-      "duplicatePairs": [],
-      "umbrellaStops": []
-    },
-    {
-      "tourId": "77a10329-37f8-4a9d-8889-d33cec89ad65",
-      "tourTitle": "丽江玉龙雪山之旅。",
-      "routeId": "77a10329-r2",
-      "dayLabel": "2日全景游",
-      "stops": 10,
-      "storedLegs": 9,
-      "nextLegs": [
-        {
-          "from": "玉龙雪山冰川公园栈道",
-          "to": "玉龙雪山国家级风景名胜区蓝月谷",
-          "mode": "shuttle",
-          "distanceM": 5193,
-          "elevationDeltaM": -1606,
-          "roadMinutes": 14,
-          "inferred": true
-        },
-        {
-          "from": "玉龙雪山国家级风景名胜区蓝月谷",
-          "to": "白水河",
-          "mode": "walk",
-          "distanceM": 457,
-          "elevationDeltaM": 50,
-          "inferred": true
-        },
-        {
-          "from": "白水河",
-          "to": "甘海子",
-          "mode": "shuttle",
-          "distanceM": 4255,
-          "elevationDeltaM": 150,
-          "roadMinutes": 12,
-          "inferred": true
-        },
-        {
-          "from": "甘海子",
           "to": "云杉坪索道上部站",
-          "mode": "shuttle",
-          "distanceM": 5174,
-          "elevationDeltaM": 140,
-          "roadMinutes": 14,
+          "mode": "walk",
+          "distanceM": 942,
+          "elevationDeltaM": 290,
           "inferred": true
         },
         {
           "from": "云杉坪索道上部站",
-          "to": "云杉坪",
-          "mode": "walk",
-          "distanceM": 745,
-          "elevationDeltaM": 0,
-          "inferred": true
-        },
-        {
-          "from": "云杉坪",
           "to": "牦牛坪",
           "mode": "shuttle",
-          "distanceM": 4137,
+          "distanceM": 3519,
           "elevationDeltaM": 460,
-          "roadMinutes": 11,
+          "roadMinutes": 10,
           "inferred": true
         },
         {
           "from": "牦牛坪",
+          "to": "甘海子",
+          "mode": "shuttle",
+          "distanceM": 8479,
+          "elevationDeltaM": -600,
+          "roadMinutes": 23,
+          "inferred": true
+        },
+        {
+          "from": "甘海子",
           "to": "丽江玉水寨",
-          "mode": "car",
-          "distanceM": 18970,
-          "elevationDeltaM": -1000,
-          "roadMinutes": 72,
+          "mode": "shuttle",
+          "distanceM": 11545,
+          "elevationDeltaM": -400,
+          "roadMinutes": 32,
           "inferred": true
         },
         {
@@ -170,7 +108,7 @@
       ],
       "changedModes": [
         "77a10329-glacier-park>77a10329-blue-moon-valley:cableway=>shuttle",
-        "77a10329-yak-meadow>77a10329-yushui-village:shuttle=>car"
+        "77a10329-baishui-river>77a10329-spruce-meadow:shuttle=>walk"
       ],
       "issues": [
         {
@@ -181,32 +119,40 @@
         {
           "type": "long-transfer",
           "level": "advisory",
-          "message": "云杉坪 → 牦牛坪（直线约 4km、高差约 460m）资料中无衔接方式，已推断为「观光车/摆渡车」（未经核实）"
+          "message": "云杉坪索道上部站 → 牦牛坪（直线约 4km、高差约 460m）资料中无衔接方式，已推断为「观光车/摆渡车」（未经核实）"
         },
         {
           "type": "long-transfer",
           "level": "advisory",
-          "message": "牦牛坪 → 丽江玉水寨（直线约 19km、高差约 1000m）资料中无衔接方式，已推断为「专车/出租车」（未经核实）"
+          "message": "牦牛坪 → 甘海子（直线约 8km、高差约 600m）资料中无衔接方式，已推断为「观光车/摆渡车」（未经核实）"
+        },
+        {
+          "type": "long-transfer",
+          "level": "advisory",
+          "message": "甘海子 → 丽江玉水寨（直线约 12km、高差约 400m）资料中无衔接方式，已推断为「观光车/摆渡车」（未经核实）"
         }
       ],
       "blocking": [],
       "autoRepairable": false,
-      "durationMinutes": 368,
-      "narrativeInstruction": "玉龙雪山冰川公园栈道 → 玉龙雪山国家级风景名胜区蓝月谷：观光车/摆渡车，约 2.3 小时车程，高差约 1606m，须借助索道或景区交通下撤，禁止写成连续徒步（narrative 须写明乘坐景区观光车或摆渡车）；玉龙雪山国家级风景名胜区蓝月谷 → 白水河：徒步；白水河 → 甘海子：观光车/摆渡车，约 2 小时车程，直线约 4km，建议乘坐景区观光车（narrative 须写明乘坐景区观光车或摆渡车）；甘海子 → 云杉坪索道上部站：观光车/摆渡车，约 2.3 小时车程，直线约 5km，建议乘坐景区观光车（narrative 须写明乘坐景区观光车或摆渡车）；云杉坪索道上部站 → 云杉坪：徒步；云杉坪 → 牦牛坪：观光车/摆渡车，约 1.8 小时车程，高差约 460m，须借助索道或景区交通上升，禁止写成连续徒步（narrative 须写明乘坐景区观光车或摆渡车）；牦牛坪 → 丽江玉水寨：专车/出租车，约 12 小时车程，高差约 1000m，须借助索道或景区交通下撤，禁止写成连续徒步（narrative 必须写明需乘车/包车并给出时长，禁止描述为景区观光车短驳或索道直达）；丽江玉水寨 → 东巴谷：观光车/摆渡车，约 2.7 小时车程，直线约 6km，建议乘坐景区观光车（narrative 须写明乘坐景区观光车或摆渡车）；东巴谷 → 玉峰寺：观光车/摆渡车，约 3 小时车程，直线约 7km，建议乘坐景区观光车（narrative 须写明乘坐景区观光车或摆渡车）",
+      "durationMinutes": 326,
+      "narrativeInstruction": "玉龙雪山冰川公园栈道 → 玉龙雪山国家级风景名胜区蓝月谷：观光车/摆渡车，约 2.3 小时车程，高差约 1606m，须借助索道或景区交通下撤，禁止写成连续徒步（narrative 须写明乘坐景区观光车或摆渡车）；玉龙雪山国家级风景名胜区蓝月谷 → 白水河：徒步；白水河 → 云杉坪索道上部站：徒步；云杉坪索道上部站 → 牦牛坪：观光车/摆渡车，约 1.7 小时车程，高差约 460m，须借助索道或景区交通上升，禁止写成连续徒步（narrative 须写明乘坐景区观光车或摆渡车）；牦牛坪 → 甘海子：观光车/摆渡车，约 3.8 小时车程，高差约 600m，须借助索道或景区交通下撤，禁止写成连续徒步（narrative 须写明乘坐景区观光车或摆渡车）；甘海子 → 丽江玉水寨：观光车/摆渡车，约 5.3 小时车程，高差约 400m，须借助索道或景区交通下撤，禁止写成连续徒步（narrative 须写明乘坐景区观光车或摆渡车）；丽江玉水寨 → 东巴谷：观光车/摆渡车，约 2.7 小时车程，直线约 6km，建议乘坐景区观光车（narrative 须写明乘坐景区观光车或摆渡车）；东巴谷 → 玉峰寺：观光车/摆渡车，约 3 小时车程，直线约 7km，建议乘坐景区观光车（narrative 须写明乘坐景区观光车或摆渡车）",
       "tier": "L2",
       "knowledgeSource": "auto-research",
       "tierLabel": "自动研究/策展顺序，未经核实",
-      "suppressedByTier": true,
+      "suppressedByTier": false,
+      "bindingRate": 0,
+      "zoneRate": 0,
+      "knowledgeQuality": null,
       "duplicatePairs": [],
       "umbrellaStops": []
     },
     {
       "tourId": "77a10329-37f8-4a9d-8889-d33cec89ad65",
       "tourTitle": "丽江玉龙雪山之旅。",
-      "routeId": "77a10329-r3",
+      "routeId": "77a10329-r2",
       "dayLabel": "主题游",
-      "stops": 7,
-      "storedLegs": 6,
+      "stops": 5,
+      "storedLegs": 4,
       "nextLegs": [
         {
           "from": "玉龙雪山冰川公园栈道",
@@ -219,16 +165,10 @@
         },
         {
           "from": "玉龙雪山国家级风景名胜区蓝月谷",
-          "to": "邀月楼",
-          "mode": "walk",
-          "distanceM": 760,
-          "inferred": true
-        },
-        {
-          "from": "邀月楼",
           "to": "云杉坪索道上部站",
           "mode": "walk",
-          "distanceM": 1715,
+          "distanceM": 1253,
+          "elevationDeltaM": 340,
           "inferred": true
         },
         {
@@ -247,21 +187,11 @@
           "distanceM": 28637,
           "roadMinutes": 109,
           "inferred": true
-        },
-        {
-          "from": "丽江拉市海湿地公园",
-          "to": "香格里拉虎跳峡",
-          "mode": "car",
-          "distanceM": 36713,
-          "roadMinutes": 140,
-          "inferred": true
         }
       ],
       "changedModes": [
         "77a10329-glacier-park>77a10329-blue-moon-valley:cableway=>shuttle",
-        "77a10329-reg-16>77a10329-spruce-meadow:shuttle=>walk",
-        "77a10329-ganhaizi>77a10329-reg-13:shuttle=>car",
-        "77a10329-reg-13>77a10329-reg-14:shuttle=>car"
+        "77a10329-blue-moon-valley>77a10329-spruce-meadow:shuttle=>walk"
       ],
       "issues": [
         {
@@ -272,12 +202,15 @@
       ],
       "blocking": [],
       "autoRepairable": false,
-      "durationMinutes": 455,
-      "narrativeInstruction": "玉龙雪山冰川公园栈道 → 玉龙雪山国家级风景名胜区蓝月谷：观光车/摆渡车，约 2.3 小时车程，高差约 1606m，须借助索道或景区交通下撤，禁止写成连续徒步（narrative 须写明乘坐景区观光车或摆渡车）；玉龙雪山国家级风景名胜区蓝月谷 → 邀月楼：徒步；邀月楼 → 云杉坪索道上部站：徒步；云杉坪索道上部站 → 甘海子：观光车/摆渡车，约 2.3 小时车程，直线约 5km，建议乘坐景区观光车（narrative 须写明乘坐景区观光车或摆渡车）；甘海子 → 丽江拉市海湿地公园：专车/出租车，约 18.2 小时车程，直线约 29km，山路约 54.4km / 109 分钟车程（narrative 必须写明需乘车/包车并给出时长，禁止描述为景区观光车短驳或索道直达）；丽江拉市海湿地公园 → 香格里拉虎跳峡：专车/出租车，约 23.3 小时车程，直线约 37km，山路约 69.8km / 140 分钟车程（narrative 必须写明需乘车/包车并给出时长，禁止描述为景区观光车短驳或索道直达）",
+      "durationMinutes": 267,
+      "narrativeInstruction": "玉龙雪山冰川公园栈道 → 玉龙雪山国家级风景名胜区蓝月谷：观光车/摆渡车，约 2.3 小时车程，高差约 1606m，须借助索道或景区交通下撤，禁止写成连续徒步（narrative 须写明乘坐景区观光车或摆渡车）；玉龙雪山国家级风景名胜区蓝月谷 → 云杉坪索道上部站：徒步，高差约 340m，须借助索道或景区交通上升，禁止写成连续徒步；云杉坪索道上部站 → 甘海子：观光车/摆渡车，约 2.3 小时车程，直线约 5km，建议乘坐景区观光车（narrative 须写明乘坐景区观光车或摆渡车）；甘海子 → 丽江拉市海湿地公园：专车/出租车，约 18.2 小时车程，直线约 29km，山路约 54.4km / 109 分钟车程（narrative 必须写明需乘车/包车并给出时长，禁止描述为景区观光车短驳或索道直达）",
       "tier": "L2",
       "knowledgeSource": "auto-research",
       "tierLabel": "自动研究/策展顺序，未经核实",
-      "suppressedByTier": true,
+      "suppressedByTier": false,
+      "bindingRate": 0,
+      "zoneRate": 0,
+      "knowledgeQuality": null,
       "duplicatePairs": [],
       "umbrellaStops": []
     },
@@ -337,6 +270,9 @@
       "knowledgeSource": "auto-research",
       "tierLabel": "自动研究/策展顺序，未经核实",
       "suppressedByTier": false,
+      "bindingRate": 0,
+      "zoneRate": 0,
+      "knowledgeQuality": null,
       "duplicatePairs": [],
       "umbrellaStops": []
     },
@@ -422,6 +358,9 @@
       "knowledgeSource": "auto-research",
       "tierLabel": "自动研究/策展顺序，未经核实",
       "suppressedByTier": true,
+      "bindingRate": 0,
+      "zoneRate": 0,
+      "knowledgeQuality": null,
       "duplicatePairs": [],
       "umbrellaStops": []
     },
@@ -512,7 +451,10 @@
       "tier": "L2",
       "knowledgeSource": "auto-research",
       "tierLabel": "自动研究/策展顺序，未经核实",
-      "suppressedByTier": true,
+      "suppressedByTier": false,
+      "bindingRate": 0,
+      "zoneRate": 0,
+      "knowledgeQuality": null,
       "duplicatePairs": [],
       "umbrellaStops": []
     },
@@ -618,6 +560,9 @@
       "knowledgeSource": "builtin",
       "tierLabel": "已验证（人工策展或创作者确认）",
       "suppressedByTier": false,
+      "bindingRate": 0.65,
+      "zoneRate": 0,
+      "knowledgeQuality": 0.68,
       "duplicatePairs": [],
       "umbrellaStops": []
     },
@@ -678,6 +623,9 @@
       "knowledgeSource": "builtin",
       "tierLabel": "已验证（人工策展或创作者确认）",
       "suppressedByTier": false,
+      "bindingRate": 0.65,
+      "zoneRate": 0,
+      "knowledgeQuality": 0.68,
       "duplicatePairs": [],
       "umbrellaStops": []
     },
@@ -756,6 +704,9 @@
       "knowledgeSource": "none",
       "tierLabel": "无路线知识",
       "suppressedByTier": false,
+      "bindingRate": 0,
+      "zoneRate": 0,
+      "knowledgeQuality": null,
       "duplicatePairs": [],
       "umbrellaStops": [
         "青城山"
@@ -851,6 +802,9 @@
       "knowledgeSource": "none",
       "tierLabel": "无路线知识",
       "suppressedByTier": true,
+      "bindingRate": 0,
+      "zoneRate": 0,
+      "knowledgeQuality": null,
       "duplicatePairs": [],
       "umbrellaStops": [
         "青城山"
@@ -914,7 +868,10 @@
       "tier": "L1",
       "knowledgeSource": "none",
       "tierLabel": "无路线知识",
-      "suppressedByTier": true,
+      "suppressedByTier": false,
+      "bindingRate": 0,
+      "zoneRate": 0,
+      "knowledgeQuality": null,
       "duplicatePairs": [],
       "umbrellaStops": [
         "青城山"
@@ -972,6 +929,9 @@
       "knowledgeSource": "none",
       "tierLabel": "无路线知识",
       "suppressedByTier": false,
+      "bindingRate": 0,
+      "zoneRate": 0,
+      "knowledgeQuality": null,
       "duplicatePairs": [],
       "umbrellaStops": [
         "武当山"
@@ -1084,6 +1044,9 @@
       "knowledgeSource": "none",
       "tierLabel": "无路线知识",
       "suppressedByTier": true,
+      "bindingRate": 0,
+      "zoneRate": 0,
+      "knowledgeQuality": null,
       "duplicatePairs": [],
       "umbrellaStops": [
         "武当山"
@@ -1168,6 +1131,9 @@
       "knowledgeSource": "none",
       "tierLabel": "无路线知识",
       "suppressedByTier": false,
+      "bindingRate": 0,
+      "zoneRate": 0,
+      "knowledgeQuality": null,
       "duplicatePairs": [],
       "umbrellaStops": [
         "天门山国家森林公园"
@@ -1293,18 +1259,27 @@
           "type": "long-transfer",
           "level": "blocking",
           "message": "天门山寺 → 黄石寨（直线约 33km）资料中无衔接方式，已推断为「专车/出租车」（未经核实）"
+        },
+        {
+          "type": "zone-interleaved",
+          "level": "blocking",
+          "message": "站点集跨 2 个片区，黄石寨、杨家界、袁家界、金鞭溪峡谷、十里画廊、百龙天梯 与主体之间没有 12km 内的衔接"
         }
       ],
       "blocking": [
-        "天门山寺 → 黄石寨（直线约 33km）资料中无衔接方式，已推断为「专车/出租车」（未经核实）"
+        "天门山寺 → 黄石寨（直线约 33km）资料中无衔接方式，已推断为「专车/出租车」（未经核实）",
+        "站点集跨 2 个片区，黄石寨、杨家界、袁家界、金鞭溪峡谷、十里画廊、百龙天梯 与主体之间没有 12km 内的衔接"
       ],
-      "autoRepairable": false,
+      "autoRepairable": true,
       "durationMinutes": 639,
       "narrativeInstruction": "天门山国家森林公园 → 天门山索道：观光车/摆渡车，约 4 小时车程，直线约 9km，建议乘坐景区观光车（narrative 须写明乘坐景区观光车或摆渡车）；天门山索道 → 通天大道：观光车/摆渡车，约 2.7 小时车程，直线约 6km，建议乘坐景区观光车（narrative 须写明乘坐景区观光车或摆渡车）；通天大道 → 天门洞前广场：徒步；天门洞前广场 → 西线玻璃栈道：徒步；西线玻璃栈道 → 鬼谷栈道(野拂)：徒步；鬼谷栈道(野拂) → 云梦仙顶：徒步；云梦仙顶 → 天门山寺：徒步；天门山寺 → 黄石寨：专车/出租车，约 20.8 小时车程，直线约 33km，山路约 62.7km / 125 分钟车程（narrative 必须写明需乘车/包车并给出时长，禁止描述为景区观光车短驳或索道直达）；黄石寨 → 杨家界：观光车/摆渡车，约 1.7 小时车程，直线约 4km，建议乘坐景区观光车（narrative 须写明乘坐景区观光车或摆渡车）；杨家界 → 袁家界：观光车/摆渡车，约 1.7 小时车程，直线约 4km，建议乘坐景区观光车（narrative 须写明乘坐景区观光车或摆渡车）；袁家界 → 金鞭溪峡谷：徒步；金鞭溪峡谷 → 十里画廊：观光车/摆渡车，约 2 小时车程，直线约 5km，建议乘坐景区观光车（narrative 须写明乘坐景区观光车或摆渡车）；十里画廊 → 百龙天梯：徒步",
       "tier": "L1",
       "knowledgeSource": "none",
       "tierLabel": "无路线知识",
       "suppressedByTier": true,
+      "bindingRate": 0,
+      "zoneRate": 0,
+      "knowledgeQuality": null,
       "duplicatePairs": [],
       "umbrellaStops": [
         "天门山国家森林公园"
@@ -1375,7 +1350,10 @@
       "tier": "L1",
       "knowledgeSource": "none",
       "tierLabel": "无路线知识",
-      "suppressedByTier": true,
+      "suppressedByTier": false,
+      "bindingRate": 0,
+      "zoneRate": 0,
+      "knowledgeQuality": null,
       "duplicatePairs": [],
       "umbrellaStops": [
         "天门山国家森林公园"
@@ -1446,6 +1424,9 @@
       "knowledgeSource": "none",
       "tierLabel": "无路线知识",
       "suppressedByTier": false,
+      "bindingRate": 0,
+      "zoneRate": 0,
+      "knowledgeQuality": null,
       "duplicatePairs": [],
       "umbrellaStops": [
         "庐山"
@@ -1523,6 +1504,9 @@
       "knowledgeSource": "none",
       "tierLabel": "无路线知识",
       "suppressedByTier": false,
+      "bindingRate": 0,
+      "zoneRate": 0,
+      "knowledgeQuality": null,
       "duplicatePairs": [],
       "umbrellaStops": [
         "庐山"
@@ -1610,6 +1594,9 @@
       "knowledgeSource": "none",
       "tierLabel": "无路线知识",
       "suppressedByTier": false,
+      "bindingRate": 0,
+      "zoneRate": 0,
+      "knowledgeQuality": null,
       "duplicatePairs": [
         {
           "keep": "1日游·徒步环线",
@@ -1704,6 +1691,9 @@
       "knowledgeSource": "none",
       "tierLabel": "无路线知识",
       "suppressedByTier": false,
+      "bindingRate": 0,
+      "zoneRate": 0,
+      "knowledgeQuality": null,
       "duplicatePairs": [
         {
           "keep": "1日游·徒步环线",
@@ -1742,6 +1732,9 @@
       "knowledgeSource": "none",
       "tierLabel": "无路线知识",
       "suppressedByTier": false,
+      "bindingRate": 0,
+      "zoneRate": 0,
+      "knowledgeQuality": null,
       "duplicatePairs": [],
       "umbrellaStops": [
         "龟山风景区"
@@ -1774,6 +1767,9 @@
       "knowledgeSource": "none",
       "tierLabel": "无路线知识",
       "suppressedByTier": false,
+      "bindingRate": 0,
+      "zoneRate": 0,
+      "knowledgeQuality": null,
       "duplicatePairs": [],
       "umbrellaStops": []
     },
@@ -1818,6 +1814,9 @@
       "knowledgeSource": "none",
       "tierLabel": "无路线知识",
       "suppressedByTier": false,
+      "bindingRate": 0,
+      "zoneRate": 0,
+      "knowledgeQuality": null,
       "duplicatePairs": [],
       "umbrellaStops": [
         "龟山风景区"
@@ -1927,6 +1926,9 @@
       "knowledgeSource": "none",
       "tierLabel": "无路线知识",
       "suppressedByTier": true,
+      "bindingRate": 0,
+      "zoneRate": 0,
+      "knowledgeQuality": null,
       "duplicatePairs": [],
       "umbrellaStops": []
     },
@@ -1985,6 +1987,9 @@
       "knowledgeSource": "none",
       "tierLabel": "无路线知识",
       "suppressedByTier": false,
+      "bindingRate": 0,
+      "zoneRate": 0,
+      "knowledgeQuality": null,
       "duplicatePairs": [],
       "umbrellaStops": []
     },
@@ -2037,7 +2042,10 @@
       "tier": "L1",
       "knowledgeSource": "none",
       "tierLabel": "无路线知识",
-      "suppressedByTier": true,
+      "suppressedByTier": false,
+      "bindingRate": 0,
+      "zoneRate": 0,
+      "knowledgeQuality": null,
       "duplicatePairs": [],
       "umbrellaStops": []
     },
@@ -2137,6 +2145,9 @@
       "knowledgeSource": "builtin",
       "tierLabel": "已验证（人工策展或创作者确认）",
       "suppressedByTier": false,
+      "bindingRate": 0.21,
+      "zoneRate": 0,
+      "knowledgeQuality": 0.54,
       "duplicatePairs": [],
       "umbrellaStops": [
         "泰山风景名胜区"
@@ -2251,6 +2262,9 @@
       "knowledgeSource": "builtin",
       "tierLabel": "已验证（人工策展或创作者确认）",
       "suppressedByTier": false,
+      "bindingRate": 0.21,
+      "zoneRate": 0,
+      "knowledgeQuality": 0.54,
       "duplicatePairs": [],
       "umbrellaStops": [
         "泰山风景名胜区"
@@ -2307,6 +2321,9 @@
       "knowledgeSource": "builtin",
       "tierLabel": "已验证（人工策展或创作者确认）",
       "suppressedByTier": false,
+      "bindingRate": 0.21,
+      "zoneRate": 0,
+      "knowledgeQuality": 0.54,
       "duplicatePairs": [],
       "umbrellaStops": [
         "泰山风景名胜区"
@@ -2370,6 +2387,9 @@
       "knowledgeSource": "builtin",
       "tierLabel": "已验证（人工策展或创作者确认）",
       "suppressedByTier": false,
+      "bindingRate": 0.21,
+      "zoneRate": 0,
+      "knowledgeQuality": 0.54,
       "duplicatePairs": [],
       "umbrellaStops": []
     },
@@ -2448,6 +2468,9 @@
       "knowledgeSource": "none",
       "tierLabel": "无路线知识",
       "suppressedByTier": false,
+      "bindingRate": 0,
+      "zoneRate": 0,
+      "knowledgeQuality": null,
       "duplicatePairs": [
         {
           "keep": "1日精华游",
@@ -2555,16 +2578,26 @@
           "type": "long-transfer",
           "level": "advisory",
           "message": "猴子观海 → 呈坎（直线约 28km）资料中无衔接方式，已推断为「专车/出租车」（未经核实）"
+        },
+        {
+          "type": "zone-interleaved",
+          "level": "blocking",
+          "message": "站点集跨 2 个片区，呈坎、唐模、潜口民宅博物馆 与主体之间没有 12km 内的衔接"
         }
       ],
-      "blocking": [],
-      "autoRepairable": false,
+      "blocking": [
+        "站点集跨 2 个片区，呈坎、唐模、潜口民宅博物馆 与主体之间没有 12km 内的衔接"
+      ],
+      "autoRepairable": true,
       "durationMinutes": 579,
       "narrativeInstruction": "黄山 → 黄山-莲花峰：徒步；黄山-莲花峰 → 黄山风景区-光明顶：徒步；黄山风景区-光明顶 → 天都峰赋：徒步；天都峰赋 → 黄山-迎客松：徒步；黄山-迎客松 → 黄山-西海大峡谷：徒步，高差约 470m，须借助索道或景区交通下撤，禁止写成连续徒步；黄山-西海大峡谷 → 黄山-始信峰：徒步，高差约 483m，须借助索道或景区交通上升，禁止写成连续徒步；黄山-始信峰 → 猴子观海：徒步；猴子观海 → 呈坎：专车/出租车，约 17.5 小时车程，直线约 28km，山路约 52.7km / 105 分钟车程（narrative 必须写明需乘车/包车并给出时长，禁止描述为景区观光车短驳或索道直达）；呈坎 → 唐模：观光车/摆渡车，约 3.3 小时车程，直线约 7km，建议乘坐景区观光车（narrative 须写明乘坐景区观光车或摆渡车）；唐模 → 潜口民宅博物馆：观光车/摆渡车，约 1.8 小时车程，直线约 4km，建议乘坐景区观光车（narrative 须写明乘坐景区观光车或摆渡车）",
       "tier": "L1",
       "knowledgeSource": "none",
       "tierLabel": "无路线知识",
       "suppressedByTier": true,
+      "bindingRate": 0,
+      "zoneRate": 0,
+      "knowledgeQuality": null,
       "duplicatePairs": [
         {
           "keep": "1日精华游",
@@ -2667,7 +2700,10 @@
       "tier": "L1",
       "knowledgeSource": "none",
       "tierLabel": "无路线知识",
-      "suppressedByTier": true,
+      "suppressedByTier": false,
+      "bindingRate": 0,
+      "zoneRate": 0,
+      "knowledgeQuality": null,
       "duplicatePairs": [
         {
           "keep": "1日精华游",
@@ -2755,6 +2791,9 @@
       "knowledgeSource": "none",
       "tierLabel": "无路线知识",
       "suppressedByTier": false,
+      "bindingRate": 0,
+      "zoneRate": 0,
+      "knowledgeQuality": null,
       "duplicatePairs": [
         {
           "keep": "1日精华游",
