@@ -113,6 +113,9 @@ export type RouteLeg = {
   inferred?: boolean;
   // 相邻站点高差（米），来自 locations.elevation；任一缺失时为 undefined。
   elevationDeltaM?: number;
+  // 主题游片区边界：该段是"从一个景区到另一个景区"的跨区域接驳。
+  // 交通方式仍按 >12km 的 car 下限保底，但表述改为中性接驳（见 INTER_AREA_DIRECTIVE）。
+  interArea?: boolean;
 };
 
 export type RouteDurationEstimate = {
@@ -256,6 +259,14 @@ const MODE_DIRECTIVE: Partial<Record<RouteEdge["mode"], string>> = {
   car: "narrative 必须写明需乘车/包车并给出时长，禁止描述为景区观光车短驳或索道直达",
   shuttle: "narrative 须写明乘坐景区观光车或摆渡车",
 };
+
+// v96：主题游片区之间的长距离位移过去一律断言"专车/出租车"，与这类线路的
+// 真实组织方式不符——大同恒山线（用户亲历）全程走景区直通车：大同古城→恒山→
+// 悬空寺→应县木塔→大同古城。但我们同样不能反向断言"这里有直通车"
+// （未经核知的存在性声明，原则同 v88 P1-3）。因此用中性接驳表述：
+// 列出候选方式，让 AI 依据目的地资料择一写明，禁止夸大缩位。
+const INTER_AREA_DIRECTIVE =
+  "narrative 须写明跨区域交通方式并给出时长：目的地资料表明确有景区直通车/旅游专线就写班车，否则写包车/网约车；禁止写成连续徒步或景区观光车短驳";
 
 function ensureNode(graph: RouteGraph, name: string, stop?: { lat?: number; lng?: number; aliases?: string[] }) {
   const key = normalizeName(name);
@@ -801,8 +812,27 @@ export function routeGraphNotes(stopIds: string[], locs: any[], knowledge: Desti
 // 内部使用别名，避免与局部变量同名造成遮蔽。
 const elevationDeltaMOf = elevationDeltaM;
 
-export function buildRouteLegs(stopIds: string[], locs: any[], knowledge: DestinationRouteKnowledge): RouteLeg[] {
+/** 找出"第 i 段（stopIds[i]→stopIds[i+1]）跨片区"的边界下标集合。 */
+export function sectionBoundarySet(stopIds: string[], sections: string[][]): Set<number> {
+  const owner = new Map<string, number>();
+  sections.forEach((ids, si) => { for (const id of ids) if (!owner.has(id)) owner.set(id, si); });
+  const out = new Set<number>();
+  for (let i = 0; i < stopIds.length - 1; i++) {
+    const a = owner.get(stopIds[i]);
+    const b = owner.get(stopIds[i + 1]);
+    if (a !== undefined && b !== undefined && a !== b) out.add(i);
+  }
+  return out;
+}
+
+export function buildRouteLegs(
+  stopIds: string[],
+  locs: any[],
+  knowledge: DestinationRouteKnowledge,
+  opts: { sections?: string[][] } = {},
+): RouteLeg[] {
   if (stopIds.length < 2) return [];
+  const sectionBoundaries = opts.sections?.length ? sectionBoundarySet(stopIds, opts.sections) : null;
   const graph = buildRouteGraph(knowledge);
   const matches = matchLocsToGraph(stopIds, locs, graph);
   const byId = new Map(locs.map(loc => [loc.id, loc]));
@@ -861,6 +891,11 @@ export function buildRouteLegs(stopIds: string[], locs: any[], knowledge: Destin
       ? `高差约 ${Math.abs(elevationDeltaM)}m，须借助索道或景区交通${elevationDeltaM < 0 ? "下撤" : "上升"}，禁止写成连续徒步`
       : "";
     if (dropNote) note = note ? `${note}；${dropNote}` : dropNote;
+    const interArea = !!sectionBoundaries?.has(i) && mode === "car" && !dropNote;
+    if (interArea) {
+      const km = Math.round((distanceM || 0) / 1000);
+      note = `跨区域接驳（直线约 ${km}km）：优先景区直通车/旅游专线，无班车则包车/网约车`;
+    }
     if (!note) {
       if (distanceM != null && mode === "car") {
         const road = estimateRoadTransfer(distanceM, "car");
@@ -887,6 +922,7 @@ export function buildRouteLegs(stopIds: string[], locs: any[], knowledge: Destin
       edgeSynthetic: edge ? isSyntheticWalkEdge(edge) : undefined,
       inferred: (!edge || isSyntheticWalkEdge(edge)) && !transfer,
       elevationDeltaM,
+      interArea: interArea || undefined,
     });
   }
   return legs;
@@ -894,14 +930,15 @@ export function buildRouteLegs(stopIds: string[], locs: any[], knowledge: Destin
 
 export function routeLegsText(legs: RouteLeg[]) {
   return legs.map(leg => {
-    const mode = MODE_TEXT[leg.mode] || MODE_TEXT.other;
+    // 主题游片区边界段显示中性"跨区域接驳"，避免未核实场景下把方式断言成专车。
+    const mode = leg.interArea ? "跨区域接驳" : (MODE_TEXT[leg.mode] || MODE_TEXT.other);
     // 车程优先用资料 duration；缺资料时用直线换算的保守山路车程，
     // 避免把 37km 的山路写成一句笼统的"需接驳"。
     const eta = leg.duration
       ? leg.duration
       : leg.roadMinutes != null ? `约 ${Math.round(leg.roadMinutes / 6 * 10) / 10} 小时车程` : "";
     const detail = [mode, eta, leg.note].filter(Boolean).join("，");
-    const directive = MODE_DIRECTIVE[leg.mode];
+    const directive = leg.interArea ? INTER_AREA_DIRECTIVE : MODE_DIRECTIVE[leg.mode];
     return `${leg.fromName} → ${leg.toName}：${detail}${directive ? `（${directive}）` : ""}`;
   }).join("；");
 }

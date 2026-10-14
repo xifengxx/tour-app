@@ -78,18 +78,47 @@ export async function gaode(name: string, destCity: string, bias?: { lng: number
   return { lng, lat, name: cleanName(top.name) };
 }
 
-export async function gaodeRegionScenics(city: string, bias?: { lng: number; lat: number }): Promise<{ lng: number; lat: number; name: string }[]> {
-  const rawCity = (splitRegion(city).city || city).replace(/[市]$/g, "");
-  const cityIsProvince = !!rawCity && PROV_EXACT.test(rawCity.replace(/省$/g, ""));
-  const cityPart = cityIsProvince ? "" : `city=${encodeURIComponent(rawCity)}&citylimit=true&`;
-  const biasParam = bias ? `&location=${bias.lng},${bias.lat}` : "";
-  const r = await fetch(`https://restapi.amap.com/v3/place/text?${cityPart}key=${GAODE_KEY}&types=风景名胜|旅游景点&offset=30${biasParam}`, { signal: AbortSignal.timeout(30000) });
+async function regionScenicsOnce(params: string) {
+  // 刻意不传 location= 偏置：实测带偏置时高德把结果聚到圆心周围，
+  // "山西大同 + 恒山坐标"只返回恒山自己的子 POI（介石/财神庙/洗心亭…），
+  // 华严寺、云冈石窟、都江堰、黄鹤楼这类真正该进主题游的独立景区一个都拿不到；
+  // 去掉偏置后市级检索能正常覆盖全城（武汉拿到黄鹤楼/武汉大学/昙华林/晴川阁）。
+  const r = await fetch(`https://restapi.amap.com/v3/place/text?${params}key=${GAODE_KEY}&types=风景名胜|旅游景点&offset=50`, { signal: AbortSignal.timeout(30000) });
   if (!r.ok) return [];
   const d = await r.json();
   return (d.pois || [])
     .filter((p: any) => p.location && !/省.*市/.test(p.name || ""))
     .filter((p: any) => !AMUSE_RE.test(p.name || "") && !JUNK_RE.test(p.name || "") && !FACILITY_RE.test(p.name || ""))
     .map((p: any) => { const [lng, lat] = p.location.split(",").map(Number); return { lng, lat, name: cleanName(p.name) }; });
+}
+
+/**
+ * 检索"目的地所在区域的其他独立景区"（v96）。
+ *
+ * 刻意只做市级检索、不带坐标偏置：
+ * 实测带 location= 偏置时高德把结果聚到圆心周围，"山西大同 + 恒山坐标"
+ * 只返回恒山自己的子 POI（介石/财神庙/洗心亭…），华严寺、都江堰、黄鹤楼
+ * 这类真正该进主题游的独立景区一个都拿不到；去掉偏置后市级检索能覆盖全城
+ * （武汉拿到黄鹤楼/武汉大学/昙华林/晴川阁）。省级补查方案实测无效，已撤销。
+ * 超出市级范围的邻市景点（如属朔州的应县木塔）不在本函数职责内，
+ * 主题游候选主要由核心点位与城市列表共同决定；远点由调用方的
+ * REGION_RADIUS（60km）距离闸负责过滤。
+ */
+export async function gaodeRegionScenics(city: string, bias?: { lng: number; lat: number }): Promise<{ lng: number; lat: number; name: string }[]> {
+  void bias; // 保留形参兼容既有调用；见 regionScenicsOnce 注释说明为何不使用
+  const { city: rawCityOnly } = splitRegion(city);
+  const rawCity = (rawCityOnly || city).replace(/[市]$/g, "");
+  const cityIsProvince = !!rawCity && PROV_EXACT.test(rawCity.replace(/省$/g, ""));
+  const query = cityIsProvince ? "" : `city=${encodeURIComponent(rawCity)}&citylimit=true&`;
+  const seen = new Set<string>();
+  const out: { lng: number; lat: number; name: string }[] = [];
+  for (const p of await regionScenicsOnce(query).catch(() => [])) {
+    const key = `${p.name}|${p.lat},${p.lng}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(p);
+  }
+  return out;
 }
 
 export { AMUSE_RE, FACILITY_RE };

@@ -392,6 +392,40 @@ describe("route graph", () => {
     expect(issues.some(i => i.type === "long-transfer" && i.message.includes("无车程估算"))).toBe(false);
   });
 
+  it("主题游片区边界的跨区段改用中性接驳表述（v96）", () => {
+    // 线上实况：恒山主题游的景区之间真实走"景区直通车"（用户亲历大同古城→恒山→悬空寺→应县木塔），
+    // 旧表述把它断言成"专车/出租车"；但反过来无资料断言"这里有直通车"同样是未核实声明（同 v88 P1-3）。
+    // 因此边界段保留 car 距离下限，表述改为"班车优先、无班车包车"的择一条件。
+    const areaLocs = [
+      loc("gucheng", "大同古城", 113.295, 40.076),
+      loc("hengshan", "北岳恒山", 113.716, 39.736),
+    ];
+    const plain = buildRouteLegs(["gucheng", "hengshan"], areaLocs, { ...knowledge, edges: [] });
+    expect(plain[0]).toMatchObject({ mode: "car" });
+    expect(plain[0].interArea).toBeUndefined();
+    expect(routeLegsText(plain)).toContain("禁止描述为景区观光车短驳或索道直达");
+
+    const themed = buildRouteLegs(["gucheng", "hengshan"], areaLocs, { ...knowledge, edges: [] },
+      { sections: [["gucheng"], ["hengshan"]] });
+    expect(themed[0]).toMatchObject({ mode: "car", interArea: true });
+    expect(themed[0].note).toContain("景区直通车");
+    const text = routeLegsText(themed);
+    expect(text).toContain("跨区域接驳");
+    expect(text).toContain("禁止写成连续徒步或景区观光车短驳");
+    // 保守车程估算不丢：容量校验仍按 car 的绕行系数与山区均速计
+    expect(themed[0].roadMinutes).toBeGreaterThan(60);
+
+    // 同一分区内部不标边界
+    const sameSection = buildRouteLegs(["gucheng", "hengshan"], areaLocs, { ...knowledge, edges: [] },
+      { sections: [["gucheng", "hengshan"]] });
+    expect(sameSection[0].interArea).toBeUndefined();
+    // 边界段但距离在摆渡/徒步层（非 car）时也不标——interArea 只针对长距离断言
+    const near = buildRouteLegs(["a", "b"], [loc("a", "东山门", 113.70, 39.70), loc("b", "西山门", 113.73, 39.70)],
+      { ...knowledge, edges: [] }, { sections: [["a"], ["b"]] });
+    expect(near[0]).toMatchObject({ mode: "walk" });
+    expect(near[0].interArea).toBeUndefined();
+  });
+
   it("大落差平面短距离不得判为连续徒步（泰山日观峰→岱庙回归）", () => {
     // 线上实况：日观峰 1536m → 岱庙 150m，直线 7.12km，旧 8km 阈值完全漏报。
     const steepLocs = [

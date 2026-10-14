@@ -241,6 +241,18 @@ describe("planRoutes 能力授权（v89 分层）", () => {
     expect(suppressed[0].reason).toContain("未经核实");
   });
 
+  it("只有一个周边独立景区时主题游仍出，分区为核心+该景区（v96 必出项）", () => {
+    // 用户要求：一条新导览至少两条路线——1日精华游 + 与周边地区组成的主题游。
+    // 恒山/青城山实测：周边哪怕只并回 1 个独立景区（如都江堰），主题游也必须存在。
+    const plans = planRoutes(locs, ctxOf({ capabilities: researched }));
+    const theme = plans.find(p => p.label === "主题游");
+    expect(theme).toBeTruthy();
+    expect(theme!.sections).toHaveLength(2);
+    expect(theme!.sections![0].kind).toBe("核心景区");
+    expect(theme!.sections![1].name).toBe("外围纪念馆");
+    expect(theme!.sections![1].allow).toContain("外围纪念馆");
+  });
+
   it("未核实分区不再把 1 日线压到 5 站", () => {
     // 线上实况：auto-research 给玉龙雪山造的分区把 13 个点全归进"冰川公园"，
     // zoneDriven 选点只剩 4 站；关闭 zoneDriven 后按重要性取满一日容量。

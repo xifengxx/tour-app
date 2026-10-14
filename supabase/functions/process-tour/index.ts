@@ -339,8 +339,9 @@ Deno.serve(async (req: Request) => {
       if (validRepaired.length) warnings.push(`🏔 核心子景点补全 +${validRepaired.length} 个：${validRepaired.map(l => l.name).join("/")}`);
     }
 
-    // 地区景点补充（确定性）：查询目的地区域知名景点，与核心所有点相距 >5km 的独立景点 ≥3 个
-    // → 并入并触发主题游（不依赖 AI 随机判断；如张家界市并入国家森林公园/黄龙洞等）
+    // 地区景点补充（确定性）：查询目的地所在城市知名景点，剔除核心子 POI（离核心 <3km）
+    // 与目的地别名后，只要还剩下 ≥1 个独立景区就并入并触发主题游（v96：主题游是必出项，
+    // 旧阈值 ≥3 让恒山/青城山这类"小山+周边大景点"的目的地永远出不了主题游）。
     if (destRegion && locs.length >= 3) {
       try {
         // 地区准备已与核心提取并行启动（regionPrep），此处直接取结果
@@ -374,6 +375,9 @@ Deno.serve(async (req: Request) => {
           if (regionFinal.some(q => haversineM(q, p) < 1000)) continue; // 同坐标（如武陵源/张家界国家森林公园）只留一个
           if (nameSeen.has(p.name)) continue;
           if (locs.some(l => String(l.name) === p.name)) continue; // 与核心地点同名（如"天门山国家森林公园"）→ 不重复并入
+          // 离核心景点太近的不是"另一个景区"，而是它的子 POI（恒山实测会返回
+          // 介石/财神庙/洗心亭这类），当作独立片区会让主题游变成同一景区的内部路线。
+          if (locs.some(l => haversineM(l, p) < 3000)) continue;
           nameSeen.add(p.name);
           regionFinal.push(p);
         }
@@ -385,14 +389,18 @@ Deno.serve(async (req: Request) => {
         const near = regionFinal.filter(p => haversineM(center, p) <= REGION_RADIUS);
         regionFinal.length = 0;
         regionFinal.push(...near);
-        if (regionFinal.length >= 3) {
+        if (regionFinal.length >= 1) {
           // v70：名称含目的地名的点（"嵩山国家重点风景名胜区""中国·嵩山世界地质公园"）是目的地自身/别名，
           // 并入后会作为"地区景点"混进主题游 → 剔除；cap 20→12、importance 4→3（不该压过核心点）
           const final = regionFinal.filter(p =>
             !(destName && (p.name.includes(destName) || destName.includes(p.name))) &&
             !isDestinationUmbrella(p.name, destName),
           );
-          if (final.length < 3) { console.log("Region merge skipped: only destination aliases within radius"); }
+          if (final.length < 1) {
+            // v96：主题游是必出项，不能静默不出。线上实测恒山重跑后只剩 1 条路线，
+            // 报告里没有任何一行解释主题游去哪了，创作者与开发者都看不见原因。
+            warnings.push(`⚠️ 未能组成主题游：${destRegion || "目的地"} 60km 内没有检索到独立于${destName}的其他景区（高德地区检索 ${regionFinal.length} 个候选，全部被目的地别名/非游览点/距离规则过滤）`);
+          }
           else {
           const addN = Math.min(12, final.length);
           for (const p of final.slice(0, addN)) {
@@ -617,7 +625,7 @@ Deno.serve(async (req: Request) => {
     }
     warnings.push(...planRepairNotes);
     // 每条路线单独生成交通 legs：1日/2日只描述本线衔接，主题游的长距离接驳不污染普通徒步线。
-    const routeTrafficHints = new Map(plans.map(plan => [plan.label, plan.allow ? routeLegsText(buildRouteLegs(plan.allow, locs, routeKnowledge)) : ""]));
+    const routeTrafficHints = new Map(plans.map(plan => [plan.label, plan.allow ? routeLegsText(buildRouteLegs(plan.allow, locs, routeKnowledge, { sections: plan.sections?.map(sec => sec.allow) })) : ""]));
     const graphNotes = routeGraphNotes(plans.flatMap(p => p.allow || []), dbLocs, routeKnowledge);
     // 每条路线的指定站点清单（文学巡礼线无 allow，AI 自由选）
     const planText = plans.map((p, i) => {
@@ -836,7 +844,7 @@ Deno.serve(async (req: Request) => {
     let routeDurationMinutes = 0;
     const gateBlocking: { label: string; message: string }[] = [];
     for (const route of routes) {
-      const legs = buildRouteLegs(route.stops, dbLocs, routeKnowledge);
+      const legs = buildRouteLegs(route.stops, dbLocs, routeKnowledge, { sections: route.sections?.map((sec: any) => sec.stopIds || []) });
       route.legs = legs;
       routeDurationMinutes += estimateRouteDuration(legs, route.stops.length).totalMinutes;
       const issues = routeGraphIssues(route.stops, dbLocs, routeKnowledge, {
