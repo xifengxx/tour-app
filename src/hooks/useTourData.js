@@ -104,6 +104,11 @@ export function normalizeTour(row) {
   return {
     id: row.id,
     userId: row.user_id,
+    status: row.status || '',
+    // AI 处理质量报告（P1-1）：Edge Function 把地点剔除、交通衔接告警、
+    // 路线图校验问题全部写进 tours.process_report，此前前端零引用，
+    // 导致创作者在审核页看不到系统已经诊断出的路线缺陷。
+    processReport: row.process_report || null,
     meta: {
       title: row.title,
       subtitle: row.subtitle || '',

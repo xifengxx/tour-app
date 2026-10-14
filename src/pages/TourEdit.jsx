@@ -443,6 +443,7 @@ export default function TourEdit() {
         {phase === 'review' && !loading && tour && (locations.length > 0 || routes.length > 0) && (
           <TourEditReview
             locations={locations} routes={routes} contentLayers={contentLayers}
+            processReport={tour.processReport}
             editingLoc={editingLoc} editingLayer={editingLayer} isPublic={isPublic}
             onSetPhase={setPhase} setIsPublic={setIsPublic}
             onShowMapSearch={() => setShowMapSearch(true)}
