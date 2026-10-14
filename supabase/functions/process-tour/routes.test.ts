@@ -199,6 +199,73 @@ describe("orderStopsGeographic", () => {
     expect(ordered).toContain("gate");
   });
 });
+describe("planRoutes 能力授权（v89 分层）", () => {
+  const zoneA = { id: "zA", name: "A区" };
+  const zoneB = { id: "zB", name: "B区" };
+  const locs = [
+    point("A区索道上站", "核心", [], 7, 114.10, 27.40),
+    point("A区观景台", "核心", [], 6, 114.11, 27.41),
+    point("B区草甸", "核心", [], 5, 114.13, 27.42),
+    point("B区寺庙", "核心", [], 4, 114.14, 27.43),
+    point("核心东", "核心", [], 3, 114.12, 27.41),
+    point("核心西", "核心", [], 2, 114.115, 27.405),
+    point("后山瀑布", "后山", [], 4, 114.16, 27.45),
+    point("后山索道", "后山", [], 3, 114.17, 27.46),
+    point("外围纪念馆", "独立", ["地区景点"], 5, 114.20, 27.50),
+  ];
+  const full = { multiDay: true, themeTour: true, zoneDriven: true, trailOrder: true, assertTransport: true };
+  const researched = { multiDay: false, themeTour: false, zoneDriven: false, trailOrder: true, assertTransport: false };
+  const ctxOf = (over: Record<string, unknown> = {}) => ({
+    coreScenicName: "核心", mainScenicName: "后山", destName: "示例山", isNovelBased: false,
+    novelName: "", hasRegionTour: true, zones: [zoneA, zoneB], ...over,
+  });
+
+  it("已验证知识仍产出 1日/2日/主题游（不削弱现有能力）", () => {
+    const suppressed: string[] = [];
+    const plans = planRoutes(locs, ctxOf({
+      capabilities: full, onSuppressed: (plan: string) => suppressed.push(plan),
+    }));
+    expect(plans.map(p => p.label)).toEqual(["1日精华游", "2日全景游", "主题游"]);
+    expect(suppressed).toEqual([]);
+  });
+
+  it("未核实知识不再产出 2日全景游与主题游", () => {
+    const suppressed: { plan: string; reason: string }[] = [];
+    const plans = planRoutes(locs, ctxOf({
+      capabilities: researched, onSuppressed: (plan, reason) => suppressed.push({ plan, reason }),
+    }));
+    expect(plans.map(p => p.label)).toEqual(["1日精华游"]);
+    expect(suppressed.map(p => p.plan).sort()).toEqual(["2日全景游", "主题游"]);
+    expect(suppressed.find(p => p.plan === "2日全景游")?.reason).toContain("未经核实");
+    expect(suppressed.find(p => p.plan === "主题游")?.reason).toContain("跨片区");
+  });
+
+  it("未核实分区不再把 1 日线压到 5 站", () => {
+    // 线上实况：auto-research 给玉龙雪山造的分区把 13 个点全归进"冰川公园"，
+    // zoneDriven 选点只剩 4 站；关闭 zoneDriven 后按重要性取满一日容量。
+    const researchedPlans = planRoutes(locs, ctxOf({ capabilities: researched }));
+    const verifiedPlans = planRoutes(locs, ctxOf({ capabilities: full }));
+    expect(researchedPlans[0].allow!.length).toBeGreaterThan(5);
+    expect(verifiedPlans[0].allow!.length).toBeLessThanOrEqual(5);
+  });
+
+  it("没有第二景区也没有分区时不虚构多日线", () => {
+    const plans = planRoutes(locs, ctxOf({ mainScenicName: "", zones: [], capabilities: full }));
+    expect(plans.map(p => p.label)).toEqual(["1日精华游", "主题游"]);
+  });
+
+  it("小说源导览的文学巡礼线不受能力授权影响", () => {
+    const plans = planRoutes(locs, ctxOf({ capabilities: researched, isNovelBased: true, novelName: "示例小说" }));
+    expect(plans.map(p => p.label)).toEqual(["1日精华游", "文学巡礼线"]);
+    expect(plans[1].allow).toBeNull();
+  });
+
+  it("缺省不传 capabilities 时保持既有行为（向后兼容）", () => {
+    const plans = planRoutes(locs, ctxOf());
+    expect(plans.map(p => p.label)).toEqual(["1日精华游", "2日全景游", "主题游"]);
+  });
+});
+
 describe("路线站点资格（景区伞形名）", () => {
   it("伞形景区名不能作为游览站", () => {
     // 现网实况：这三个都是景区名被高德定位到行政/质心点，却出现在路线站点序列里

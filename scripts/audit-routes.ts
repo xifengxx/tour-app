@@ -16,6 +16,7 @@
 
 import { blockingIssues, buildRouteLegs, estimateRouteDuration, repairPlanStops, routeGraphIssues, routeLegsText } from "../supabase/functions/process-tour/route-graph.ts";
 import { isRouteStopEligible } from "../supabase/functions/process-tour/routes.ts";
+import { tierCapabilities, tierForSource, TIER_LABEL } from "../supabase/functions/process-tour/knowledge-tier.ts";
 import { CURATED_TRAILS } from "../supabase/functions/process-tour/trail-routes.ts";
 import type { DestinationRouteKnowledge } from "../supabase/functions/process-tour/route-knowledge-types.ts";
 
@@ -55,7 +56,7 @@ async function select<T>(path: string): Promise<T[]> {
   throw new Error(`SELECT ${path} 连续 3 次失败：${lastError}`);
 }
 
-type Tour = { id: string; title: string; created_at: string; status: string; destination: any };
+type Tour = { id: string; title: string; created_at: string; status: string; destination: any; process_report: any };
 type Loc = { id: string; name: string; lat: number; lng: number; elevation: string; tags: string[]; importance: number };
 type RouteRow = { id: string; tour_id: string; day_label: string; title: string; stops: string[]; legs: any[]; narrative: string };
 
@@ -95,9 +96,9 @@ function knowledgeFor(destName: string): DestinationRouteKnowledge {
 
 const MODE_RANK: Record<string, number> = { walk: 0, cableway: 1, shuttle: 1, other: 1, car: 2 };
 
-const tours = await select<Tour>("tours?select=id,title,created_at,status,destination&order=created_at.desc" + (Deno.args.includes("--all") ? "" : "&is_public=eq.true"));
+const tours = await select<Tour>("tours?select=id,title,created_at,status,destination,process_report&order=created_at.desc" + (Deno.args.includes("--all") ? "" : "&is_public=eq.true"));
 const rows: any[] = [];
-const summary = { tours: 0, routes: 0, storedLegs: 0, missingLegs: 0, modeChanged: 0, upgraded: 0, downgraded: 0, issues: 0, longDay: 0, legacyUmbrellaStops: 0, legacyUmbrellaRoutes: 0, blocking: 0, gateBlockedRoutes: 0, repairableByReorder: 0 };
+const summary = { tours: 0, tierL3: 0, tierL2: 0, tierL1: 0, wouldSuppressMultiDay: 0, wouldSuppressTheme: 0, routes: 0, storedLegs: 0, missingLegs: 0, modeChanged: 0, upgraded: 0, downgraded: 0, issues: 0, longDay: 0, legacyUmbrellaStops: 0, legacyUmbrellaRoutes: 0, blocking: 0, gateBlockedRoutes: 0, repairableByReorder: 0 };
 // 无知识路径下的"改判"不代表线上会变好：那些目的地在生产上有 auto-research/策展边，
 // 只是 destination_route_knowledge 受 RLS 保护、本脚本用 anon key 读不到。
 // 混进主计数会把工具读数误导成"降级了 N 条路线"，所以单独统计。
@@ -110,9 +111,23 @@ for (const tour of tours) {
   ]);
   const knowledge = knowledgeFor(String(tour.destination?.name || ""));
   const hasKnowledge = knowledge.source !== "none";
+  // 分级判定优先采用 process_report 记录的**当次实际知识来源**：
+  // anon key 读不到 destination_route_knowledge，本脚本重建时只能给出 builtin/none，
+  // 而线上真实走的是 auto-research 还是 curated，报告里已经写明。
+  const recorded = tour.process_report?.routeKnowledge?.source;
+  const effectiveKnowledge = recorded
+    ? { ...knowledge, source: String(recorded), confidence: Number(tour.process_report?.routeKnowledge?.confidence ?? knowledge.confidence) }
+    : knowledge;
+  // 有报告记录时按记录的来源判级：本脚本用 anon key 读不到 destination_route_knowledge 的
+  // trails，若按数据形态判会把 auto-research 的 L2 误显示成 L1（结论方向一致，但读数误导人）。
+  const tier = tierForSource(recorded ? String(recorded) : knowledge.source);
+  // 能力授权只取决于分级：这里回答的是"这类路线在新规则下还会不会被生成"，
+  // 与本脚本能否读到 zones/edges 明细无关。
+  const capabilities = tierCapabilities(tier);
+  if (tier === "L3") summary.tierL3++; else if (tier === "L2") summary.tierL2++; else summary.tierL1++;
   summary.tours++;
   if (!hasKnowledge) noKnowledge.tours++;
-  console.log(`\n── ${tour.title}  (${tour.created_at.slice(0, 10)} / 知识=${knowledge.source}${hasKnowledge ? "" : "（本脚本用 anon key 读不到知识表，下述改判不代表线上结果）"}, ${locs.length} 地点)`);
+  console.log(`\n── ${tour.title}  (${tour.created_at.slice(0, 10)} / 知识=${effectiveKnowledge.source}${recorded ? "" : "（报告未记录，按重建推断）"} → ${tier} ${TIER_LABEL[tier]}, ${locs.length} 地点)`);
 
   for (const route of routes) {
     summary.routes++;
@@ -136,6 +151,15 @@ for (const tour of tours) {
     summary.downgraded += changed.length - up;
     summary.issues += issues.length;
     if (issues.some(i => i.type === "long-day")) summary.longDay++;
+
+    // v89 分层影响面：这条现存路线在新授权规则下还会不会被生成？
+    const isMultiDay = /2日|两日|多日/.test(String(route.day_label || ""));
+    const isTheme = route.day_label === "主题游";
+    const suppressedByTier = (isMultiDay && !capabilities.multiDay) || (isTheme && !capabilities.themeTour);
+    if (suppressedByTier) {
+      if (isMultiDay) summary.wouldSuppressMultiDay++;
+      if (isTheme) summary.wouldSuppressTheme++;
+    }
 
     // 历史数据体检：v88 之前的路线可能把景区伞形名当成游览站点存进了库。
     // 新代码已在 planRoutes 池子和写库前的资格闸两处排除，这里只统计"现网存量"。
@@ -169,7 +193,8 @@ for (const tour of tours) {
     if (blocking.length) summary.gateBlockedRoutes++;
     if (repair.repairs.length && !blockingIssues(repair.issues).length) summary.repairableByReorder++;
 
-    const flag = issues.length || changed.length || umbrellaStops.length ? "⚠" : " ";
+    const flag = issues.length || changed.length || umbrellaStops.length || suppressedByTier ? "⚠" : " ";
+    if (suppressedByTier) console.log(`       🔐 分层影响：按 ${tier} 授权，这条「${route.day_label}」将不再生成（未经核实知识不能支撑天数划分）`);
     console.log(`   ${flag} [${route.day_label}] ${stopIds.length}站  落库legs=${stored.length} 重算legs=${next.length} 变化=${changed.length} 问题=${issues.length} 预计${(duration.totalMinutes / 60).toFixed(1)}h`);
     for (const leg of changed) {
       const before = stored.find(s => s.fromId === leg.fromId && s.toId === leg.toId)?.mode;
@@ -183,14 +208,18 @@ for (const tour of tours) {
       stops: stopIds.length, storedLegs: stored.length, nextLegs: next.map(l => ({ from: l.fromName, to: l.toName, mode: l.mode, distanceM: l.distanceM, elevationDeltaM: l.elevationDeltaM, roadMinutes: l.roadMinutes, inferred: l.inferred, edgeMode: l.edgeMode })),
       changedModes: changed.map(l => `${l.fromId}>${l.toId}:${stored.find(s => s.fromId === l.fromId)?.mode}=>${l.mode}`),
       issues, blocking: blocking.map(b => b.message), autoRepairable: repair.repairs.length > 0 && !blockingIssues(repair.issues).length,
-      durationMinutes: duration.totalMinutes, knowledgeSource: knowledge.source,
+      durationMinutes: duration.totalMinutes,
       narrativeInstruction: routeLegsText(next),
+      tier, knowledgeSource: effectiveKnowledge.source, tierLabel: TIER_LABEL[tier], suppressedByTier,
     });
   }
 }
 
 console.log("\n===== 汇总 =====");
 console.log(JSON.stringify(summary, null, 2));
+console.log(`分层影响：L3 ${summary.tierL3} / L2 ${summary.tierL2} / L1 ${summary.tierL1} 个目的地；` +
+  `按 v89 授权规则，现网 ${summary.routes} 条路线中 ${summary.wouldSuppressMultiDay} 条多日线与 ` +
+  `${summary.wouldSuppressTheme} 条主题游将不再自动生成。`);
 console.log(`其中 ${noKnowledge.tours} 个目的地（${noKnowledge.routes} 条路线）本次无路线知识可用，` +
   `其 ${noKnowledge.modeChanged} 处改判只是"L1 无知识路径"的对照，不计入有效改动；` +
   `有效改判 ${summary.modeChanged - noKnowledge.modeChanged} 处。`);

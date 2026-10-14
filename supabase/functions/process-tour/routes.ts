@@ -2,6 +2,7 @@ import { haversineM } from "./geo.ts";
 import { isDestinationUmbrella, JUNK_RE } from "./gaode-scan.ts";
 import { REGION_RADIUS } from "./anchors.ts";
 import type { RouteZone } from "./route-knowledge-types.ts";
+import type { TierCapabilities } from "./knowledge-tier.ts";
 
 const CLUSTER_R = 8000;
 const SUB_DEDUP_M = 300;
@@ -135,7 +136,28 @@ function pickRep(cluster: { locs: any[] }, destName: string): any {
   )[0];
 }
 
-export function planRoutes(locs: any[], ctx: { coreScenicName: string; mainScenicName: string; destName: string; destLoc?: { lng: number; lat: number } | null; isNovelBased: boolean; novelName: string; hasRegionTour: boolean; zones?: RouteZone[] }) {
+export type PlanRoutesContext = {
+  coreScenicName: string;
+  mainScenicName: string;
+  destName: string;
+  destLoc?: { lng: number; lat: number } | null;
+  isNovelBased: boolean;
+  novelName: string;
+  hasRegionTour: boolean;
+  zones?: RouteZone[];
+  /** 路线知识能力授权（缺省视为全部允许，兼容既有调用方与测试）。 */
+  capabilities?: TierCapabilities;
+  /** 因授权不足而**没有生成**的路线回调（只报真实缺失，选点降级不走这里）。 */
+  onSuppressed?: (plan: string, reason: string) => void;
+};
+
+export function planRoutes(locs: any[], ctx: PlanRoutesContext) {
+  // v89：能力授权。缺省全开，只有显式传入 capabilities 时才收敛，
+  // 避免这个改动在调用方接入前就改变既有行为。
+  const caps: TierCapabilities = ctx.capabilities || {
+    multiDay: true, themeTour: true, zoneDriven: true, trailOrder: true, assertTransport: true,
+  };
+  const suppress = (plan: string, reason: string) => ctx.onSuppressed?.(plan, reason);
   const canRoute = (l: any) => isRouteStopEligible(l, { destName: ctx.destName });
   const isRouteSite = (l: any) => canRoute(l) && !JUNK_RE.test(String(l.name || "")) && !ROAD_RE.test(String(l.name || ""));
   const isRegion = (l: any) => (l.tags || []).includes("地区景点");
@@ -162,21 +184,36 @@ export function planRoutes(locs: any[], ctx: { coreScenicName: string; mainSceni
   // 会出现地点已入库（如应县木塔 47km、华严寺 60km）但没有任何路线引用的“孤岛地点”。
   const unifiedRegion60 = clusterRegionPts(locs, corePool).map((c) => pickRep(c, ctx.destName)).filter((l: any) => isRouteSite(l) && nearCore(l, REGION_RADIUS));
   const plans: RoutePlan[] = [];
-  if (ctx.zones?.length) {
+  if (ctx.zones?.length && caps.zoneDriven) {
     const { pools } = zonePools(routeCorePool, ctx.zones);
     const oneDay = pools.length >= 2
       ? [...pools[0].items.slice(0, 2), ...pools[1].items.slice(0, 3)].slice(0, 5)
       : routeCorePool.slice(0, 5);
     plans.push({ label: "1日精华游", title: `${ctx.destName}一日精华游`, allow: oneDay.map((l) => l.id) });
+  } else if (ctx.zones?.length && !caps.zoneDriven) {
+    // 未核实的分区不能用来决定"这一天去哪几个点"。
+    // 实测丽江玉龙雪山的 auto-research 把 13 个点全部归进"冰川公园"一个分区，
+    // 分区机制形同虚设，却把 1 日线压到只剩 4 站。
+    // 这不是"抑制路线"（1 日线照常产出），所以不走 onSuppressed，
+    // 由调用方按 capabilities.zoneDriven 单独提示选点方式降级。
+    plans.push({ label: "1日精华游", title: `${ctx.destName}一日精华游`, allow: routeCorePool.slice(0, CORE_ROUTE_MAX_STOPS).map((l) => l.id) });
   } else {
     plans.push({ label: "1日精华游", title: `${ctx.destName}一日精华游`, allow: routeCorePool.slice(0, CORE_ROUTE_MAX_STOPS).map((l) => l.id) });
   }
-  if (ctx.zones?.length) {
+  if (!caps.multiDay) {
+    if (ctx.zones?.length || mainPool.length) {
+      suppress("2日全景游", "目的地路线知识未经核实，无法确认分区间换乘与第二天可达性");
+    }
+  } else if (ctx.zones?.length) {
     plans.push(...zoneSplitPlans(routeCorePool, ctx.zones, mainPool, ctx.destName));
   } else if (mainPool.length) {
     plans.push({ label: "2日全景游", title: `${ctx.destName}两日全景游`, allow: [...routeCorePool.slice(0, CORE_ROUTE_MAX_STOPS).map((l) => l.id), ...mainPool.slice(0, 8).map((l) => l.id)] });
   }
-  if (ctx.hasRegionTour && unifiedRegion60.length) {
+  if (!caps.themeTour) {
+    if (ctx.hasRegionTour && unifiedRegion60.length) {
+      suppress("主题游", "目的地路线知识未经核实，无法确认跨片区接驳可行性");
+    }
+  } else if (ctx.hasRegionTour && unifiedRegion60.length) {
     plans.push({ label: "主题游", title: `${ctx.destName}深度主题游`, allow: [...routeCorePool.slice(0, 4).map((l) => l.id), ...unifiedRegion60.map((l) => l.id)] });
   }
   if (ctx.isNovelBased) plans.push({ label: "文学巡礼线", title: `《${ctx.novelName}》文学巡礼`, allow: null });
