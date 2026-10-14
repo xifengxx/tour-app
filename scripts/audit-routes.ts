@@ -18,6 +18,7 @@ import { blockingIssues, buildRouteLegs, estimateRouteDuration, repairPlanStops,
 import { isRouteStopEligible } from "../supabase/functions/process-tour/routes.ts";
 import { tierCapabilities, tierForSource, TIER_LABEL } from "../supabase/functions/process-tour/knowledge-tier.ts";
 import { findDuplicateRoutes } from "../supabase/functions/process-tour/route-dedup.ts";
+import { resolveCoreDestination } from "../supabase/functions/process-tour/destination.ts";
 import { CURATED_TRAILS } from "../supabase/functions/process-tour/trail-routes.ts";
 import type { DestinationRouteKnowledge } from "../supabase/functions/process-tour/route-knowledge-types.ts";
 
@@ -69,8 +70,19 @@ const knowledgeBundle: Record<string, any> = knowledgeIdx >= 0
   ? JSON.parse(Deno.readTextFileSync(Deno.args[knowledgeIdx + 1]))
   : {};
 
+// --knowledge 既接受"目的地 → 知识"的 bundle，也接受 research-knowledge.ts
+// 直接导出的单个知识对象（带 destinationName），省一步手工包装。
+function knowledgeBundleFor(destName: string): [string, any] | undefined {
+  const entries = Object.entries(knowledgeBundle);
+  if (entries.length && knowledgeBundle.destinationName) {
+    const name = String(knowledgeBundle.destinationName);
+    return name.includes(destName) || destName.includes(name) ? ["__single__", knowledgeBundle] : undefined;
+  }
+  return entries.find(([name]) => destName.includes(name) || name.includes(destName));
+}
+
 function knowledgeFor(destName: string): DestinationRouteKnowledge {
-  const hit = Object.entries(knowledgeBundle).find(([name]) => destName.includes(name) || name.includes(destName));
+  const hit = knowledgeBundleFor(destName);
   if (hit) {
     const m = hit[1]?.model || hit[1];
     return {
@@ -110,7 +122,9 @@ for (const tour of tours) {
     select<Loc>(`locations?select=id,name,lat,lng,elevation,tags,importance&tour_id=eq.${tour.id}&order=sort_order`),
     select<RouteRow>(`routes?select=id,tour_id,day_label,title,stops,legs,narrative&tour_id=eq.${tour.id}&order=sort_order`),
   ]);
-  const knowledge = knowledgeFor(String(tour.destination?.name || ""));
+  // 与线上一致：destination.name 常填城市（"丽江"），真正查知识用的是从标题解析出的景区名
+  const coreDest = resolveCoreDestination(tour, String(tour.destination?.name || ""));
+  const knowledge = knowledgeFor(coreDest);
   const hasKnowledge = knowledge.source !== "none";
   // 分级判定优先采用 process_report 记录的**当次实际知识来源**：
   // anon key 读不到 destination_route_knowledge，本脚本重建时只能给出 builtin/none，

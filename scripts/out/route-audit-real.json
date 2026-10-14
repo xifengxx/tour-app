@@ -1,0 +1,2771 @@
+{
+  "auditedAt": "2026-10-14T09:07:04.574Z",
+  "summary": {
+    "tours": 12,
+    "tierL3": 2,
+    "tierL2": 2,
+    "tierL1": 8,
+    "wouldSuppressMultiDay": 7,
+    "wouldSuppressTheme": 6,
+    "routes": 34,
+    "storedLegs": 6,
+    "missingLegs": 28,
+    "modeChanged": 12,
+    "upgraded": 7,
+    "downgraded": 5,
+    "issues": 22,
+    "longDay": 2,
+    "legacyUmbrellaStops": 21,
+    "legacyUmbrellaRoutes": 21,
+    "blocking": 4,
+    "gateBlockedRoutes": 4,
+    "repairableByReorder": 3,
+    "duplicatePairs": 2,
+    "toursWithDuplicates": 2
+  },
+  "routes": [
+    {
+      "tourId": "77a10329-37f8-4a9d-8889-d33cec89ad65",
+      "tourTitle": "丽江玉龙雪山之旅。",
+      "routeId": "77a10329-r1",
+      "dayLabel": "1日精华游",
+      "stops": 4,
+      "storedLegs": 3,
+      "nextLegs": [
+        {
+          "from": "玉龙雪山冰川公园栈道",
+          "to": "玉龙雪山国家级风景名胜区蓝月谷",
+          "mode": "shuttle",
+          "distanceM": 5193,
+          "elevationDeltaM": -1606,
+          "roadMinutes": 14,
+          "inferred": true
+        },
+        {
+          "from": "玉龙雪山国家级风景名胜区蓝月谷",
+          "to": "白水河",
+          "mode": "walk",
+          "distanceM": 457,
+          "elevationDeltaM": 50,
+          "inferred": true
+        },
+        {
+          "from": "白水河",
+          "to": "甘海子",
+          "mode": "shuttle",
+          "distanceM": 4255,
+          "elevationDeltaM": 150,
+          "roadMinutes": 12,
+          "inferred": true
+        }
+      ],
+      "changedModes": [
+        "77a10329-glacier-park>77a10329-blue-moon-valley:cableway=>shuttle"
+      ],
+      "issues": [
+        {
+          "type": "long-transfer",
+          "level": "advisory",
+          "message": "玉龙雪山冰川公园栈道 → 玉龙雪山国家级风景名胜区蓝月谷（直线约 5km、高差约 1606m）资料中无衔接方式，已推断为「观光车/摆渡车」（未经核实）"
+        }
+      ],
+      "blocking": [],
+      "autoRepairable": false,
+      "durationMinutes": 100,
+      "narrativeInstruction": "玉龙雪山冰川公园栈道 → 玉龙雪山国家级风景名胜区蓝月谷：观光车/摆渡车，约 2.3 小时车程，不同徒步/索道分区，需换乘观光车或接驳车；高差约 1606m，须借助索道或景区交通下撤，禁止写成连续徒步（narrative 须写明乘坐景区观光车或摆渡车）；玉龙雪山国家级风景名胜区蓝月谷 → 白水河：徒步；白水河 → 甘海子：观光车/摆渡车，约 2 小时车程，直线约 4km，建议乘坐景区观光车（narrative 须写明乘坐景区观光车或摆渡车）",
+      "tier": "L2",
+      "knowledgeSource": "auto-research",
+      "tierLabel": "自动研究/策展顺序，未经核实",
+      "suppressedByTier": false,
+      "duplicatePairs": [],
+      "umbrellaStops": []
+    },
+    {
+      "tourId": "77a10329-37f8-4a9d-8889-d33cec89ad65",
+      "tourTitle": "丽江玉龙雪山之旅。",
+      "routeId": "77a10329-r2",
+      "dayLabel": "2日全景游",
+      "stops": 10,
+      "storedLegs": 9,
+      "nextLegs": [
+        {
+          "from": "玉龙雪山冰川公园栈道",
+          "to": "玉龙雪山国家级风景名胜区蓝月谷",
+          "mode": "shuttle",
+          "distanceM": 5193,
+          "elevationDeltaM": -1606,
+          "roadMinutes": 14,
+          "inferred": true
+        },
+        {
+          "from": "玉龙雪山国家级风景名胜区蓝月谷",
+          "to": "白水河",
+          "mode": "walk",
+          "distanceM": 457,
+          "elevationDeltaM": 50,
+          "inferred": true
+        },
+        {
+          "from": "白水河",
+          "to": "甘海子",
+          "mode": "shuttle",
+          "distanceM": 4255,
+          "elevationDeltaM": 150,
+          "roadMinutes": 12,
+          "inferred": true
+        },
+        {
+          "from": "甘海子",
+          "to": "云杉坪索道上部站",
+          "mode": "shuttle",
+          "distanceM": 5174,
+          "elevationDeltaM": 140,
+          "roadMinutes": 14,
+          "inferred": true
+        },
+        {
+          "from": "云杉坪索道上部站",
+          "to": "云杉坪",
+          "mode": "walk",
+          "distanceM": 745,
+          "elevationDeltaM": 0,
+          "inferred": true
+        },
+        {
+          "from": "云杉坪",
+          "to": "牦牛坪",
+          "mode": "shuttle",
+          "distanceM": 4137,
+          "elevationDeltaM": 460,
+          "roadMinutes": 11,
+          "inferred": true
+        },
+        {
+          "from": "牦牛坪",
+          "to": "丽江玉水寨",
+          "mode": "car",
+          "distanceM": 18970,
+          "elevationDeltaM": -1000,
+          "roadMinutes": 72,
+          "inferred": true
+        },
+        {
+          "from": "丽江玉水寨",
+          "to": "东巴谷",
+          "mode": "shuttle",
+          "distanceM": 5932,
+          "elevationDeltaM": 0,
+          "roadMinutes": 16,
+          "inferred": true
+        },
+        {
+          "from": "东巴谷",
+          "to": "玉峰寺",
+          "mode": "shuttle",
+          "distanceM": 6526,
+          "elevationDeltaM": 0,
+          "roadMinutes": 18,
+          "inferred": true
+        }
+      ],
+      "changedModes": [
+        "77a10329-glacier-park>77a10329-blue-moon-valley:cableway=>shuttle",
+        "77a10329-yak-meadow>77a10329-yushui-village:shuttle=>car"
+      ],
+      "issues": [
+        {
+          "type": "long-transfer",
+          "level": "advisory",
+          "message": "玉龙雪山冰川公园栈道 → 玉龙雪山国家级风景名胜区蓝月谷（直线约 5km、高差约 1606m）资料中无衔接方式，已推断为「观光车/摆渡车」（未经核实）"
+        },
+        {
+          "type": "long-transfer",
+          "level": "advisory",
+          "message": "云杉坪 → 牦牛坪（直线约 4km、高差约 460m）资料中无衔接方式，已推断为「观光车/摆渡车」（未经核实）"
+        },
+        {
+          "type": "long-transfer",
+          "level": "advisory",
+          "message": "牦牛坪 → 丽江玉水寨（直线约 19km、高差约 1000m）资料中无衔接方式，已推断为「专车/出租车」（未经核实）"
+        }
+      ],
+      "blocking": [],
+      "autoRepairable": false,
+      "durationMinutes": 368,
+      "narrativeInstruction": "玉龙雪山冰川公园栈道 → 玉龙雪山国家级风景名胜区蓝月谷：观光车/摆渡车，约 2.3 小时车程，不同徒步/索道分区，需换乘观光车或接驳车；高差约 1606m，须借助索道或景区交通下撤，禁止写成连续徒步（narrative 须写明乘坐景区观光车或摆渡车）；玉龙雪山国家级风景名胜区蓝月谷 → 白水河：徒步；白水河 → 甘海子：观光车/摆渡车，约 2 小时车程，直线约 4km，建议乘坐景区观光车（narrative 须写明乘坐景区观光车或摆渡车）；甘海子 → 云杉坪索道上部站：观光车/摆渡车，约 2.3 小时车程，不同徒步/索道分区，需换乘观光车或接驳车（narrative 须写明乘坐景区观光车或摆渡车）；云杉坪索道上部站 → 云杉坪：徒步；云杉坪 → 牦牛坪：观光车/摆渡车，约 1.8 小时车程，不同徒步/索道分区，需换乘观光车或接驳车；高差约 460m，须借助索道或景区交通上升，禁止写成连续徒步（narrative 须写明乘坐景区观光车或摆渡车）；牦牛坪 → 丽江玉水寨：专车/出租车，约 12 小时车程，高差约 1000m，须借助索道或景区交通下撤，禁止写成连续徒步（narrative 必须写明需乘车/包车并给出时长，禁止描述为景区观光车短驳或索道直达）；丽江玉水寨 → 东巴谷：观光车/摆渡车，约 2.7 小时车程，直线约 6km，建议乘坐景区观光车（narrative 须写明乘坐景区观光车或摆渡车）；东巴谷 → 玉峰寺：观光车/摆渡车，约 3 小时车程，直线约 7km，建议乘坐景区观光车（narrative 须写明乘坐景区观光车或摆渡车）",
+      "tier": "L2",
+      "knowledgeSource": "auto-research",
+      "tierLabel": "自动研究/策展顺序，未经核实",
+      "suppressedByTier": true,
+      "duplicatePairs": [],
+      "umbrellaStops": []
+    },
+    {
+      "tourId": "77a10329-37f8-4a9d-8889-d33cec89ad65",
+      "tourTitle": "丽江玉龙雪山之旅。",
+      "routeId": "77a10329-r3",
+      "dayLabel": "主题游",
+      "stops": 7,
+      "storedLegs": 6,
+      "nextLegs": [
+        {
+          "from": "玉龙雪山冰川公园栈道",
+          "to": "玉龙雪山国家级风景名胜区蓝月谷",
+          "mode": "shuttle",
+          "distanceM": 5193,
+          "elevationDeltaM": -1606,
+          "roadMinutes": 14,
+          "inferred": true
+        },
+        {
+          "from": "玉龙雪山国家级风景名胜区蓝月谷",
+          "to": "邀月楼",
+          "mode": "walk",
+          "distanceM": 760,
+          "inferred": true
+        },
+        {
+          "from": "邀月楼",
+          "to": "云杉坪索道上部站",
+          "mode": "shuttle",
+          "distanceM": 1715,
+          "roadMinutes": 5,
+          "inferred": true
+        },
+        {
+          "from": "云杉坪索道上部站",
+          "to": "甘海子",
+          "mode": "shuttle",
+          "distanceM": 5174,
+          "elevationDeltaM": -140,
+          "roadMinutes": 14,
+          "inferred": true
+        },
+        {
+          "from": "甘海子",
+          "to": "丽江拉市海湿地公园",
+          "mode": "car",
+          "distanceM": 28637,
+          "roadMinutes": 109,
+          "inferred": true
+        },
+        {
+          "from": "丽江拉市海湿地公园",
+          "to": "香格里拉虎跳峡",
+          "mode": "car",
+          "distanceM": 36713,
+          "roadMinutes": 140,
+          "inferred": true
+        }
+      ],
+      "changedModes": [
+        "77a10329-glacier-park>77a10329-blue-moon-valley:cableway=>shuttle",
+        "77a10329-ganhaizi>77a10329-reg-13:shuttle=>car",
+        "77a10329-reg-13>77a10329-reg-14:shuttle=>car"
+      ],
+      "issues": [
+        {
+          "type": "long-transfer",
+          "level": "advisory",
+          "message": "玉龙雪山冰川公园栈道 → 玉龙雪山国家级风景名胜区蓝月谷（直线约 5km、高差约 1606m）资料中无衔接方式，已推断为「观光车/摆渡车」（未经核实）"
+        }
+      ],
+      "blocking": [],
+      "autoRepairable": false,
+      "durationMinutes": 420,
+      "narrativeInstruction": "玉龙雪山冰川公园栈道 → 玉龙雪山国家级风景名胜区蓝月谷：观光车/摆渡车，约 2.3 小时车程，不同徒步/索道分区，需换乘观光车或接驳车；高差约 1606m，须借助索道或景区交通下撤，禁止写成连续徒步（narrative 须写明乘坐景区观光车或摆渡车）；玉龙雪山国家级风景名胜区蓝月谷 → 邀月楼：徒步；邀月楼 → 云杉坪索道上部站：观光车/摆渡车，约 0.8 小时车程，不同徒步/索道分区，需换乘观光车或接驳车（narrative 须写明乘坐景区观光车或摆渡车）；云杉坪索道上部站 → 甘海子：观光车/摆渡车，约 2.3 小时车程，不同徒步/索道分区，需换乘观光车或接驳车（narrative 须写明乘坐景区观光车或摆渡车）；甘海子 → 丽江拉市海湿地公园：专车/出租车，约 18.2 小时车程，直线约 29km，山路约 54.4km / 109 分钟车程（narrative 必须写明需乘车/包车并给出时长，禁止描述为景区观光车短驳或索道直达）；丽江拉市海湿地公园 → 香格里拉虎跳峡：专车/出租车，约 23.3 小时车程，直线约 37km，山路约 69.8km / 140 分钟车程（narrative 必须写明需乘车/包车并给出时长，禁止描述为景区观光车短驳或索道直达）",
+      "tier": "L2",
+      "knowledgeSource": "auto-research",
+      "tierLabel": "自动研究/策展顺序，未经核实",
+      "suppressedByTier": true,
+      "duplicatePairs": [],
+      "umbrellaStops": []
+    },
+    {
+      "tourId": "7feeedd7-893a-4677-8c81-4213b69ee96c",
+      "tourTitle": "武功山冷启动测试",
+      "routeId": "7feeedd7-r1",
+      "dayLabel": "1日精华游",
+      "stops": 6,
+      "storedLegs": 5,
+      "nextLegs": [
+        {
+          "from": "石鼓寺",
+          "to": "武功山-葛仙观",
+          "mode": "walk",
+          "distanceM": 686,
+          "inferred": true
+        },
+        {
+          "from": "武功山-葛仙观",
+          "to": "中庵索道",
+          "mode": "walk",
+          "distanceM": 853,
+          "inferred": true
+        },
+        {
+          "from": "中庵索道",
+          "to": "萍乡武功山景区紫极宫(中庵)",
+          "mode": "walk",
+          "distanceM": 1805,
+          "inferred": true
+        },
+        {
+          "from": "萍乡武功山景区紫极宫(中庵)",
+          "to": "武功山风景名胜区金顶",
+          "mode": "walk",
+          "distanceM": 917,
+          "elevationDeltaM": 318,
+          "inferred": true
+        },
+        {
+          "from": "武功山风景名胜区金顶",
+          "to": "武功山高山草甸",
+          "mode": "walk",
+          "distanceM": 327,
+          "elevationDeltaM": -318,
+          "inferred": true
+        }
+      ],
+      "changedModes": [],
+      "issues": [],
+      "blocking": [],
+      "autoRepairable": false,
+      "durationMinutes": 227,
+      "narrativeInstruction": "石鼓寺 → 武功山-葛仙观：徒步；武功山-葛仙观 → 中庵索道：徒步；中庵索道 → 萍乡武功山景区紫极宫(中庵)：徒步；萍乡武功山景区紫极宫(中庵) → 武功山风景名胜区金顶：徒步，高差约 318m，须借助索道或景区交通上升，禁止写成连续徒步；武功山风景名胜区金顶 → 武功山高山草甸：徒步，高差约 318m，须借助索道或景区交通下撤，禁止写成连续徒步",
+      "tier": "L2",
+      "knowledgeSource": "auto-research",
+      "tierLabel": "自动研究/策展顺序，未经核实",
+      "suppressedByTier": false,
+      "duplicatePairs": [],
+      "umbrellaStops": []
+    },
+    {
+      "tourId": "7feeedd7-893a-4677-8c81-4213b69ee96c",
+      "tourTitle": "武功山冷启动测试",
+      "routeId": "7feeedd7-r2",
+      "dayLabel": "2日全景游",
+      "stops": 9,
+      "storedLegs": 8,
+      "nextLegs": [
+        {
+          "from": "石鼓寺",
+          "to": "武功山-葛仙观",
+          "mode": "walk",
+          "distanceM": 686,
+          "inferred": true
+        },
+        {
+          "from": "武功山-葛仙观",
+          "to": "中庵索道",
+          "mode": "walk",
+          "distanceM": 853,
+          "inferred": true
+        },
+        {
+          "from": "中庵索道",
+          "to": "萍乡武功山景区紫极宫(中庵)",
+          "mode": "walk",
+          "distanceM": 1805,
+          "inferred": true
+        },
+        {
+          "from": "萍乡武功山景区紫极宫(中庵)",
+          "to": "福星谷栈道",
+          "mode": "walk",
+          "distanceM": 384,
+          "elevationDeltaM": -200,
+          "inferred": true
+        },
+        {
+          "from": "福星谷栈道",
+          "to": "武功山高山草甸",
+          "mode": "walk",
+          "distanceM": 763,
+          "elevationDeltaM": 200,
+          "inferred": true
+        },
+        {
+          "from": "武功山高山草甸",
+          "to": "武功山风景名胜区金顶",
+          "mode": "walk",
+          "distanceM": 327,
+          "elevationDeltaM": 318,
+          "inferred": true
+        },
+        {
+          "from": "武功山风景名胜区金顶",
+          "to": "吊马桩",
+          "mode": "walk",
+          "distanceM": 1240,
+          "elevationDeltaM": -318,
+          "inferred": true
+        },
+        {
+          "from": "吊马桩",
+          "to": "发云界",
+          "mode": "shuttle",
+          "distanceM": 6937,
+          "roadMinutes": 19,
+          "inferred": true
+        }
+      ],
+      "changedModes": [
+        "7feeedd7-diaoqiao>7feeedd7-reg-13:walk=>shuttle"
+      ],
+      "issues": [],
+      "blocking": [],
+      "autoRepairable": false,
+      "durationMinutes": 352,
+      "narrativeInstruction": "石鼓寺 → 武功山-葛仙观：徒步；武功山-葛仙观 → 中庵索道：徒步；中庵索道 → 萍乡武功山景区紫极宫(中庵)：徒步；萍乡武功山景区紫极宫(中庵) → 福星谷栈道：徒步；福星谷栈道 → 武功山高山草甸：徒步；武功山高山草甸 → 武功山风景名胜区金顶：徒步，高差约 318m，须借助索道或景区交通上升，禁止写成连续徒步；武功山风景名胜区金顶 → 吊马桩：徒步，高差约 318m，须借助索道或景区交通下撤，禁止写成连续徒步；吊马桩 → 发云界：观光车/摆渡车，约 3.2 小时车程，直线约 7km，建议乘坐景区观光车（narrative 须写明乘坐景区观光车或摆渡车）",
+      "tier": "L2",
+      "knowledgeSource": "auto-research",
+      "tierLabel": "自动研究/策展顺序，未经核实",
+      "suppressedByTier": true,
+      "duplicatePairs": [],
+      "umbrellaStops": []
+    },
+    {
+      "tourId": "7feeedd7-893a-4677-8c81-4213b69ee96c",
+      "tourTitle": "武功山冷启动测试",
+      "routeId": "7feeedd7-r3",
+      "dayLabel": "主题游",
+      "stops": 8,
+      "storedLegs": 7,
+      "nextLegs": [
+        {
+          "from": "石鼓寺",
+          "to": "萍乡武功山景区紫极宫(中庵)",
+          "mode": "walk",
+          "distanceM": 1961,
+          "inferred": true
+        },
+        {
+          "from": "萍乡武功山景区紫极宫(中庵)",
+          "to": "武功山风景名胜区金顶",
+          "mode": "walk",
+          "distanceM": 917,
+          "elevationDeltaM": 318,
+          "inferred": true
+        },
+        {
+          "from": "武功山风景名胜区金顶",
+          "to": "武功山高山草甸",
+          "mode": "walk",
+          "distanceM": 327,
+          "elevationDeltaM": -318,
+          "inferred": true
+        },
+        {
+          "from": "武功山高山草甸",
+          "to": "发云界",
+          "mode": "shuttle",
+          "distanceM": 8493,
+          "roadMinutes": 23,
+          "inferred": true
+        },
+        {
+          "from": "发云界",
+          "to": "武功湖",
+          "mode": "car",
+          "distanceM": 18053,
+          "roadMinutes": 69,
+          "inferred": true
+        },
+        {
+          "from": "武功湖",
+          "to": "杨岐山孽龙洞",
+          "mode": "car",
+          "distanceM": 58853,
+          "roadMinutes": 224,
+          "inferred": true
+        },
+        {
+          "from": "杨岐山孽龙洞",
+          "to": "安源路矿工人运动纪念馆",
+          "mode": "car",
+          "distanceM": 16878,
+          "roadMinutes": 64,
+          "inferred": true
+        }
+      ],
+      "changedModes": [
+        "7feeedd7-core-scan-0>7feeedd7-ziyuan:cableway=>walk",
+        "7feeedd7-ziyuan>7feeedd7-jinding:cableway=>walk",
+        "7feeedd7-reg-13>7feeedd7-reg-14:shuttle=>car",
+        "7feeedd7-reg-14>7feeedd7-reg-15:shuttle=>car",
+        "7feeedd7-reg-15>7feeedd7-reg-16:shuttle=>car"
+      ],
+      "issues": [
+        {
+          "type": "long-day",
+          "level": "blocking",
+          "message": "预计全程 10.3 小时（移动 7.9h + 停留 2.3h），超过 1 日 × 10 小时容量"
+        }
+      ],
+      "blocking": [
+        "预计全程 10.3 小时（移动 7.9h + 停留 2.3h），超过 1 日 × 10 小时容量"
+      ],
+      "autoRepairable": true,
+      "durationMinutes": 615,
+      "narrativeInstruction": "石鼓寺 → 萍乡武功山景区紫极宫(中庵)：徒步；萍乡武功山景区紫极宫(中庵) → 武功山风景名胜区金顶：徒步，高差约 318m，须借助索道或景区交通上升，禁止写成连续徒步；武功山风景名胜区金顶 → 武功山高山草甸：徒步，高差约 318m，须借助索道或景区交通下撤，禁止写成连续徒步；武功山高山草甸 → 发云界：观光车/摆渡车，约 3.8 小时车程，直线约 8km，建议乘坐景区观光车（narrative 须写明乘坐景区观光车或摆渡车）；发云界 → 武功湖：专车/出租车，约 11.5 小时车程，直线约 18km，山路约 34.3km / 69 分钟车程（narrative 必须写明需乘车/包车并给出时长，禁止描述为景区观光车短驳或索道直达）；武功湖 → 杨岐山孽龙洞：专车/出租车，约 37.3 小时车程，直线约 59km，山路约 111.8km / 224 分钟车程（narrative 必须写明需乘车/包车并给出时长，禁止描述为景区观光车短驳或索道直达）；杨岐山孽龙洞 → 安源路矿工人运动纪念馆：专车/出租车，约 10.7 小时车程，直线约 17km，山路约 32.1km / 64 分钟车程（narrative 必须写明需乘车/包车并给出时长，禁止描述为景区观光车短驳或索道直达）",
+      "tier": "L2",
+      "knowledgeSource": "auto-research",
+      "tierLabel": "自动研究/策展顺序，未经核实",
+      "suppressedByTier": true,
+      "duplicatePairs": [],
+      "umbrellaStops": []
+    },
+    {
+      "tourId": "1aa0b067-7082-47e4-a39f-4db35426b8d6",
+      "tourTitle": "北岳恒山",
+      "routeId": "1aa0b067-r1",
+      "dayLabel": "1日精华游",
+      "stops": 11,
+      "storedLegs": 0,
+      "nextLegs": [
+        {
+          "from": "北岳恒山",
+          "to": "会仙府",
+          "mode": "walk",
+          "distanceM": 380,
+          "inferred": true
+        },
+        {
+          "from": "会仙府",
+          "to": "天峰岭",
+          "mode": "walk",
+          "distanceM": 281,
+          "inferred": true
+        },
+        {
+          "from": "天峰岭",
+          "to": "北岳恒山-果老岭",
+          "mode": "walk",
+          "distanceM": 565,
+          "inferred": true
+        },
+        {
+          "from": "北岳恒山-果老岭",
+          "to": "虎风口",
+          "mode": "walk",
+          "distanceM": 243,
+          "inferred": true,
+          "edgeMode": "walk"
+        },
+        {
+          "from": "虎风口",
+          "to": "真武庙",
+          "mode": "walk",
+          "distanceM": 357,
+          "inferred": true,
+          "edgeMode": "walk"
+        },
+        {
+          "from": "真武庙",
+          "to": "三清殿",
+          "mode": "walk",
+          "distanceM": 1427,
+          "inferred": true
+        },
+        {
+          "from": "三清殿",
+          "to": "三元宫",
+          "mode": "walk",
+          "distanceM": 131,
+          "inferred": true,
+          "edgeMode": "walk"
+        },
+        {
+          "from": "三元宫",
+          "to": "悬空寺",
+          "mode": "walk",
+          "distanceM": 1274,
+          "inferred": true
+        },
+        {
+          "from": "悬空寺",
+          "to": "金龙峡栈道",
+          "mode": "walk",
+          "distanceM": 444,
+          "inferred": true,
+          "edgeMode": "walk"
+        },
+        {
+          "from": "金龙峡栈道",
+          "to": "翠屏山-三清殿",
+          "mode": "walk",
+          "distanceM": 562,
+          "inferred": true,
+          "edgeMode": "walk"
+        }
+      ],
+      "changedModes": [],
+      "issues": [
+        {
+          "type": "trail-backtrack",
+          "level": "blocking",
+          "message": "步道「未命名」出现顺序回退"
+        }
+      ],
+      "blocking": [
+        "步道「未命名」出现顺序回退"
+      ],
+      "autoRepairable": true,
+      "durationMinutes": 334,
+      "narrativeInstruction": "北岳恒山 → 会仙府：徒步；会仙府 → 天峰岭：徒步；天峰岭 → 北岳恒山-果老岭：徒步；北岳恒山-果老岭 → 虎风口：徒步；虎风口 → 真武庙：徒步；真武庙 → 三清殿：徒步；三清殿 → 三元宫：徒步；三元宫 → 悬空寺：徒步；悬空寺 → 金龙峡栈道：徒步；金龙峡栈道 → 翠屏山-三清殿：徒步",
+      "tier": "L3",
+      "knowledgeSource": "builtin",
+      "tierLabel": "已验证（人工策展或创作者确认）",
+      "suppressedByTier": false,
+      "duplicatePairs": [],
+      "umbrellaStops": []
+    },
+    {
+      "tourId": "1aa0b067-7082-47e4-a39f-4db35426b8d6",
+      "tourTitle": "北岳恒山",
+      "routeId": "1aa0b067-r3",
+      "dayLabel": "主题游",
+      "stops": 6,
+      "storedLegs": 0,
+      "nextLegs": [
+        {
+          "from": "北岳恒山",
+          "to": "会仙府",
+          "mode": "walk",
+          "distanceM": 380,
+          "inferred": true
+        },
+        {
+          "from": "会仙府",
+          "to": "天峰岭",
+          "mode": "walk",
+          "distanceM": 281,
+          "inferred": true
+        },
+        {
+          "from": "天峰岭",
+          "to": "悬空寺",
+          "mode": "walk",
+          "distanceM": 1950,
+          "inferred": true,
+          "edgeMode": "walk"
+        },
+        {
+          "from": "悬空寺",
+          "to": "应县木塔",
+          "mode": "car",
+          "distanceM": 46350,
+          "roadMinutes": 176,
+          "inferred": true
+        },
+        {
+          "from": "应县木塔",
+          "to": "大同古城墙",
+          "mode": "car",
+          "distanceM": 58421,
+          "roadMinutes": 222,
+          "inferred": true
+        }
+      ],
+      "changedModes": [],
+      "issues": [],
+      "blocking": [],
+      "autoRepairable": false,
+      "durationMinutes": 560,
+      "narrativeInstruction": "北岳恒山 → 会仙府：徒步；会仙府 → 天峰岭：徒步；天峰岭 → 悬空寺：徒步；悬空寺 → 应县木塔：专车/出租车，约 29.3 小时车程，直线约 46km，山路约 88.1km / 176 分钟车程（narrative 必须写明需乘车/包车并给出时长，禁止描述为景区观光车短驳或索道直达）；应县木塔 → 大同古城墙：专车/出租车，约 37 小时车程，直线约 58km，山路约 111km / 222 分钟车程（narrative 必须写明需乘车/包车并给出时长，禁止描述为景区观光车短驳或索道直达）",
+      "tier": "L3",
+      "knowledgeSource": "builtin",
+      "tierLabel": "已验证（人工策展或创作者确认）",
+      "suppressedByTier": false,
+      "duplicatePairs": [],
+      "umbrellaStops": []
+    },
+    {
+      "tourId": "9803d21e-7456-420c-8c92-d6cb71ca9c88",
+      "tourTitle": "青城山之旅",
+      "routeId": "9803d21e-r1",
+      "dayLabel": "1日精华游",
+      "stops": 8,
+      "storedLegs": 0,
+      "nextLegs": [
+        {
+          "from": "建福宫",
+          "to": "青城山",
+          "mode": "walk",
+          "distanceM": 1163,
+          "elevationDeltaM": 460,
+          "inferred": true
+        },
+        {
+          "from": "青城山",
+          "to": "天师洞",
+          "mode": "walk",
+          "distanceM": 399,
+          "elevationDeltaM": -260,
+          "inferred": true
+        },
+        {
+          "from": "天师洞",
+          "to": "朝阳洞",
+          "mode": "walk",
+          "distanceM": 458,
+          "elevationDeltaM": 0,
+          "inferred": true
+        },
+        {
+          "from": "朝阳洞",
+          "to": "上清宫",
+          "mode": "walk",
+          "distanceM": 730,
+          "elevationDeltaM": 180,
+          "inferred": true
+        },
+        {
+          "from": "上清宫",
+          "to": "老君阁",
+          "mode": "walk",
+          "distanceM": 347,
+          "elevationDeltaM": 80,
+          "inferred": true
+        },
+        {
+          "from": "老君阁",
+          "to": "祖师殿",
+          "mode": "walk",
+          "distanceM": 774,
+          "elevationDeltaM": -360,
+          "inferred": true
+        },
+        {
+          "from": "祖师殿",
+          "to": "月城湖",
+          "mode": "walk",
+          "distanceM": 1127,
+          "elevationDeltaM": -300,
+          "inferred": true
+        }
+      ],
+      "changedModes": [],
+      "issues": [],
+      "blocking": [],
+      "autoRepairable": false,
+      "durationMinutes": 300,
+      "narrativeInstruction": "建福宫 → 青城山：徒步，高差约 460m，须借助索道或景区交通上升，禁止写成连续徒步；青城山 → 天师洞：徒步；天师洞 → 朝阳洞：徒步；朝阳洞 → 上清宫：徒步；上清宫 → 老君阁：徒步；老君阁 → 祖师殿：徒步，高差约 360m，须借助索道或景区交通下撤，禁止写成连续徒步；祖师殿 → 月城湖：徒步，高差约 300m，须借助索道或景区交通下撤，禁止写成连续徒步",
+      "tier": "L1",
+      "knowledgeSource": "none",
+      "tierLabel": "无路线知识",
+      "suppressedByTier": false,
+      "duplicatePairs": [],
+      "umbrellaStops": [
+        "青城山"
+      ]
+    },
+    {
+      "tourId": "9803d21e-7456-420c-8c92-d6cb71ca9c88",
+      "tourTitle": "青城山之旅",
+      "routeId": "9803d21e-r2",
+      "dayLabel": "2日全景游",
+      "stops": 10,
+      "storedLegs": 0,
+      "nextLegs": [
+        {
+          "from": "建福宫",
+          "to": "青城山",
+          "mode": "walk",
+          "distanceM": 1163,
+          "elevationDeltaM": 460,
+          "inferred": true
+        },
+        {
+          "from": "青城山",
+          "to": "天师洞",
+          "mode": "walk",
+          "distanceM": 399,
+          "elevationDeltaM": -260,
+          "inferred": true
+        },
+        {
+          "from": "天师洞",
+          "to": "朝阳洞",
+          "mode": "walk",
+          "distanceM": 458,
+          "elevationDeltaM": 0,
+          "inferred": true
+        },
+        {
+          "from": "朝阳洞",
+          "to": "上清宫",
+          "mode": "walk",
+          "distanceM": 730,
+          "elevationDeltaM": 180,
+          "inferred": true
+        },
+        {
+          "from": "上清宫",
+          "to": "老君阁",
+          "mode": "walk",
+          "distanceM": 347,
+          "elevationDeltaM": 80,
+          "inferred": true
+        },
+        {
+          "from": "老君阁",
+          "to": "祖师殿",
+          "mode": "walk",
+          "distanceM": 774,
+          "elevationDeltaM": -360,
+          "inferred": true
+        },
+        {
+          "from": "祖师殿",
+          "to": "月城湖",
+          "mode": "walk",
+          "distanceM": 1127,
+          "elevationDeltaM": -300,
+          "inferred": true
+        },
+        {
+          "from": "月城湖",
+          "to": "泰安古镇-古黄鹤桥",
+          "mode": "shuttle",
+          "distanceM": 7877,
+          "roadMinutes": 22,
+          "inferred": true
+        },
+        {
+          "from": "泰安古镇-古黄鹤桥",
+          "to": "五龙沟",
+          "mode": "walk",
+          "distanceM": 1555,
+          "inferred": true
+        }
+      ],
+      "changedModes": [],
+      "issues": [],
+      "blocking": [],
+      "autoRepairable": false,
+      "durationMinutes": 398,
+      "narrativeInstruction": "建福宫 → 青城山：徒步，高差约 460m，须借助索道或景区交通上升，禁止写成连续徒步；青城山 → 天师洞：徒步；天师洞 → 朝阳洞：徒步；朝阳洞 → 上清宫：徒步；上清宫 → 老君阁：徒步；老君阁 → 祖师殿：徒步，高差约 360m，须借助索道或景区交通下撤，禁止写成连续徒步；祖师殿 → 月城湖：徒步，高差约 300m，须借助索道或景区交通下撤，禁止写成连续徒步；月城湖 → 泰安古镇-古黄鹤桥：观光车/摆渡车，约 3.7 小时车程，直线约 8km，建议乘坐景区观光车（narrative 须写明乘坐景区观光车或摆渡车）；泰安古镇-古黄鹤桥 → 五龙沟：徒步",
+      "tier": "L1",
+      "knowledgeSource": "none",
+      "tierLabel": "无路线知识",
+      "suppressedByTier": true,
+      "duplicatePairs": [],
+      "umbrellaStops": [
+        "青城山"
+      ]
+    },
+    {
+      "tourId": "9803d21e-7456-420c-8c92-d6cb71ca9c88",
+      "tourTitle": "青城山之旅",
+      "routeId": "9803d21e-r3",
+      "dayLabel": "主题游",
+      "stops": 6,
+      "storedLegs": 0,
+      "nextLegs": [
+        {
+          "from": "建福宫",
+          "to": "青城山",
+          "mode": "walk",
+          "distanceM": 1163,
+          "elevationDeltaM": 460,
+          "inferred": true
+        },
+        {
+          "from": "青城山",
+          "to": "天师洞",
+          "mode": "walk",
+          "distanceM": 399,
+          "elevationDeltaM": -260,
+          "inferred": true
+        },
+        {
+          "from": "天师洞",
+          "to": "上清宫",
+          "mode": "walk",
+          "distanceM": 930,
+          "elevationDeltaM": 180,
+          "inferred": true
+        },
+        {
+          "from": "上清宫",
+          "to": "都江堰",
+          "mode": "shuttle",
+          "distanceM": 11302,
+          "roadMinutes": 31,
+          "inferred": true
+        },
+        {
+          "from": "都江堰",
+          "to": "五龙沟",
+          "mode": "car",
+          "distanceM": 15838,
+          "roadMinutes": 60,
+          "inferred": true
+        }
+      ],
+      "changedModes": [],
+      "issues": [],
+      "blocking": [],
+      "autoRepairable": false,
+      "durationMinutes": 288,
+      "narrativeInstruction": "建福宫 → 青城山：徒步，高差约 460m，须借助索道或景区交通上升，禁止写成连续徒步；青城山 → 天师洞：徒步；天师洞 → 上清宫：徒步；上清宫 → 都江堰：观光车/摆渡车，约 5.2 小时车程，直线约 11km，建议乘坐景区观光车（narrative 须写明乘坐景区观光车或摆渡车）；都江堰 → 五龙沟：专车/出租车，约 10 小时车程，直线约 16km，山路约 30.1km / 60 分钟车程（narrative 必须写明需乘车/包车并给出时长，禁止描述为景区观光车短驳或索道直达）",
+      "tier": "L1",
+      "knowledgeSource": "none",
+      "tierLabel": "无路线知识",
+      "suppressedByTier": true,
+      "duplicatePairs": [],
+      "umbrellaStops": [
+        "青城山"
+      ]
+    },
+    {
+      "tourId": "be0c0e93-4e04-47f0-92db-d9cbaa048e8f",
+      "tourTitle": "《武当山之旅》",
+      "routeId": "be0c0e93-r1",
+      "dayLabel": "1日精华游",
+      "stops": 5,
+      "storedLegs": 0,
+      "nextLegs": [
+        {
+          "from": "武当山",
+          "to": "武当山风景区-太子坡",
+          "mode": "walk",
+          "distanceM": 1884,
+          "elevationDeltaM": -1012,
+          "inferred": true
+        },
+        {
+          "from": "武当山风景区-太子坡",
+          "to": "紫霄宫",
+          "mode": "shuttle",
+          "distanceM": 4142,
+          "elevationDeltaM": 250,
+          "roadMinutes": 11,
+          "inferred": true
+        },
+        {
+          "from": "紫霄宫",
+          "to": "武当山风景区-南岩宫",
+          "mode": "walk",
+          "distanceM": 1154,
+          "elevationDeltaM": 50,
+          "inferred": true
+        },
+        {
+          "from": "武当山风景区-南岩宫",
+          "to": "武当山风景区-金顶",
+          "mode": "walk",
+          "distanceM": 2591,
+          "elevationDeltaM": 712,
+          "inferred": true
+        }
+      ],
+      "changedModes": [],
+      "issues": [],
+      "blocking": [],
+      "autoRepairable": false,
+      "durationMinutes": 268,
+      "narrativeInstruction": "武当山 → 武当山风景区-太子坡：徒步，高差约 1012m，须借助索道或景区交通下撤，禁止写成连续徒步；武当山风景区-太子坡 → 紫霄宫：观光车/摆渡车，约 1.8 小时车程，直线约 4km，建议乘坐景区观光车（narrative 须写明乘坐景区观光车或摆渡车）；紫霄宫 → 武当山风景区-南岩宫：徒步；武当山风景区-南岩宫 → 武当山风景区-金顶：徒步，高差约 712m，须借助索道或景区交通上升，禁止写成连续徒步",
+      "tier": "L1",
+      "knowledgeSource": "none",
+      "tierLabel": "无路线知识",
+      "suppressedByTier": false,
+      "duplicatePairs": [],
+      "umbrellaStops": [
+        "武当山"
+      ]
+    },
+    {
+      "tourId": "be0c0e93-4e04-47f0-92db-d9cbaa048e8f",
+      "tourTitle": "《武当山之旅》",
+      "routeId": "be0c0e93-r2",
+      "dayLabel": "2日全景游",
+      "stops": 10,
+      "storedLegs": 0,
+      "nextLegs": [
+        {
+          "from": "武当山",
+          "to": "武当山风景区-太子坡",
+          "mode": "walk",
+          "distanceM": 1884,
+          "elevationDeltaM": -1012,
+          "inferred": true
+        },
+        {
+          "from": "武当山风景区-太子坡",
+          "to": "紫霄宫",
+          "mode": "shuttle",
+          "distanceM": 4142,
+          "elevationDeltaM": 250,
+          "roadMinutes": 11,
+          "inferred": true
+        },
+        {
+          "from": "紫霄宫",
+          "to": "武当山风景区-南岩宫",
+          "mode": "walk",
+          "distanceM": 1154,
+          "elevationDeltaM": 50,
+          "inferred": true
+        },
+        {
+          "from": "武当山风景区-南岩宫",
+          "to": "武当山风景区-金顶",
+          "mode": "walk",
+          "distanceM": 2591,
+          "elevationDeltaM": 712,
+          "inferred": true
+        },
+        {
+          "from": "武当山风景区-金顶",
+          "to": "武当山风景区-逍遥谷",
+          "mode": "shuttle",
+          "distanceM": 5998,
+          "elevationDeltaM": -1112,
+          "roadMinutes": 16,
+          "inferred": true
+        },
+        {
+          "from": "武当山风景区-逍遥谷",
+          "to": "武当山风景区-磨针井",
+          "mode": "shuttle",
+          "distanceM": 4429,
+          "elevationDeltaM": 0,
+          "roadMinutes": 12,
+          "inferred": true
+        },
+        {
+          "from": "武当山风景区-磨针井",
+          "to": "武当山风景区-玉虚宫(公园路)",
+          "mode": "shuttle",
+          "distanceM": 4106,
+          "elevationDeltaM": -300,
+          "roadMinutes": 11,
+          "inferred": true
+        },
+        {
+          "from": "武当山风景区-玉虚宫(公园路)",
+          "to": "玄岳门(公交站)",
+          "mode": "shuttle",
+          "distanceM": 4763,
+          "elevationDeltaM": 0,
+          "roadMinutes": 13,
+          "inferred": true
+        },
+        {
+          "from": "玄岳门(公交站)",
+          "to": "武当山风景区-遇真宫",
+          "mode": "walk",
+          "distanceM": 1034,
+          "elevationDeltaM": 0,
+          "inferred": true
+        }
+      ],
+      "changedModes": [],
+      "issues": [
+        {
+          "type": "long-transfer",
+          "level": "advisory",
+          "message": "武当山风景区-金顶 → 武当山风景区-逍遥谷（直线约 6km、高差约 1112m）资料中无衔接方式，已推断为「观光车/摆渡车」（未经核实）"
+        },
+        {
+          "type": "long-transfer",
+          "level": "advisory",
+          "message": "武当山风景区-磨针井 → 武当山风景区-玉虚宫(公园路)（直线约 4km、高差约 300m）资料中无衔接方式，已推断为「观光车/摆渡车」（未经核实）"
+        }
+      ],
+      "blocking": [],
+      "autoRepairable": false,
+      "durationMinutes": 444,
+      "narrativeInstruction": "武当山 → 武当山风景区-太子坡：徒步，高差约 1012m，须借助索道或景区交通下撤，禁止写成连续徒步；武当山风景区-太子坡 → 紫霄宫：观光车/摆渡车，约 1.8 小时车程，直线约 4km，建议乘坐景区观光车（narrative 须写明乘坐景区观光车或摆渡车）；紫霄宫 → 武当山风景区-南岩宫：徒步；武当山风景区-南岩宫 → 武当山风景区-金顶：徒步，高差约 712m，须借助索道或景区交通上升，禁止写成连续徒步；武当山风景区-金顶 → 武当山风景区-逍遥谷：观光车/摆渡车，约 2.7 小时车程，高差约 1112m，须借助索道或景区交通下撤，禁止写成连续徒步（narrative 须写明乘坐景区观光车或摆渡车）；武当山风景区-逍遥谷 → 武当山风景区-磨针井：观光车/摆渡车，约 2 小时车程，直线约 4km，建议乘坐景区观光车（narrative 须写明乘坐景区观光车或摆渡车）；武当山风景区-磨针井 → 武当山风景区-玉虚宫(公园路)：观光车/摆渡车，约 1.8 小时车程，高差约 300m，须借助索道或景区交通下撤，禁止写成连续徒步（narrative 须写明乘坐景区观光车或摆渡车）；武当山风景区-玉虚宫(公园路) → 玄岳门(公交站)：观光车/摆渡车，约 2.2 小时车程，直线约 5km，建议乘坐景区观光车（narrative 须写明乘坐景区观光车或摆渡车）；玄岳门(公交站) → 武当山风景区-遇真宫：徒步",
+      "tier": "L1",
+      "knowledgeSource": "none",
+      "tierLabel": "无路线知识",
+      "suppressedByTier": true,
+      "duplicatePairs": [],
+      "umbrellaStops": [
+        "武当山"
+      ]
+    },
+    {
+      "tourId": "f9573c9a-e581-4498-bdc0-13f6d6d66ed7",
+      "tourTitle": "张家界天门山之旅。",
+      "routeId": "f9573c9a-r1",
+      "dayLabel": "1日精华游",
+      "stops": 8,
+      "storedLegs": 0,
+      "nextLegs": [
+        {
+          "from": "天门山国家森林公园",
+          "to": "天门山索道",
+          "mode": "shuttle",
+          "distanceM": 8833,
+          "roadMinutes": 24,
+          "inferred": true
+        },
+        {
+          "from": "天门山索道",
+          "to": "通天大道",
+          "mode": "shuttle",
+          "distanceM": 5784,
+          "roadMinutes": 16,
+          "inferred": true
+        },
+        {
+          "from": "通天大道",
+          "to": "天门洞前广场",
+          "mode": "walk",
+          "distanceM": 1176,
+          "inferred": true
+        },
+        {
+          "from": "天门洞前广场",
+          "to": "西线玻璃栈道",
+          "mode": "walk",
+          "distanceM": 802,
+          "elevationDeltaM": 130,
+          "inferred": true
+        },
+        {
+          "from": "西线玻璃栈道",
+          "to": "鬼谷栈道(野拂)",
+          "mode": "walk",
+          "distanceM": 567,
+          "elevationDeltaM": -30,
+          "inferred": true
+        },
+        {
+          "from": "鬼谷栈道(野拂)",
+          "to": "云梦仙顶",
+          "mode": "walk",
+          "distanceM": 554,
+          "elevationDeltaM": 119,
+          "inferred": true
+        },
+        {
+          "from": "云梦仙顶",
+          "to": "天门山寺",
+          "mode": "walk",
+          "distanceM": 1007,
+          "inferred": true
+        }
+      ],
+      "changedModes": [],
+      "issues": [
+        {
+          "type": "long-transfer",
+          "level": "advisory",
+          "message": "天门山国家森林公园 → 天门山索道（直线约 9km）资料中无衔接方式，已推断为「观光车/摆渡车」（未经核实）"
+        }
+      ],
+      "blocking": [],
+      "autoRepairable": false,
+      "durationMinutes": 292,
+      "narrativeInstruction": "天门山国家森林公园 → 天门山索道：观光车/摆渡车，约 4 小时车程，直线约 9km，建议乘坐景区观光车（narrative 须写明乘坐景区观光车或摆渡车）；天门山索道 → 通天大道：观光车/摆渡车，约 2.7 小时车程，直线约 6km，建议乘坐景区观光车（narrative 须写明乘坐景区观光车或摆渡车）；通天大道 → 天门洞前广场：徒步；天门洞前广场 → 西线玻璃栈道：徒步；西线玻璃栈道 → 鬼谷栈道(野拂)：徒步；鬼谷栈道(野拂) → 云梦仙顶：徒步；云梦仙顶 → 天门山寺：徒步",
+      "tier": "L1",
+      "knowledgeSource": "none",
+      "tierLabel": "无路线知识",
+      "suppressedByTier": false,
+      "duplicatePairs": [],
+      "umbrellaStops": [
+        "天门山国家森林公园"
+      ]
+    },
+    {
+      "tourId": "f9573c9a-e581-4498-bdc0-13f6d6d66ed7",
+      "tourTitle": "张家界天门山之旅。",
+      "routeId": "f9573c9a-r2",
+      "dayLabel": "2日全景游",
+      "stops": 14,
+      "storedLegs": 0,
+      "nextLegs": [
+        {
+          "from": "天门山国家森林公园",
+          "to": "天门山索道",
+          "mode": "shuttle",
+          "distanceM": 8833,
+          "roadMinutes": 24,
+          "inferred": true
+        },
+        {
+          "from": "天门山索道",
+          "to": "通天大道",
+          "mode": "shuttle",
+          "distanceM": 5784,
+          "roadMinutes": 16,
+          "inferred": true
+        },
+        {
+          "from": "通天大道",
+          "to": "天门洞前广场",
+          "mode": "walk",
+          "distanceM": 1176,
+          "inferred": true
+        },
+        {
+          "from": "天门洞前广场",
+          "to": "西线玻璃栈道",
+          "mode": "walk",
+          "distanceM": 802,
+          "elevationDeltaM": 130,
+          "inferred": true
+        },
+        {
+          "from": "西线玻璃栈道",
+          "to": "鬼谷栈道(野拂)",
+          "mode": "walk",
+          "distanceM": 567,
+          "elevationDeltaM": -30,
+          "inferred": true
+        },
+        {
+          "from": "鬼谷栈道(野拂)",
+          "to": "云梦仙顶",
+          "mode": "walk",
+          "distanceM": 554,
+          "elevationDeltaM": 119,
+          "inferred": true
+        },
+        {
+          "from": "云梦仙顶",
+          "to": "天门山寺",
+          "mode": "walk",
+          "distanceM": 1007,
+          "inferred": true
+        },
+        {
+          "from": "天门山寺",
+          "to": "黄石寨",
+          "mode": "car",
+          "distanceM": 32992,
+          "roadMinutes": 125,
+          "inferred": true
+        },
+        {
+          "from": "黄石寨",
+          "to": "杨家界",
+          "mode": "shuttle",
+          "distanceM": 3695,
+          "roadMinutes": 10,
+          "inferred": true
+        },
+        {
+          "from": "杨家界",
+          "to": "袁家界",
+          "mode": "shuttle",
+          "distanceM": 3594,
+          "roadMinutes": 10,
+          "inferred": true
+        },
+        {
+          "from": "袁家界",
+          "to": "金鞭溪峡谷",
+          "mode": "walk",
+          "distanceM": 1007,
+          "inferred": true
+        },
+        {
+          "from": "金鞭溪峡谷",
+          "to": "十里画廊",
+          "mode": "shuttle",
+          "distanceM": 4530,
+          "roadMinutes": 12,
+          "inferred": true
+        },
+        {
+          "from": "十里画廊",
+          "to": "百龙天梯",
+          "mode": "walk",
+          "distanceM": 1978,
+          "inferred": true
+        }
+      ],
+      "changedModes": [],
+      "issues": [
+        {
+          "type": "long-transfer",
+          "level": "advisory",
+          "message": "天门山国家森林公园 → 天门山索道（直线约 9km）资料中无衔接方式，已推断为「观光车/摆渡车」（未经核实）"
+        },
+        {
+          "type": "long-transfer",
+          "level": "blocking",
+          "message": "天门山寺 → 黄石寨（直线约 33km）资料中无衔接方式，已推断为「专车/出租车」（未经核实）"
+        }
+      ],
+      "blocking": [
+        "天门山寺 → 黄石寨（直线约 33km）资料中无衔接方式，已推断为「专车/出租车」（未经核实）"
+      ],
+      "autoRepairable": false,
+      "durationMinutes": 639,
+      "narrativeInstruction": "天门山国家森林公园 → 天门山索道：观光车/摆渡车，约 4 小时车程，直线约 9km，建议乘坐景区观光车（narrative 须写明乘坐景区观光车或摆渡车）；天门山索道 → 通天大道：观光车/摆渡车，约 2.7 小时车程，直线约 6km，建议乘坐景区观光车（narrative 须写明乘坐景区观光车或摆渡车）；通天大道 → 天门洞前广场：徒步；天门洞前广场 → 西线玻璃栈道：徒步；西线玻璃栈道 → 鬼谷栈道(野拂)：徒步；鬼谷栈道(野拂) → 云梦仙顶：徒步；云梦仙顶 → 天门山寺：徒步；天门山寺 → 黄石寨：专车/出租车，约 20.8 小时车程，直线约 33km，山路约 62.7km / 125 分钟车程（narrative 必须写明需乘车/包车并给出时长，禁止描述为景区观光车短驳或索道直达）；黄石寨 → 杨家界：观光车/摆渡车，约 1.7 小时车程，直线约 4km，建议乘坐景区观光车（narrative 须写明乘坐景区观光车或摆渡车）；杨家界 → 袁家界：观光车/摆渡车，约 1.7 小时车程，直线约 4km，建议乘坐景区观光车（narrative 须写明乘坐景区观光车或摆渡车）；袁家界 → 金鞭溪峡谷：徒步；金鞭溪峡谷 → 十里画廊：观光车/摆渡车，约 2 小时车程，直线约 5km，建议乘坐景区观光车（narrative 须写明乘坐景区观光车或摆渡车）；十里画廊 → 百龙天梯：徒步",
+      "tier": "L1",
+      "knowledgeSource": "none",
+      "tierLabel": "无路线知识",
+      "suppressedByTier": true,
+      "duplicatePairs": [],
+      "umbrellaStops": [
+        "天门山国家森林公园"
+      ]
+    },
+    {
+      "tourId": "f9573c9a-e581-4498-bdc0-13f6d6d66ed7",
+      "tourTitle": "张家界天门山之旅。",
+      "routeId": "f9573c9a-r3",
+      "dayLabel": "主题游",
+      "stops": 7,
+      "storedLegs": 0,
+      "nextLegs": [
+        {
+          "from": "天门山国家森林公园",
+          "to": "天门山索道",
+          "mode": "shuttle",
+          "distanceM": 8833,
+          "roadMinutes": 24,
+          "inferred": true
+        },
+        {
+          "from": "天门山索道",
+          "to": "通天大道",
+          "mode": "shuttle",
+          "distanceM": 5784,
+          "roadMinutes": 16,
+          "inferred": true
+        },
+        {
+          "from": "通天大道",
+          "to": "天门洞前广场",
+          "mode": "walk",
+          "distanceM": 1176,
+          "inferred": true
+        },
+        {
+          "from": "天门洞前广场",
+          "to": "黄龙泉",
+          "mode": "car",
+          "distanceM": 37409,
+          "roadMinutes": 142,
+          "inferred": true
+        },
+        {
+          "from": "黄龙泉",
+          "to": "宝峰湖",
+          "mode": "car",
+          "distanceM": 12194,
+          "roadMinutes": 46,
+          "inferred": true
+        },
+        {
+          "from": "宝峰湖",
+          "to": "黄龙洞",
+          "mode": "shuttle",
+          "distanceM": 8502,
+          "roadMinutes": 23,
+          "inferred": true
+        }
+      ],
+      "changedModes": [],
+      "issues": [],
+      "blocking": [],
+      "autoRepairable": false,
+      "durationMinutes": 399,
+      "narrativeInstruction": "天门山国家森林公园 → 天门山索道：观光车/摆渡车，约 4 小时车程，直线约 9km，建议乘坐景区观光车（narrative 须写明乘坐景区观光车或摆渡车）；天门山索道 → 通天大道：观光车/摆渡车，约 2.7 小时车程，直线约 6km，建议乘坐景区观光车（narrative 须写明乘坐景区观光车或摆渡车）；通天大道 → 天门洞前广场：徒步；天门洞前广场 → 黄龙泉：专车/出租车，约 23.7 小时车程，直线约 37km，山路约 71.1km / 142 分钟车程（narrative 必须写明需乘车/包车并给出时长，禁止描述为景区观光车短驳或索道直达）；黄龙泉 → 宝峰湖：专车/出租车，约 7.7 小时车程，直线约 12km，山路约 23.2km / 46 分钟车程（narrative 必须写明需乘车/包车并给出时长，禁止描述为景区观光车短驳或索道直达）；宝峰湖 → 黄龙洞：观光车/摆渡车，约 3.8 小时车程，直线约 9km，建议乘坐景区观光车（narrative 须写明乘坐景区观光车或摆渡车）",
+      "tier": "L1",
+      "knowledgeSource": "none",
+      "tierLabel": "无路线知识",
+      "suppressedByTier": true,
+      "duplicatePairs": [],
+      "umbrellaStops": [
+        "天门山国家森林公园"
+      ]
+    },
+    {
+      "tourId": "b47e3d39-212f-44ff-acb4-7aa2b9b7ef6e",
+      "tourTitle": "庐山之旅",
+      "routeId": "b47e3d39-r1",
+      "dayLabel": "1日游·徒步环线",
+      "stops": 7,
+      "storedLegs": 0,
+      "nextLegs": [
+        {
+          "from": "庐山",
+          "to": "含鄱口",
+          "mode": "walk",
+          "distanceM": 2353,
+          "elevationDeltaM": -188,
+          "inferred": true
+        },
+        {
+          "from": "含鄱口",
+          "to": "五老峰",
+          "mode": "shuttle",
+          "distanceM": 3154,
+          "elevationDeltaM": 150,
+          "roadMinutes": 9,
+          "inferred": true
+        },
+        {
+          "from": "五老峰",
+          "to": "花径公园",
+          "mode": "shuttle",
+          "distanceM": 4444,
+          "roadMinutes": 12,
+          "inferred": true
+        },
+        {
+          "from": "花径公园",
+          "to": "大天池",
+          "mode": "walk",
+          "distanceM": 1055,
+          "inferred": true
+        },
+        {
+          "from": "大天池",
+          "to": "龙首崖",
+          "mode": "walk",
+          "distanceM": 584,
+          "inferred": true
+        },
+        {
+          "from": "龙首崖",
+          "to": "石门涧",
+          "mode": "walk",
+          "distanceM": 611,
+          "inferred": true
+        }
+      ],
+      "changedModes": [],
+      "issues": [],
+      "blocking": [],
+      "autoRepairable": false,
+      "durationMinutes": 249,
+      "narrativeInstruction": "庐山 → 含鄱口：徒步；含鄱口 → 五老峰：观光车/摆渡车，约 1.5 小时车程，直线约 3km，建议乘坐景区观光车（narrative 须写明乘坐景区观光车或摆渡车）；五老峰 → 花径公园：观光车/摆渡车，约 2 小时车程，直线约 4km，建议乘坐景区观光车（narrative 须写明乘坐景区观光车或摆渡车）；花径公园 → 大天池：徒步；大天池 → 龙首崖：徒步；龙首崖 → 石门涧：徒步",
+      "tier": "L1",
+      "knowledgeSource": "none",
+      "tierLabel": "无路线知识",
+      "suppressedByTier": false,
+      "duplicatePairs": [],
+      "umbrellaStops": [
+        "庐山"
+      ]
+    },
+    {
+      "tourId": "b47e3d39-212f-44ff-acb4-7aa2b9b7ef6e",
+      "tourTitle": "庐山之旅",
+      "routeId": "b47e3d39-r2",
+      "dayLabel": "1日游·车行索道线",
+      "stops": 7,
+      "storedLegs": 0,
+      "nextLegs": [
+        {
+          "from": "庐山",
+          "to": "美庐别墅",
+          "mode": "shuttle",
+          "distanceM": 4804,
+          "roadMinutes": 13,
+          "inferred": true
+        },
+        {
+          "from": "美庐别墅",
+          "to": "花径公园",
+          "mode": "walk",
+          "distanceM": 1460,
+          "inferred": true
+        },
+        {
+          "from": "花径公园",
+          "to": "含鄱口",
+          "mode": "walk",
+          "distanceM": 2551,
+          "inferred": true
+        },
+        {
+          "from": "含鄱口",
+          "to": "五老峰",
+          "mode": "shuttle",
+          "distanceM": 3154,
+          "elevationDeltaM": 150,
+          "roadMinutes": 9,
+          "inferred": true
+        },
+        {
+          "from": "五老峰",
+          "to": "白鹿洞书院",
+          "mode": "shuttle",
+          "distanceM": 4509,
+          "roadMinutes": 12,
+          "inferred": true
+        },
+        {
+          "from": "白鹿洞书院",
+          "to": "东林寺",
+          "mode": "car",
+          "distanceM": 12728,
+          "roadMinutes": 48,
+          "inferred": true
+        }
+      ],
+      "changedModes": [],
+      "issues": [
+        {
+          "type": "long-transfer",
+          "level": "advisory",
+          "message": "白鹿洞书院 → 东林寺（直线约 13km）资料中无衔接方式，已推断为「专车/出租车」（未经核实）"
+        }
+      ],
+      "blocking": [],
+      "autoRepairable": false,
+      "durationMinutes": 296,
+      "narrativeInstruction": "庐山 → 美庐别墅：观光车/摆渡车，约 2.2 小时车程，直线约 5km，建议乘坐景区观光车（narrative 须写明乘坐景区观光车或摆渡车）；美庐别墅 → 花径公园：徒步；花径公园 → 含鄱口：徒步；含鄱口 → 五老峰：观光车/摆渡车，约 1.5 小时车程，直线约 3km，建议乘坐景区观光车（narrative 须写明乘坐景区观光车或摆渡车）；五老峰 → 白鹿洞书院：观光车/摆渡车，约 2 小时车程，直线约 5km，建议乘坐景区观光车（narrative 须写明乘坐景区观光车或摆渡车）；白鹿洞书院 → 东林寺：专车/出租车，约 8 小时车程，直线约 13km，山路约 24.2km / 48 分钟车程（narrative 必须写明需乘车/包车并给出时长，禁止描述为景区观光车短驳或索道直达）",
+      "tier": "L1",
+      "knowledgeSource": "none",
+      "tierLabel": "无路线知识",
+      "suppressedByTier": false,
+      "duplicatePairs": [],
+      "umbrellaStops": [
+        "庐山"
+      ]
+    },
+    {
+      "tourId": "1a956ea4-7f68-4db0-b745-d74182e10a9b",
+      "tourTitle": "三清山之旅",
+      "routeId": "1a956ea4-r1",
+      "dayLabel": "1日游·徒步环线",
+      "stops": 10,
+      "storedLegs": 0,
+      "nextLegs": [
+        {
+          "from": "三清山",
+          "to": "仙姑晒鞋",
+          "mode": "walk",
+          "distanceM": 935,
+          "inferred": true
+        },
+        {
+          "from": "仙姑晒鞋",
+          "to": "三清宫",
+          "mode": "walk",
+          "distanceM": 1640,
+          "inferred": true
+        },
+        {
+          "from": "三清宫",
+          "to": "玉京峰",
+          "mode": "walk",
+          "distanceM": 1046,
+          "inferred": true
+        },
+        {
+          "from": "玉京峰",
+          "to": "西海岸",
+          "mode": "walk",
+          "distanceM": 469,
+          "inferred": true
+        },
+        {
+          "from": "西海岸",
+          "to": "阳光海岸",
+          "mode": "walk",
+          "distanceM": 1299,
+          "inferred": true
+        },
+        {
+          "from": "阳光海岸",
+          "to": "巨蟒出山",
+          "mode": "walk",
+          "distanceM": 344,
+          "inferred": true
+        },
+        {
+          "from": "巨蟒出山",
+          "to": "女神峰",
+          "mode": "walk",
+          "distanceM": 158,
+          "inferred": true
+        },
+        {
+          "from": "女神峰",
+          "to": "玉女开怀",
+          "mode": "walk",
+          "distanceM": 474,
+          "inferred": true
+        },
+        {
+          "from": "玉女开怀",
+          "to": "老道拜月",
+          "mode": "walk",
+          "distanceM": 394,
+          "inferred": true
+        }
+      ],
+      "changedModes": [],
+      "issues": [],
+      "blocking": [],
+      "autoRepairable": false,
+      "durationMinutes": 338,
+      "narrativeInstruction": "三清山 → 仙姑晒鞋：徒步；仙姑晒鞋 → 三清宫：徒步；三清宫 → 玉京峰：徒步；玉京峰 → 西海岸：徒步；西海岸 → 阳光海岸：徒步；阳光海岸 → 巨蟒出山：徒步；巨蟒出山 → 女神峰：徒步；女神峰 → 玉女开怀：徒步；玉女开怀 → 老道拜月：徒步",
+      "tier": "L1",
+      "knowledgeSource": "none",
+      "tierLabel": "无路线知识",
+      "suppressedByTier": false,
+      "duplicatePairs": [
+        {
+          "keep": "1日游·徒步环线",
+          "drop": "1日游·车行索道线",
+          "identical": true,
+          "exempted": false
+        }
+      ],
+      "umbrellaStops": [
+        "三清山"
+      ]
+    },
+    {
+      "tourId": "1a956ea4-7f68-4db0-b745-d74182e10a9b",
+      "tourTitle": "三清山之旅",
+      "routeId": "1a956ea4-r2",
+      "dayLabel": "1日游·车行索道线",
+      "stops": 10,
+      "storedLegs": 0,
+      "nextLegs": [
+        {
+          "from": "三清山",
+          "to": "仙姑晒鞋",
+          "mode": "walk",
+          "distanceM": 935,
+          "inferred": true
+        },
+        {
+          "from": "仙姑晒鞋",
+          "to": "三清宫",
+          "mode": "walk",
+          "distanceM": 1640,
+          "inferred": true
+        },
+        {
+          "from": "三清宫",
+          "to": "玉京峰",
+          "mode": "walk",
+          "distanceM": 1046,
+          "inferred": true
+        },
+        {
+          "from": "玉京峰",
+          "to": "西海岸",
+          "mode": "walk",
+          "distanceM": 469,
+          "inferred": true
+        },
+        {
+          "from": "西海岸",
+          "to": "阳光海岸",
+          "mode": "walk",
+          "distanceM": 1299,
+          "inferred": true
+        },
+        {
+          "from": "阳光海岸",
+          "to": "巨蟒出山",
+          "mode": "walk",
+          "distanceM": 344,
+          "inferred": true
+        },
+        {
+          "from": "巨蟒出山",
+          "to": "女神峰",
+          "mode": "walk",
+          "distanceM": 158,
+          "inferred": true
+        },
+        {
+          "from": "女神峰",
+          "to": "玉女开怀",
+          "mode": "walk",
+          "distanceM": 474,
+          "inferred": true
+        },
+        {
+          "from": "玉女开怀",
+          "to": "老道拜月",
+          "mode": "walk",
+          "distanceM": 394,
+          "inferred": true
+        }
+      ],
+      "changedModes": [],
+      "issues": [],
+      "blocking": [],
+      "autoRepairable": false,
+      "durationMinutes": 338,
+      "narrativeInstruction": "三清山 → 仙姑晒鞋：徒步；仙姑晒鞋 → 三清宫：徒步；三清宫 → 玉京峰：徒步；玉京峰 → 西海岸：徒步；西海岸 → 阳光海岸：徒步；阳光海岸 → 巨蟒出山：徒步；巨蟒出山 → 女神峰：徒步；女神峰 → 玉女开怀：徒步；玉女开怀 → 老道拜月：徒步",
+      "tier": "L1",
+      "knowledgeSource": "none",
+      "tierLabel": "无路线知识",
+      "suppressedByTier": false,
+      "duplicatePairs": [
+        {
+          "keep": "1日游·徒步环线",
+          "drop": "1日游·车行索道线",
+          "identical": true,
+          "exempted": false
+        }
+      ],
+      "umbrellaStops": [
+        "三清山"
+      ]
+    },
+    {
+      "tourId": "0cb82b1c-54ed-42d7-ae36-6bcc42772160",
+      "tourTitle": "武汉龟山之旅三。",
+      "routeId": "0cb82b1c-r1",
+      "dayLabel": "半日游",
+      "stops": 2,
+      "storedLegs": 0,
+      "nextLegs": [
+        {
+          "from": "龟山风景区",
+          "to": "晴川阁",
+          "mode": "walk",
+          "distanceM": 871,
+          "inferred": true
+        }
+      ],
+      "changedModes": [],
+      "issues": [],
+      "blocking": [],
+      "autoRepairable": false,
+      "durationMinutes": 40,
+      "narrativeInstruction": "龟山风景区 → 晴川阁：徒步",
+      "tier": "L1",
+      "knowledgeSource": "none",
+      "tierLabel": "无路线知识",
+      "suppressedByTier": false,
+      "duplicatePairs": [],
+      "umbrellaStops": [
+        "龟山风景区"
+      ]
+    },
+    {
+      "tourId": "0cb82b1c-54ed-42d7-ae36-6bcc42772160",
+      "tourTitle": "武汉龟山之旅三。",
+      "routeId": "0cb82b1c-r2",
+      "dayLabel": "半日游",
+      "stops": 2,
+      "storedLegs": 0,
+      "nextLegs": [
+        {
+          "from": "琴台公园-古建筑(打卡点)",
+          "to": "解放公园",
+          "mode": "shuttle",
+          "distanceM": 6880,
+          "roadMinutes": 19,
+          "inferred": true
+        }
+      ],
+      "changedModes": [],
+      "issues": [],
+      "blocking": [],
+      "autoRepairable": false,
+      "durationMinutes": 39,
+      "narrativeInstruction": "琴台公园-古建筑(打卡点) → 解放公园：观光车/摆渡车，约 3.2 小时车程，直线约 7km，建议乘坐景区观光车（narrative 须写明乘坐景区观光车或摆渡车）",
+      "tier": "L1",
+      "knowledgeSource": "none",
+      "tierLabel": "无路线知识",
+      "suppressedByTier": false,
+      "duplicatePairs": [],
+      "umbrellaStops": []
+    },
+    {
+      "tourId": "0cb82b1c-54ed-42d7-ae36-6bcc42772160",
+      "tourTitle": "武汉龟山之旅三。",
+      "routeId": "0cb82b1c-r3",
+      "dayLabel": "1日游",
+      "stops": 4,
+      "storedLegs": 0,
+      "nextLegs": [
+        {
+          "from": "龟山风景区",
+          "to": "晴川阁",
+          "mode": "walk",
+          "distanceM": 871,
+          "inferred": true
+        },
+        {
+          "from": "晴川阁",
+          "to": "琴台公园-古建筑(打卡点)",
+          "mode": "walk",
+          "distanceM": 1991,
+          "inferred": true
+        },
+        {
+          "from": "琴台公园-古建筑(打卡点)",
+          "to": "解放公园",
+          "mode": "shuttle",
+          "distanceM": 6880,
+          "roadMinutes": 19,
+          "inferred": true
+        }
+      ],
+      "changedModes": [],
+      "issues": [],
+      "blocking": [],
+      "autoRepairable": false,
+      "durationMinutes": 146,
+      "narrativeInstruction": "龟山风景区 → 晴川阁：徒步；晴川阁 → 琴台公园-古建筑(打卡点)：徒步；琴台公园-古建筑(打卡点) → 解放公园：观光车/摆渡车，约 3.2 小时车程，直线约 7km，建议乘坐景区观光车（narrative 须写明乘坐景区观光车或摆渡车）",
+      "tier": "L1",
+      "knowledgeSource": "none",
+      "tierLabel": "无路线知识",
+      "suppressedByTier": false,
+      "duplicatePairs": [],
+      "umbrellaStops": [
+        "龟山风景区"
+      ]
+    },
+    {
+      "tourId": "690d3b68-908a-413a-b6f4-3ce89877eb6f",
+      "tourTitle": "武汉东湖之旅",
+      "routeId": "690d3b68-r1",
+      "dayLabel": "2日游",
+      "stops": 13,
+      "storedLegs": 0,
+      "nextLegs": [
+        {
+          "from": "东湖磨山景区",
+          "to": "楚天台",
+          "mode": "walk",
+          "distanceM": 396,
+          "inferred": true
+        },
+        {
+          "from": "楚天台",
+          "to": "离骚碑",
+          "mode": "walk",
+          "distanceM": 220,
+          "inferred": true
+        },
+        {
+          "from": "离骚碑",
+          "to": "刘备郊天坛",
+          "mode": "walk",
+          "distanceM": 1078,
+          "inferred": true
+        },
+        {
+          "from": "刘备郊天坛",
+          "to": "楚城",
+          "mode": "walk",
+          "distanceM": 1770,
+          "inferred": true
+        },
+        {
+          "from": "楚城",
+          "to": "东湖生态旅游风景区-朱碑亭朱德雕像(打卡点)",
+          "mode": "walk",
+          "distanceM": 297,
+          "inferred": true
+        },
+        {
+          "from": "东湖生态旅游风景区-朱碑亭朱德雕像(打卡点)",
+          "to": "东湖听涛景区",
+          "mode": "shuttle",
+          "distanceM": 3525,
+          "roadMinutes": 10,
+          "inferred": true
+        },
+        {
+          "from": "东湖听涛景区",
+          "to": "行吟阁",
+          "mode": "walk",
+          "distanceM": 27,
+          "inferred": true
+        },
+        {
+          "from": "行吟阁",
+          "to": "屈原纪念馆",
+          "mode": "walk",
+          "distanceM": 596,
+          "inferred": true
+        },
+        {
+          "from": "屈原纪念馆",
+          "to": "长天楼",
+          "mode": "walk",
+          "distanceM": 724,
+          "inferred": true
+        },
+        {
+          "from": "长天楼",
+          "to": "九女墩",
+          "mode": "walk",
+          "distanceM": 965,
+          "inferred": true
+        },
+        {
+          "from": "九女墩",
+          "to": "武汉东湖沙滩",
+          "mode": "walk",
+          "distanceM": 1801,
+          "inferred": true
+        },
+        {
+          "from": "武汉东湖沙滩",
+          "to": "湖心岛",
+          "mode": "walk",
+          "distanceM": 132,
+          "inferred": true
+        }
+      ],
+      "changedModes": [],
+      "issues": [],
+      "blocking": [],
+      "autoRepairable": false,
+      "durationMinutes": 443,
+      "narrativeInstruction": "东湖磨山景区 → 楚天台：徒步；楚天台 → 离骚碑：徒步；离骚碑 → 刘备郊天坛：徒步；刘备郊天坛 → 楚城：徒步；楚城 → 东湖生态旅游风景区-朱碑亭朱德雕像(打卡点)：徒步；东湖生态旅游风景区-朱碑亭朱德雕像(打卡点) → 东湖听涛景区：观光车/摆渡车，约 1.7 小时车程，直线约 4km，建议乘坐景区观光车（narrative 须写明乘坐景区观光车或摆渡车）；东湖听涛景区 → 行吟阁：徒步；行吟阁 → 屈原纪念馆：徒步；屈原纪念馆 → 长天楼：徒步；长天楼 → 九女墩：徒步；九女墩 → 武汉东湖沙滩：徒步；武汉东湖沙滩 → 湖心岛：徒步",
+      "tier": "L1",
+      "knowledgeSource": "none",
+      "tierLabel": "无路线知识",
+      "suppressedByTier": true,
+      "duplicatePairs": [],
+      "umbrellaStops": []
+    },
+    {
+      "tourId": "690d3b68-908a-413a-b6f4-3ce89877eb6f",
+      "tourTitle": "武汉东湖之旅",
+      "routeId": "690d3b68-r2",
+      "dayLabel": "1日游",
+      "stops": 6,
+      "storedLegs": 0,
+      "nextLegs": [
+        {
+          "from": "东湖磨山景区",
+          "to": "楚天台",
+          "mode": "walk",
+          "distanceM": 396,
+          "inferred": true
+        },
+        {
+          "from": "楚天台",
+          "to": "楚城",
+          "mode": "walk",
+          "distanceM": 546,
+          "inferred": true
+        },
+        {
+          "from": "楚城",
+          "to": "东湖听涛景区",
+          "mode": "shuttle",
+          "distanceM": 3551,
+          "roadMinutes": 10,
+          "inferred": true
+        },
+        {
+          "from": "东湖听涛景区",
+          "to": "行吟阁",
+          "mode": "walk",
+          "distanceM": 27,
+          "inferred": true
+        },
+        {
+          "from": "行吟阁",
+          "to": "武汉东湖沙滩",
+          "mode": "walk",
+          "distanceM": 1668,
+          "inferred": true
+        }
+      ],
+      "changedModes": [],
+      "issues": [],
+      "blocking": [],
+      "autoRepairable": false,
+      "durationMinutes": 176,
+      "narrativeInstruction": "东湖磨山景区 → 楚天台：徒步；楚天台 → 楚城：徒步；楚城 → 东湖听涛景区：观光车/摆渡车，约 1.7 小时车程，直线约 4km，建议乘坐景区观光车（narrative 须写明乘坐景区观光车或摆渡车）；东湖听涛景区 → 行吟阁：徒步；行吟阁 → 武汉东湖沙滩：徒步",
+      "tier": "L1",
+      "knowledgeSource": "none",
+      "tierLabel": "无路线知识",
+      "suppressedByTier": false,
+      "duplicatePairs": [],
+      "umbrellaStops": []
+    },
+    {
+      "tourId": "690d3b68-908a-413a-b6f4-3ce89877eb6f",
+      "tourTitle": "武汉东湖之旅",
+      "routeId": "690d3b68-r3",
+      "dayLabel": "主题游",
+      "stops": 5,
+      "storedLegs": 0,
+      "nextLegs": [
+        {
+          "from": "东湖荷园",
+          "to": "东湖牡丹园-丹霞",
+          "mode": "shuttle",
+          "distanceM": 4818,
+          "roadMinutes": 13,
+          "inferred": true
+        },
+        {
+          "from": "东湖牡丹园-丹霞",
+          "to": "东湖绿道-全景广场",
+          "mode": "shuttle",
+          "distanceM": 4281,
+          "roadMinutes": 12,
+          "inferred": true
+        },
+        {
+          "from": "东湖绿道-全景广场",
+          "to": "晴川阁",
+          "mode": "shuttle",
+          "distanceM": 11499,
+          "roadMinutes": 32,
+          "inferred": true
+        },
+        {
+          "from": "晴川阁",
+          "to": "黄鹤楼",
+          "mode": "walk",
+          "distanceM": 2082,
+          "inferred": true
+        }
+      ],
+      "changedModes": [],
+      "issues": [],
+      "blocking": [],
+      "autoRepairable": false,
+      "durationMinutes": 186,
+      "narrativeInstruction": "东湖荷园 → 东湖牡丹园-丹霞：观光车/摆渡车，约 2.2 小时车程，直线约 5km，建议乘坐景区观光车（narrative 须写明乘坐景区观光车或摆渡车）；东湖牡丹园-丹霞 → 东湖绿道-全景广场：观光车/摆渡车，约 2 小时车程，直线约 4km，建议乘坐景区观光车（narrative 须写明乘坐景区观光车或摆渡车）；东湖绿道-全景广场 → 晴川阁：观光车/摆渡车，约 5.3 小时车程，直线约 11km，建议乘坐景区观光车（narrative 须写明乘坐景区观光车或摆渡车）；晴川阁 → 黄鹤楼：徒步",
+      "tier": "L1",
+      "knowledgeSource": "none",
+      "tierLabel": "无路线知识",
+      "suppressedByTier": true,
+      "duplicatePairs": [],
+      "umbrellaStops": []
+    },
+    {
+      "tourId": "73e455ab-6b29-4a02-9a93-ec96b67e5b65",
+      "tourTitle": "泰山封禅 · 帝王之路",
+      "routeId": "73e455ab-r1",
+      "dayLabel": "1日精华游",
+      "stops": 8,
+      "storedLegs": 0,
+      "nextLegs": [
+        {
+          "from": "红门宫",
+          "to": "泰山风景名胜区",
+          "mode": "shuttle",
+          "distanceM": 7014,
+          "elevationDeltaM": 1295,
+          "roadMinutes": 19,
+          "inferred": true
+        },
+        {
+          "from": "泰山风景名胜区",
+          "to": "中天门",
+          "mode": "shuttle",
+          "distanceM": 3755,
+          "elevationDeltaM": -698,
+          "roadMinutes": 10,
+          "inferred": true
+        },
+        {
+          "from": "中天门",
+          "to": "十八盘",
+          "mode": "walk",
+          "distanceM": 1451,
+          "elevationDeltaM": 553,
+          "inferred": true
+        },
+        {
+          "from": "十八盘",
+          "to": "南天门",
+          "mode": "walk",
+          "distanceM": 623,
+          "elevationDeltaM": 60,
+          "inferred": true,
+          "edgeMode": "walk"
+        },
+        {
+          "from": "南天门",
+          "to": "玉皇顶",
+          "mode": "walk",
+          "distanceM": 463,
+          "elevationDeltaM": 85,
+          "inferred": true
+        },
+        {
+          "from": "玉皇顶",
+          "to": "日观峰",
+          "mode": "walk",
+          "distanceM": 268,
+          "elevationDeltaM": -9,
+          "inferred": true,
+          "edgeMode": "walk"
+        },
+        {
+          "from": "日观峰",
+          "to": "岱庙",
+          "mode": "shuttle",
+          "distanceM": 7123,
+          "elevationDeltaM": -1386,
+          "roadMinutes": 20,
+          "inferred": true
+        }
+      ],
+      "changedModes": [],
+      "issues": [
+        {
+          "type": "long-transfer",
+          "level": "advisory",
+          "message": "红门宫 → 泰山风景名胜区（直线约 7km、高差约 1295m）资料中无衔接方式，已推断为「观光车/摆渡车」（未经核实）"
+        },
+        {
+          "type": "long-transfer",
+          "level": "advisory",
+          "message": "泰山风景名胜区 → 中天门（直线约 4km、高差约 698m）资料中无衔接方式，已推断为「观光车/摆渡车」（未经核实）"
+        },
+        {
+          "type": "long-transfer",
+          "level": "advisory",
+          "message": "日观峰 → 岱庙（直线约 7km、高差约 1386m）资料中无衔接方式，已推断为「观光车/摆渡车」（未经核实）"
+        }
+      ],
+      "blocking": [],
+      "autoRepairable": false,
+      "durationMinutes": 296,
+      "narrativeInstruction": "红门宫 → 泰山风景名胜区：观光车/摆渡车，约 3.2 小时车程，高差约 1295m，须借助索道或景区交通上升，禁止写成连续徒步（narrative 须写明乘坐景区观光车或摆渡车）；泰山风景名胜区 → 中天门：观光车/摆渡车，约 1.7 小时车程，高差约 698m，须借助索道或景区交通下撤，禁止写成连续徒步（narrative 须写明乘坐景区观光车或摆渡车）；中天门 → 十八盘：徒步，高差约 553m，须借助索道或景区交通上升，禁止写成连续徒步；十八盘 → 南天门：徒步；南天门 → 玉皇顶：徒步；玉皇顶 → 日观峰：徒步；日观峰 → 岱庙：观光车/摆渡车，约 3.3 小时车程，高差约 1386m，须借助索道或景区交通下撤，禁止写成连续徒步（narrative 须写明乘坐景区观光车或摆渡车）",
+      "tier": "L3",
+      "knowledgeSource": "builtin",
+      "tierLabel": "已验证（人工策展或创作者确认）",
+      "suppressedByTier": false,
+      "duplicatePairs": [],
+      "umbrellaStops": [
+        "泰山风景名胜区"
+      ]
+    },
+    {
+      "tourId": "73e455ab-6b29-4a02-9a93-ec96b67e5b65",
+      "tourTitle": "泰山封禅 · 帝王之路",
+      "routeId": "73e455ab-r2",
+      "dayLabel": "2日全景游",
+      "stops": 10,
+      "storedLegs": 0,
+      "nextLegs": [
+        {
+          "from": "红门宫",
+          "to": "泰山风景名胜区",
+          "mode": "shuttle",
+          "distanceM": 7014,
+          "elevationDeltaM": 1295,
+          "roadMinutes": 19,
+          "inferred": true
+        },
+        {
+          "from": "泰山风景名胜区",
+          "to": "中天门",
+          "mode": "shuttle",
+          "distanceM": 3755,
+          "elevationDeltaM": -698,
+          "roadMinutes": 10,
+          "inferred": true
+        },
+        {
+          "from": "中天门",
+          "to": "十八盘",
+          "mode": "walk",
+          "distanceM": 1451,
+          "elevationDeltaM": 553,
+          "inferred": true
+        },
+        {
+          "from": "十八盘",
+          "to": "南天门",
+          "mode": "walk",
+          "distanceM": 623,
+          "elevationDeltaM": 60,
+          "inferred": true,
+          "edgeMode": "walk"
+        },
+        {
+          "from": "南天门",
+          "to": "玉皇顶",
+          "mode": "walk",
+          "distanceM": 463,
+          "elevationDeltaM": 85,
+          "inferred": true
+        },
+        {
+          "from": "玉皇顶",
+          "to": "日观峰",
+          "mode": "walk",
+          "distanceM": 268,
+          "elevationDeltaM": -9,
+          "inferred": true,
+          "edgeMode": "walk"
+        },
+        {
+          "from": "日观峰",
+          "to": "二虎庙",
+          "mode": "walk",
+          "distanceM": 1369,
+          "inferred": true
+        },
+        {
+          "from": "二虎庙",
+          "to": "两期岩体穿插关系",
+          "mode": "walk",
+          "distanceM": 2197,
+          "inferred": true
+        },
+        {
+          "from": "两期岩体穿插关系",
+          "to": "岱庙",
+          "mode": "shuttle",
+          "distanceM": 9665,
+          "roadMinutes": 27,
+          "inferred": true
+        }
+      ],
+      "changedModes": [],
+      "issues": [
+        {
+          "type": "long-transfer",
+          "level": "advisory",
+          "message": "红门宫 → 泰山风景名胜区（直线约 7km、高差约 1295m）资料中无衔接方式，已推断为「观光车/摆渡车」（未经核实）"
+        },
+        {
+          "type": "long-transfer",
+          "level": "advisory",
+          "message": "泰山风景名胜区 → 中天门（直线约 4km、高差约 698m）资料中无衔接方式，已推断为「观光车/摆渡车」（未经核实）"
+        },
+        {
+          "type": "long-transfer",
+          "level": "advisory",
+          "message": "两期岩体穿插关系 → 岱庙（直线约 10km）资料中无衔接方式，已推断为「观光车/摆渡车」（未经核实）"
+        }
+      ],
+      "blocking": [],
+      "autoRepairable": false,
+      "durationMinutes": 426,
+      "narrativeInstruction": "红门宫 → 泰山风景名胜区：观光车/摆渡车，约 3.2 小时车程，高差约 1295m，须借助索道或景区交通上升，禁止写成连续徒步（narrative 须写明乘坐景区观光车或摆渡车）；泰山风景名胜区 → 中天门：观光车/摆渡车，约 1.7 小时车程，高差约 698m，须借助索道或景区交通下撤，禁止写成连续徒步（narrative 须写明乘坐景区观光车或摆渡车）；中天门 → 十八盘：徒步，高差约 553m，须借助索道或景区交通上升，禁止写成连续徒步；十八盘 → 南天门：徒步；南天门 → 玉皇顶：徒步；玉皇顶 → 日观峰：徒步；日观峰 → 二虎庙：徒步；二虎庙 → 两期岩体穿插关系：徒步；两期岩体穿插关系 → 岱庙：观光车/摆渡车，约 4.5 小时车程，直线约 10km，建议乘坐景区观光车（narrative 须写明乘坐景区观光车或摆渡车）",
+      "tier": "L3",
+      "knowledgeSource": "builtin",
+      "tierLabel": "已验证（人工策展或创作者确认）",
+      "suppressedByTier": false,
+      "duplicatePairs": [],
+      "umbrellaStops": [
+        "泰山风景名胜区"
+      ]
+    },
+    {
+      "tourId": "73e455ab-6b29-4a02-9a93-ec96b67e5b65",
+      "tourTitle": "泰山封禅 · 帝王之路",
+      "routeId": "73e455ab-r3",
+      "dayLabel": "主题游",
+      "stops": 5,
+      "storedLegs": 0,
+      "nextLegs": [
+        {
+          "from": "泰山风景名胜区",
+          "to": "十八盘",
+          "mode": "walk",
+          "distanceM": 2422,
+          "elevationDeltaM": -145,
+          "inferred": true
+        },
+        {
+          "from": "十八盘",
+          "to": "南天门",
+          "mode": "walk",
+          "distanceM": 623,
+          "elevationDeltaM": 60,
+          "inferred": true,
+          "edgeMode": "walk"
+        },
+        {
+          "from": "南天门",
+          "to": "玉皇顶",
+          "mode": "walk",
+          "distanceM": 463,
+          "elevationDeltaM": 85,
+          "inferred": true
+        },
+        {
+          "from": "玉皇顶",
+          "to": "二虎庙",
+          "mode": "walk",
+          "distanceM": 1101,
+          "inferred": true
+        }
+      ],
+      "changedModes": [],
+      "issues": [],
+      "blocking": [],
+      "autoRepairable": false,
+      "durationMinutes": 197,
+      "narrativeInstruction": "泰山风景名胜区 → 十八盘：徒步；十八盘 → 南天门：徒步；南天门 → 玉皇顶：徒步；玉皇顶 → 二虎庙：徒步",
+      "tier": "L3",
+      "knowledgeSource": "builtin",
+      "tierLabel": "已验证（人工策展或创作者确认）",
+      "suppressedByTier": false,
+      "duplicatePairs": [],
+      "umbrellaStops": [
+        "泰山风景名胜区"
+      ]
+    },
+    {
+      "tourId": "73e455ab-6b29-4a02-9a93-ec96b67e5b65",
+      "tourTitle": "泰山封禅 · 帝王之路",
+      "routeId": "73e455ab-r4",
+      "dayLabel": "文学巡礼线",
+      "stops": 5,
+      "storedLegs": 0,
+      "nextLegs": [
+        {
+          "from": "岱庙",
+          "to": "红门宫",
+          "mode": "walk",
+          "distanceM": 1882,
+          "elevationDeltaM": 100,
+          "inferred": true
+        },
+        {
+          "from": "红门宫",
+          "to": "中天门",
+          "mode": "shuttle",
+          "distanceM": 3377,
+          "elevationDeltaM": 597,
+          "roadMinutes": 9,
+          "inferred": true
+        },
+        {
+          "from": "中天门",
+          "to": "南天门",
+          "mode": "walk",
+          "distanceM": 2069,
+          "elevationDeltaM": 613,
+          "inferred": true
+        },
+        {
+          "from": "南天门",
+          "to": "玉皇顶",
+          "mode": "walk",
+          "distanceM": 463,
+          "elevationDeltaM": 85,
+          "inferred": true
+        }
+      ],
+      "changedModes": [],
+      "issues": [
+        {
+          "type": "long-transfer",
+          "level": "advisory",
+          "message": "红门宫 → 中天门（直线约 3km、高差约 597m）资料中无衔接方式，已推断为「观光车/摆渡车」（未经核实）"
+        }
+      ],
+      "blocking": [],
+      "autoRepairable": false,
+      "durationMinutes": 240,
+      "narrativeInstruction": "岱庙 → 红门宫：徒步；红门宫 → 中天门：观光车/摆渡车，约 1.5 小时车程，高差约 597m，须借助索道或景区交通上升，禁止写成连续徒步（narrative 须写明乘坐景区观光车或摆渡车）；中天门 → 南天门：徒步，高差约 613m，须借助索道或景区交通上升，禁止写成连续徒步；南天门 → 玉皇顶：徒步",
+      "tier": "L3",
+      "knowledgeSource": "builtin",
+      "tierLabel": "已验证（人工策展或创作者确认）",
+      "suppressedByTier": false,
+      "duplicatePairs": [],
+      "umbrellaStops": []
+    },
+    {
+      "tourId": "1baca791-416e-4c72-8fed-3f59001369bf",
+      "tourTitle": "课本里的黄山 · 文学巡礼",
+      "routeId": "1baca791-r1",
+      "dayLabel": "1日精华游",
+      "stops": 8,
+      "storedLegs": 0,
+      "nextLegs": [
+        {
+          "from": "黄山",
+          "to": "黄山-莲花峰",
+          "mode": "walk",
+          "distanceM": 1924,
+          "elevationDeltaM": 0,
+          "inferred": true
+        },
+        {
+          "from": "黄山-莲花峰",
+          "to": "黄山风景区-光明顶",
+          "mode": "walk",
+          "distanceM": 860,
+          "elevationDeltaM": -5,
+          "inferred": true
+        },
+        {
+          "from": "黄山风景区-光明顶",
+          "to": "天都峰赋",
+          "mode": "walk",
+          "distanceM": 1475,
+          "elevationDeltaM": -50,
+          "inferred": true
+        },
+        {
+          "from": "天都峰赋",
+          "to": "黄山-迎客松",
+          "mode": "walk",
+          "distanceM": 233,
+          "elevationDeltaM": -140,
+          "inferred": true
+        },
+        {
+          "from": "黄山-迎客松",
+          "to": "黄山-西海大峡谷",
+          "mode": "walk",
+          "distanceM": 2168,
+          "elevationDeltaM": -470,
+          "inferred": true
+        },
+        {
+          "from": "黄山-西海大峡谷",
+          "to": "黄山-始信峰",
+          "mode": "walk",
+          "distanceM": 1978,
+          "elevationDeltaM": 483,
+          "inferred": true
+        },
+        {
+          "from": "黄山-始信峰",
+          "to": "猴子观海",
+          "mode": "walk",
+          "distanceM": 519,
+          "elevationDeltaM": -83,
+          "inferred": true
+        }
+      ],
+      "changedModes": [],
+      "issues": [],
+      "blocking": [],
+      "autoRepairable": false,
+      "durationMinutes": 383,
+      "narrativeInstruction": "黄山 → 黄山-莲花峰：徒步；黄山-莲花峰 → 黄山风景区-光明顶：徒步；黄山风景区-光明顶 → 天都峰赋：徒步；天都峰赋 → 黄山-迎客松：徒步；黄山-迎客松 → 黄山-西海大峡谷：徒步，高差约 470m，须借助索道或景区交通下撤，禁止写成连续徒步；黄山-西海大峡谷 → 黄山-始信峰：徒步，高差约 483m，须借助索道或景区交通上升，禁止写成连续徒步；黄山-始信峰 → 猴子观海：徒步",
+      "tier": "L1",
+      "knowledgeSource": "none",
+      "tierLabel": "无路线知识",
+      "suppressedByTier": false,
+      "duplicatePairs": [
+        {
+          "keep": "1日精华游",
+          "drop": "文学巡礼线",
+          "identical": true,
+          "exempted": true
+        }
+      ],
+      "umbrellaStops": [
+        "黄山"
+      ]
+    },
+    {
+      "tourId": "1baca791-416e-4c72-8fed-3f59001369bf",
+      "tourTitle": "课本里的黄山 · 文学巡礼",
+      "routeId": "1baca791-r2",
+      "dayLabel": "2日全景游",
+      "stops": 11,
+      "storedLegs": 0,
+      "nextLegs": [
+        {
+          "from": "黄山",
+          "to": "黄山-莲花峰",
+          "mode": "walk",
+          "distanceM": 1924,
+          "elevationDeltaM": 0,
+          "inferred": true
+        },
+        {
+          "from": "黄山-莲花峰",
+          "to": "黄山风景区-光明顶",
+          "mode": "walk",
+          "distanceM": 860,
+          "elevationDeltaM": -5,
+          "inferred": true
+        },
+        {
+          "from": "黄山风景区-光明顶",
+          "to": "天都峰赋",
+          "mode": "walk",
+          "distanceM": 1475,
+          "elevationDeltaM": -50,
+          "inferred": true
+        },
+        {
+          "from": "天都峰赋",
+          "to": "黄山-迎客松",
+          "mode": "walk",
+          "distanceM": 233,
+          "elevationDeltaM": -140,
+          "inferred": true
+        },
+        {
+          "from": "黄山-迎客松",
+          "to": "黄山-西海大峡谷",
+          "mode": "walk",
+          "distanceM": 2168,
+          "elevationDeltaM": -470,
+          "inferred": true
+        },
+        {
+          "from": "黄山-西海大峡谷",
+          "to": "黄山-始信峰",
+          "mode": "walk",
+          "distanceM": 1978,
+          "elevationDeltaM": 483,
+          "inferred": true
+        },
+        {
+          "from": "黄山-始信峰",
+          "to": "猴子观海",
+          "mode": "walk",
+          "distanceM": 519,
+          "elevationDeltaM": -83,
+          "inferred": true
+        },
+        {
+          "from": "猴子观海",
+          "to": "呈坎",
+          "mode": "car",
+          "distanceM": 27713,
+          "roadMinutes": 105,
+          "inferred": true
+        },
+        {
+          "from": "呈坎",
+          "to": "唐模",
+          "mode": "shuttle",
+          "distanceM": 7379,
+          "roadMinutes": 20,
+          "inferred": true
+        },
+        {
+          "from": "唐模",
+          "to": "潜口民宅博物馆",
+          "mode": "shuttle",
+          "distanceM": 3964,
+          "roadMinutes": 11,
+          "inferred": true
+        }
+      ],
+      "changedModes": [],
+      "issues": [
+        {
+          "type": "long-transfer",
+          "level": "advisory",
+          "message": "猴子观海 → 呈坎（直线约 28km）资料中无衔接方式，已推断为「专车/出租车」（未经核实）"
+        }
+      ],
+      "blocking": [],
+      "autoRepairable": false,
+      "durationMinutes": 579,
+      "narrativeInstruction": "黄山 → 黄山-莲花峰：徒步；黄山-莲花峰 → 黄山风景区-光明顶：徒步；黄山风景区-光明顶 → 天都峰赋：徒步；天都峰赋 → 黄山-迎客松：徒步；黄山-迎客松 → 黄山-西海大峡谷：徒步，高差约 470m，须借助索道或景区交通下撤，禁止写成连续徒步；黄山-西海大峡谷 → 黄山-始信峰：徒步，高差约 483m，须借助索道或景区交通上升，禁止写成连续徒步；黄山-始信峰 → 猴子观海：徒步；猴子观海 → 呈坎：专车/出租车，约 17.5 小时车程，直线约 28km，山路约 52.7km / 105 分钟车程（narrative 必须写明需乘车/包车并给出时长，禁止描述为景区观光车短驳或索道直达）；呈坎 → 唐模：观光车/摆渡车，约 3.3 小时车程，直线约 7km，建议乘坐景区观光车（narrative 须写明乘坐景区观光车或摆渡车）；唐模 → 潜口民宅博物馆：观光车/摆渡车，约 1.8 小时车程，直线约 4km，建议乘坐景区观光车（narrative 须写明乘坐景区观光车或摆渡车）",
+      "tier": "L1",
+      "knowledgeSource": "none",
+      "tierLabel": "无路线知识",
+      "suppressedByTier": true,
+      "duplicatePairs": [
+        {
+          "keep": "1日精华游",
+          "drop": "文学巡礼线",
+          "identical": true,
+          "exempted": true
+        }
+      ],
+      "umbrellaStops": [
+        "黄山"
+      ]
+    },
+    {
+      "tourId": "1baca791-416e-4c72-8fed-3f59001369bf",
+      "tourTitle": "课本里的黄山 · 文学巡礼",
+      "routeId": "1baca791-r3",
+      "dayLabel": "主题游",
+      "stops": 9,
+      "storedLegs": 0,
+      "nextLegs": [
+        {
+          "from": "黄山",
+          "to": "黄山-莲花峰",
+          "mode": "walk",
+          "distanceM": 1924,
+          "elevationDeltaM": 0,
+          "inferred": true
+        },
+        {
+          "from": "黄山-莲花峰",
+          "to": "黄山风景区-光明顶",
+          "mode": "walk",
+          "distanceM": 860,
+          "elevationDeltaM": -5,
+          "inferred": true
+        },
+        {
+          "from": "黄山风景区-光明顶",
+          "to": "天都峰赋",
+          "mode": "walk",
+          "distanceM": 1475,
+          "elevationDeltaM": -50,
+          "inferred": true
+        },
+        {
+          "from": "天都峰赋",
+          "to": "宏村",
+          "mode": "car",
+          "distanceM": 22153,
+          "roadMinutes": 84,
+          "inferred": true
+        },
+        {
+          "from": "宏村",
+          "to": "西递古村落",
+          "mode": "shuttle",
+          "distanceM": 11051,
+          "roadMinutes": 30,
+          "inferred": true
+        },
+        {
+          "from": "西递古村落",
+          "to": "呈坎",
+          "mode": "car",
+          "distanceM": 27479,
+          "roadMinutes": 104,
+          "inferred": true
+        },
+        {
+          "from": "呈坎",
+          "to": "徽州古城",
+          "mode": "car",
+          "distanceM": 15967,
+          "roadMinutes": 61,
+          "inferred": true
+        },
+        {
+          "from": "徽州古城",
+          "to": "齐云山",
+          "mode": "car",
+          "distanceM": 39127,
+          "roadMinutes": 149,
+          "inferred": true
+        }
+      ],
+      "changedModes": [],
+      "issues": [
+        {
+          "type": "long-day",
+          "level": "blocking",
+          "message": "预计全程 11.5 小时（移动 8.8h + 停留 2.7h），超过 1 日 × 10 小时容量"
+        }
+      ],
+      "blocking": [
+        "预计全程 11.5 小时（移动 8.8h + 停留 2.7h），超过 1 日 × 10 小时容量"
+      ],
+      "autoRepairable": true,
+      "durationMinutes": 688,
+      "narrativeInstruction": "黄山 → 黄山-莲花峰：徒步；黄山-莲花峰 → 黄山风景区-光明顶：徒步；黄山风景区-光明顶 → 天都峰赋：徒步；天都峰赋 → 宏村：专车/出租车，约 14 小时车程，直线约 22km，山路约 42.1km / 84 分钟车程（narrative 必须写明需乘车/包车并给出时长，禁止描述为景区观光车短驳或索道直达）；宏村 → 西递古村落：观光车/摆渡车，约 5 小时车程，直线约 11km，建议乘坐景区观光车（narrative 须写明乘坐景区观光车或摆渡车）；西递古村落 → 呈坎：专车/出租车，约 17.3 小时车程，直线约 27km，山路约 52.2km / 104 分钟车程（narrative 必须写明需乘车/包车并给出时长，禁止描述为景区观光车短驳或索道直达）；呈坎 → 徽州古城：专车/出租车，约 10.2 小时车程，直线约 16km，山路约 30.3km / 61 分钟车程（narrative 必须写明需乘车/包车并给出时长，禁止描述为景区观光车短驳或索道直达）；徽州古城 → 齐云山：专车/出租车，约 24.8 小时车程，直线约 39km，山路约 74.3km / 149 分钟车程（narrative 必须写明需乘车/包车并给出时长，禁止描述为景区观光车短驳或索道直达）",
+      "tier": "L1",
+      "knowledgeSource": "none",
+      "tierLabel": "无路线知识",
+      "suppressedByTier": true,
+      "duplicatePairs": [
+        {
+          "keep": "1日精华游",
+          "drop": "文学巡礼线",
+          "identical": true,
+          "exempted": true
+        }
+      ],
+      "umbrellaStops": [
+        "黄山"
+      ]
+    },
+    {
+      "tourId": "1baca791-416e-4c72-8fed-3f59001369bf",
+      "tourTitle": "课本里的黄山 · 文学巡礼",
+      "routeId": "1baca791-r4",
+      "dayLabel": "文学巡礼线",
+      "stops": 8,
+      "storedLegs": 0,
+      "nextLegs": [
+        {
+          "from": "黄山",
+          "to": "黄山-迎客松",
+          "mode": "walk",
+          "distanceM": 2410,
+          "elevationDeltaM": -195,
+          "inferred": true
+        },
+        {
+          "from": "黄山-迎客松",
+          "to": "黄山风景区-光明顶",
+          "mode": "walk",
+          "distanceM": 1271,
+          "elevationDeltaM": 190,
+          "inferred": true
+        },
+        {
+          "from": "黄山风景区-光明顶",
+          "to": "黄山-莲花峰",
+          "mode": "walk",
+          "distanceM": 860,
+          "elevationDeltaM": 5,
+          "inferred": true
+        },
+        {
+          "from": "黄山-莲花峰",
+          "to": "天都峰赋",
+          "mode": "walk",
+          "distanceM": 682,
+          "elevationDeltaM": -55,
+          "inferred": true
+        },
+        {
+          "from": "天都峰赋",
+          "to": "黄山-西海大峡谷",
+          "mode": "walk",
+          "distanceM": 2299,
+          "elevationDeltaM": -610,
+          "inferred": true
+        },
+        {
+          "from": "黄山-西海大峡谷",
+          "to": "黄山-始信峰",
+          "mode": "walk",
+          "distanceM": 1978,
+          "elevationDeltaM": 483,
+          "inferred": true
+        },
+        {
+          "from": "黄山-始信峰",
+          "to": "猴子观海",
+          "mode": "walk",
+          "distanceM": 519,
+          "elevationDeltaM": -83,
+          "inferred": true
+        }
+      ],
+      "changedModes": [],
+      "issues": [],
+      "blocking": [],
+      "autoRepairable": false,
+      "durationMinutes": 414,
+      "narrativeInstruction": "黄山 → 黄山-迎客松：徒步；黄山-迎客松 → 黄山风景区-光明顶：徒步；黄山风景区-光明顶 → 黄山-莲花峰：徒步；黄山-莲花峰 → 天都峰赋：徒步；天都峰赋 → 黄山-西海大峡谷：徒步，高差约 610m，须借助索道或景区交通下撤，禁止写成连续徒步；黄山-西海大峡谷 → 黄山-始信峰：徒步，高差约 483m，须借助索道或景区交通上升，禁止写成连续徒步；黄山-始信峰 → 猴子观海：徒步",
+      "tier": "L1",
+      "knowledgeSource": "none",
+      "tierLabel": "无路线知识",
+      "suppressedByTier": false,
+      "duplicatePairs": [
+        {
+          "keep": "1日精华游",
+          "drop": "文学巡礼线",
+          "identical": true,
+          "exempted": true
+        }
+      ],
+      "umbrellaStops": [
+        "黄山"
+      ]
+    }
+  ]
+}
