@@ -43,6 +43,9 @@ const confirm = flagValue("--confirm");
 const backupDir = flagValue("--backup-dir") || "scripts/out/backup";
 const timeoutSec = Number(flagValue("--timeout") || 300);
 const wantAll = args.has("--all");
+// v95：--public 把范围限定在公开导览。--all 配合 service_role 读取时会连
+// 草稿、测试数据和其他人的私有导览一起扫进来，批量重跑不该有这种默认范围。
+const onlyPublic = args.has("--public");
 
 if (!apply) {
   console.log("模式：dry-run（只读，不改任何数据）。要真正重跑请加 --apply\n");
@@ -141,14 +144,19 @@ function summarizeRow(tour: any) {
 
 const tours = await readTours();
 let targets = tours;
+// v95 修正：加 --public 时我把 else-if 链拆断了，导致 --tour/--dest 单独使用时
+// 会掉进"未指定范围"分支被清空。改成显式的 scoped 标记，不再依赖 if/else 相邻。
+let scoped = true;
 if (onlyTour) targets = tours.filter(t => t.id === onlyTour || t.id.startsWith(onlyTour));
 else if (onlyDest) targets = tours.filter(t => String(t.destination?.name || "").includes(onlyDest));
-else if (!wantAll) {
-  console.log("未指定范围：默认列出前 12 条可重跑目标（dry-run 预览）。请用 --tour/--dest/--all 指定。\n");
+else if (!wantAll) scoped = false;
+if (onlyPublic) targets = targets.filter(t => t.is_public);
+if (!scoped) {
+  console.log("未指定范围：默认列出可重跑目标（dry-run 预览）。请用 --tour/--dest/--all 指定。\n");
   targets = [];
 }
 
-if (targets.length === 0 && !onlyTour && !onlyDest && !wantAll) {
+if (!scoped) {
   for (const tour of tours) {
     const s = summarizeRow(tour);
     console.log(`  ${tour.id.slice(0, 8)}  ${tour.title.slice(0, 20).padEnd(22)} ${s.status.padEnd(13)} ${s.public}  地点${String(s.locCount).padStart(2)} 路线${s.routeCount} 知识${s.tier.padEnd(3)} 交通问题${String(s.transportIssues ?? "-").padStart(2)} 阻断${s.blocking}`);
@@ -163,8 +171,8 @@ for (const tour of targets) {
   console.log(`  ${tour.id.slice(0, 8)}  ${tour.title.slice(0, 22).padEnd(24)} 当前 ${s.status} / ${s.public} / 地点${s.locCount} 路线${s.routeCount}`);
 }
 
-if (wantAll && apply && confirm !== String(targets.length)) {
-  console.error(`\n--all --apply 需要显式复核范围：加 --confirm ${targets.length}（当前匹配 ${targets.length} 条）。已中止，未改动任何数据。`);
+if ((wantAll || onlyPublic) && apply && confirm !== String(targets.length)) {
+  console.error(`\n--all/--public 批量重跑需要显式复核范围：加 --confirm ${targets.length}（当前匹配 ${targets.length} 条）。已中止，未改动任何数据。`);
   Deno.exit(1);
 }
 

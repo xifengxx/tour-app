@@ -600,7 +600,17 @@ export function routeGraphIssues(
   knowledge: DestinationRouteKnowledge,
   options: RouteGraphOptions = {},
 ): RouteGraphIssue[] {
-  if (stopIds.length < 2) return [];
+  // v95：0 或 1 个站点不构成一条路线，必须报阻断而不是直接跳过体检。
+  // 线上批量重跑实测：黄山"1日精华游"只落到 1 个站点，而旧实现在 length<2 时
+  // 直接 return []，等于最短的路线恰好是唯一不被检查的那条。
+  // 下限取 2 而不是 3：现网存在合法的 2 站"半日游"（龟山风景区→晴川阁）。
+  if (stopIds.length < 2) {
+    return [{
+      type: "long-day",
+      level: "blocking",
+      message: `路线只有 ${stopIds.length} 个站点，不构成可游览行程（多为景区核心名解析或地区景点合并失败所致）`,
+    }];
+  }
   // 注意：这里不能因为 knowledge.trails 为空就整体短路返回。
   // 原实现在目的地没有路线知识时跳过全部校验，而"新目的地"恰恰必然没有知识——
   // 实测 12 个线上导览有 10 个走的是这条短路，等于新导览完全不过体检。
@@ -1037,7 +1047,9 @@ export function repairPlanStops(
   const repairs: PlanRepair[] = [];
   const trimmedIds: string[] = [];
   if (stopIds.length < 2) {
-    return { stopIds, repairs, issues: [], trimmedIds };
+    // 退化计划不能当成"没有问题"返回：修复器必须把校验器的结论原样带出去，
+    // 否则 1 个站点的路线会在"没有修复动作"的表象下被放行。
+    return { stopIds, repairs, issues: routeGraphIssues(stopIds, locs, knowledge, options), trimmedIds };
   }
   let current = [...stopIds];
   const byId = new Map(locs.map(l => [l.id, l]));

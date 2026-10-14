@@ -627,3 +627,28 @@ describe("跨片区判定必须与站点顺序无关（v94 线上实测修正）
 });
 
 });
+
+describe("退化路线必须被拦下（v95 线上批量重跑实测）", () => {
+  const noKnowledge: DestinationRouteKnowledge = {
+    destinationName: "黄山", aliases: [], zones: [], trails: [], edges: [], source: "none", confidence: 0,
+  };
+
+  it("只有 1 个站点的路线报阻断，而不是跳过体检", () => {
+    // 线上实况：批量重跑后黄山"1日精华游"只剩 1 站，旧实现在 length<2 时直接 return []，
+    // 于是最短的路线恰好是唯一不被检查的那条。
+    const issues = routeGraphIssues(["only"], [{ id: "only", name: "黄山", lat: 30.1, lng: 118.16 }], noKnowledge, { dayLabel: "1日精华游" });
+    expect(issues).toEqual([expect.objectContaining({ level: "blocking", message: expect.stringContaining("不构成可游览行程") })]);
+  });
+
+  it("2 站是合法的最短路线（现网有 2 站半日游），不再被退化规则误伤", () => {
+    const two = [{ id: "a", name: "龟山风景区", lat: 30.547, lng: 114.276 }, { id: "b", name: "晴川阁", lat: 30.556, lng: 114.277 }];
+    expect(blockingIssues(routeGraphIssues(["a", "b"], two, noKnowledge, { dayLabel: "半日游" }))).toEqual([]);
+  });
+
+  it("退化路线不会被自动削站修成空，只能交回人工", () => {
+    const r = repairPlanStops(["only"], [{ id: "only", name: "黄山", lat: 30.1, lng: 118.16 }], noKnowledge, { dayLabel: "1日精华游" });
+    expect(r.stopIds).toEqual(["only"]);
+    expect(r.repairs).toEqual([]);
+    expect(blockingIssues(r.issues)).toHaveLength(1);
+  });
+});

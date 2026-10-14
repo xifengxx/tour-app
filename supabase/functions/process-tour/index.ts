@@ -699,11 +699,25 @@ Deno.serve(async (req: Request) => {
       // 4. Routes：与内容并行（只用 locs/id，不依赖内容）
       (async () => {
         let routes: any[] = [];
-        for (let attempt = 0; attempt < 2 && routes.length < plans.length; attempt++) {
-          const rr = await deepseek([
+          // v95：路线生成也要处理输出截断。内容层早就有"截断→拆半重试"，
+          // 但路线层没有，导致地点多的导览（黄山 17 点）整条被打进 status=error，
+          // 失败原因只有一句 finish_reason=length。
+          const buildRouteMessages = (compact: boolean) => [
             { role: "system", content: "你是旅游路线规划师。只返回JSON。" },
-            { role: "user", content: `${destName}路线。**每条路线的站点及其顺序已由系统按地理动线排定，stops 必须严格按给定顺序逐字输出（这是实际游览顺序，已保证不走回头路），严禁增删替换或调整顺序；文学巡礼线除外（可自由选点与排序）。**\n\n${planText}\n\n${trailNotes ? `参考真实动线：${trailNotes}\n\n` : ""}${graphNotes ? `路线衔接：${graphNotes}\n\n` : ""}要求：\n1. 每条路线按上面的指定站点生成完整行程（从入口/索道进 → 逐点游览 → 出口/索道出）。\n2. narrative 各写 150-300 字完整行程描述：从哪个入口/索道进、每段用什么交通（徒步/索道/观光车）、依次经过哪些地点、从哪里出。narrative 中必须写地点的中文名（如"玉京峰"），严禁写 id 代号。narrative 的游览顺序必须与给定站点顺序一致。山地路线从半山下降到山脚庙宇/游客中心/停车场，或从游客中心前往外围峡谷/悬空景点时，必须写清换乘观光车、摆渡车或专车，不要把长距离位移写成连续徒步。\n3. **2日全景游 narrative 必须明确「第1天前山」「第2天后山」各去哪**；主题游写明主题与串联逻辑。\n4. day_label 必须是上面给定的标签（1日精华游/2日全景游/主题游/文学巡礼线）。\n5. 地点少时压缩天数，严禁编造不存在的多日行程。\n6. stops 数组顺序必须与 narrative 中的实际游览顺序一致（入口/索道在前，依次游览，出口/索道在后）；stops 只能从上面指定 id 中逐字复制。\n7. 路线条数必须与上述完全一致（${plans.length} 条），缺一不可。\n主题游额外要求：按上面给的"按景区分组"输出 sections 数组，每项 {name, text}，name 用给定的景区名原样，text 写 60-120 字"这个景区里怎么玩"；不要把不同景区的点混写成一条连续步行线，景区之间如需乘车就照交通衔接写。\nJSON: {"routes":[{"day_label":"","title":"","stops":["id1","id2"],"narrative":"完整行程描述","sections":[{"name":"","text":""}]}]}` },
-          ], { temperature: 0.2 });
+            { role: "user", content: `${destName}路线。**每条路线的站点及其顺序已由系统按地理动线排定，stops 必须严格按给定顺序逐字输出（这是实际游览顺序，已保证不走回头路），严禁增删替换或调整顺序；文学巡礼线除外（可自由选点与排序）。**\n\n${planText}\n\n${trailNotes ? `参考真实动线：${trailNotes}\n\n` : ""}${graphNotes ? `路线衔接：${graphNotes}\n\n` : ""}要求：\n1. 每条路线按上面的指定站点生成完整行程（从入口/索道进 → 逐点游览 → 出口/索道出）。\n2. narrative 各写 ${compact ? "60-100" : "150-300"} 字完整行程描述：从哪个入口/索道进、每段用什么交通（徒步/索道/观光车）、依次经过哪些地点、从哪里出。narrative 中必须写地点的中文名（如"玉京峰"），严禁写 id 代号。narrative 的游览顺序必须与给定站点顺序一致。山地路线从半山下降到山脚庙宇/游客中心/停车场，或从游客中心前往外围峡谷/悬空景点时，必须写清换乘观光车、摆渡车或专车，不要把长距离位移写成连续徒步。\n3. **2日全景游 narrative 必须明确「第1天前山」「第2天后山」各去哪**；主题游写明主题与串联逻辑。\n4. day_label 必须是上面给定的标签（1日精华游/2日全景游/主题游/文学巡礼线）。\n5. 地点少时压缩天数，严禁编造不存在的多日行程。\n6. stops 数组顺序必须与 narrative 中的实际游览顺序一致（入口/索道在前，依次游览，出口/索道在后）；stops 只能从上面指定 id 中逐字复制。\n7. 路线条数必须与上述完全一致（${plans.length} 条），缺一不可。\n主题游额外要求：按上面给的"按景区分组"输出 sections 数组，每项 {name, text}，name 用给定的景区名原样，text 写 ${compact ? "20-40" : "60-120"} 字"这个景区里怎么玩"；不要把不同景区的点混写成一条连续步行线，景区之间如需乘车就照交通衔接写。\nJSON: {"routes":[{"day_label":"","title":"","stops":["id1","id2"],"narrative":"完整行程描述","sections":[{"name":"","text":""}]}]}` },
+          ];
+          const requestRoutes = async () => {
+            try {
+              return await deepseek(buildRouteMessages(false), { temperature: 0.2 });
+            } catch (e: any) {
+              if (!e.truncated) throw e;
+              warnings.push(`⚠️ 路线文案输出被截断，改用精简文案重试（${plans.length} 条路线）`);
+              return await deepseek(buildRouteMessages(true), { temperature: 0.2 });
+            }
+          };
+
+        for (let attempt = 0; attempt < 2 && routes.length < plans.length; attempt++) {
+          const rr = await requestRoutes();
           // Route stop validation: resolve + 确定性兜底。
           // 注意：不能按数组下标取 plan（AI 返回 routes 的顺序常与 plans 不一致 → 会张冠李戴，
           // 2日 混入 西岭雪山 就是顺序错位导致的）。按 day_label 模糊匹配 plan，找不到才回退下标。
