@@ -258,10 +258,14 @@ export function planRoutes(locs: any[], ctx: PlanRoutesContext) {
   // 三套语义，黄山线上实测 coreScenic 被 loose 匹配到"温泉景区"这种 1 点子区，
   // 一日精华游只剩 3 站）。当名称匹配的核心池不足 4 站时，退回数据本身的定义：
   // "目的地坐标 15km 内的全部非地区、可游览点"——这才是一日精华游的物理含义。
-  if (coherentCorePool.length < 4 && ctx.destLoc) {
+  if (ctx.destLoc) {
     const nearAll = locs.filter((l: any) => !isRegion(l)).filter(isRouteSite)
       .filter(l => haversineM(routeCenter, l) <= CORE_ROUTE_RADIUS_M).sort(byImp);
-    if (nearAll.length > coherentCorePool.length) {
+    // 触发条件不是"标签池绝对小"，而是"标签池相对地理全集明显残缺"
+    // （≥4 个近距可游览点被错标到别的子景区名下）。黄山二次实测：
+    // 恰好 4 个"温泉景区"标签点（凉亭+三个索道站）会让 <4 阈值失效，
+    // 而天门山这类标签本来就完整的池子不该被远端新景点稀释。
+    if (nearAll.length >= coherentCorePool.length + 4) {
       coherentCorePool.length = 0;
       coherentCorePool.push(...nearAll);
     }
