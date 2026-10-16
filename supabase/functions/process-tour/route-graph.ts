@@ -75,6 +75,12 @@ export const HARD_TRANSFER_M = 30000;
 export type RouteGraphOptions = {
   // 主题游本来就串联核心景区和 60km 内的独立景点；长距离换乘是预期行为。
   allowLongTransfers?: boolean;
+  /**
+   * 文学巡礼线等按叙事排序的自由路线：跨景区折返是产品设定（沿课本/小说情节走），
+   * 不是路线缺陷。v97：此类路线的 trail-backtrack / zone-interleaved 降为 warning，
+   * 物理类检查（长距离衔接标注、每日容量）保持 blocking。
+   */
+  allowNarrativeOrder?: boolean;
   longTransferM?: number;
   dayLabel?: string;
   maxDailyHours?: number;
@@ -665,8 +671,8 @@ export function routeGraphIssues(
     if (positions.length >= 2 && !monotonicInc && !monotonicDec) {
       issues.push({
         type: "trail-backtrack",
-        level: "blocking",
-        message: `步道「${trail.scenicName || trail.id || "未命名"}」出现顺序回退`,
+        level: options.allowNarrativeOrder ? "advisory" : "blocking",
+        message: `步道「${trail.scenicName || trail.id || "未命名"}」出现顺序回退${options.allowNarrativeOrder ? "（文学/叙事线路按情节排序，仅供参考）" : ""}`,
       });
     }
   }
@@ -698,8 +704,8 @@ export function routeGraphIssues(
     if (previous !== zone && firstSeen.get(zone)! < index - 0) {
       issues.push({
         type: "zone-interleaved",
-        level: "blocking",
-        message: `「${zone}」被其他徒步区隔断，存在跨区往返`,
+        level: options.allowNarrativeOrder ? "advisory" : "blocking",
+        message: `「${zone}」被其他徒步区隔断，存在跨区往返${options.allowNarrativeOrder ? "（文学/叙事线路按情节排序，仅供参考）" : ""}`,
       });
     }
   });

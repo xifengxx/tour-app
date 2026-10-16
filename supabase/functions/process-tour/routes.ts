@@ -254,6 +254,18 @@ export function planRoutes(locs: any[], ctx: PlanRoutesContext) {
   const cc = { lng: coreCenter.lng / coreN, lat: coreCenter.lat / coreN };
   const routeCenter = ctx.destLoc || cc;
   const coherentCorePool = rawCorePool.filter(l => haversineM(routeCenter, l) <= CORE_ROUTE_RADIUS_M);
+  // v97：景区标签分组是整条管线里最脆的一环（AI 叫法、锚点清洗名、策展 zone 名
+  // 三套语义，黄山线上实测 coreScenic 被 loose 匹配到"温泉景区"这种 1 点子区，
+  // 一日精华游只剩 3 站）。当名称匹配的核心池不足 4 站时，退回数据本身的定义：
+  // "目的地坐标 15km 内的全部非地区、可游览点"——这才是一日精华游的物理含义。
+  if (coherentCorePool.length < 4 && ctx.destLoc) {
+    const nearAll = locs.filter((l: any) => !isRegion(l)).filter(isRouteSite)
+      .filter(l => haversineM(routeCenter, l) <= CORE_ROUTE_RADIUS_M).sort(byImp);
+    if (nearAll.length > coherentCorePool.length) {
+      coherentCorePool.length = 0;
+      coherentCorePool.push(...nearAll);
+    }
+  }
   // 小景区可能只有 1-2 个坐标点；为避免过滤层反而清空常规路线，保留原兜底。
   const routeCorePool = coherentCorePool.length >= 3 ? coherentCorePool : rawCorePool;
   // v96.4：半径闸的圆心与核心池质心解耦。此前 nearCore 用 cc（核心池几何中心），

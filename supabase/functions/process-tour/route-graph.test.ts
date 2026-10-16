@@ -180,6 +180,17 @@ describe("route graph", () => {
     expect(repairPlanStops(["入口"], graphLocs, knowledge).repairs).toEqual([]);
   });
 
+  it("文学巡礼线的叙事排序不触发发布阻断（v97）", () => {
+    // 迎客松(7)→天都峰(3)→莲花峰(9)：对玉屏步道是回退，但对沿课本情节走的
+    // 文学巡礼线这是产品设定。物理类检查仍应工作。
+    const narrative = ["入口", "主峰", "中亭"];
+    const plain = routeGraphIssues(narrative, graphLocs, knowledge);
+    const free = routeGraphIssues(narrative, graphLocs, knowledge, { allowNarrativeOrder: true });
+    expect(plain.some(i => i.type === "trail-backtrack" && i.level === "blocking")).toBe(true);
+    expect(free.some(i => i.type === "trail-backtrack" && i.level === "advisory")).toBe(true);
+    expect(free.some(i => i.level === "blocking")).toBe(false);
+  });
+
   it("跨步道共享枢纽不参与单条步道的顺序断言（黄山光明顶回归）", () => {
     const hubKnowledge: DestinationRouteKnowledge = {
       destinationName: "示例二山", aliases: [],

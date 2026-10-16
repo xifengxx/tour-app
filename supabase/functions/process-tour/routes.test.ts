@@ -199,6 +199,30 @@ describe("orderStopsGeographic", () => {
     expect(ordered).toContain("gate");
   });
 });
+describe("核心池地理兜底（v97 黄山回归）", () => {
+  it("标签把核心池切到 3 站时，一日退回目的地 15km 内的全部可游览点", () => {
+    // 线上实况：黄山 coreScenic 被 loose 匹配到只含 1 个凉亭点的"温泉景区"子区，
+    // 真实主山点散在"玉屏/北海"标签下，一日精华游只剩 3 站。
+    const locs = [
+      point("温泉凉亭", "温泉景区", [], 5, 118.13, 30.10),
+      point("玉屏", "玉屏景区", [], 4, 118.16, 30.11),
+      point("迎客松", "玉屏景区", [], 5, 118.17, 30.11),
+      point("天都峰", "玉屏景区", [], 5, 118.18, 30.10),
+      point("光明顶", "北海景区", [], 5, 118.16, 30.13),
+      point("飞来石", "北海景区", [], 4, 118.14, 30.14),
+      point("始信峰", "北海景区", [], 4, 118.19, 30.14),
+      point("远山寺", "独立", [], 3, 118.55, 30.05), // 40km 外，不进一日
+    ];
+    const plans = planRoutes(locs, {
+      coreScenicName: "温泉景区", mainScenicName: "玉屏景区", destName: "黄山",
+      destLoc: { lng: 118.16, lat: 30.12 }, isNovelBased: false, novelName: "", hasRegionTour: false,
+    });
+    expect(plans[0].label).toBe("1日精华游");
+    expect(plans[0]!.allow!.length).toBeGreaterThanOrEqual(6);
+    expect(plans[0]!.allow).not.toContain("远山寺");
+  });
+});
+
 describe("半径闸圆心解耦（v96.4 青城山回归）", () => {
   it("核心池标签断裂、质心不可用时，主题游按目的地坐标判近", () => {
     // 线上实况：青城山核心池 scenic 标签与 coreScenicName 断裂时核心质心≈(0,0)，

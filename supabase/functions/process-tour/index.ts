@@ -887,6 +887,9 @@ Deno.serve(async (req: Request) => {
       routeDurationMinutes += estimateRouteDuration(legs, route.stops.length).totalMinutes;
       const issues = routeGraphIssues(route.stops, dbLocs, routeKnowledge, {
         allowLongTransfers: route.day_label === "主题游",
+        // v97：文学巡礼线是自由选点+叙事排序（沿课本情节走），
+        // 步道回退/跨区隔断对它只作提示，不作发布阻断。
+        allowNarrativeOrder: route.day_label === "文学巡礼线",
         dayLabel: route.day_label,
         // 主题游是 N 个可连着玩的景区，按 N 日计容量；
         // 按 1 日算会把正常的分组主题游全判成超容量（v93）。
