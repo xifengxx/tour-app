@@ -14,7 +14,7 @@ import { applyTrailGroups, getPrimaryTrailScenicName, getTrailNotes, injectTrail
 import { loadOrResearchRouteKnowledge } from "./route-knowledge.ts";
 import { capabilitiesFor, TIER_LABEL } from "./knowledge-tier.ts";
 import { qualityGaps } from "./knowledge-quality.ts";
-import { blockingIssues, buildRouteLegs, estimateRouteDuration, planGraphStops, repairPlanStops, routeGraphIssues, routeGraphNotes, routeLegsText } from "./route-graph.ts";
+import { blockingIssues, buildRouteLegs, estimateRouteDuration, planGraphStops, repairPlanStops, repairTransportHours, routeGraphIssues, routeGraphNotes, routeLegsText } from "./route-graph.ts";
 import { resolveCoreDestination } from "./destination.ts";
 import { isNonSitePOI, rejectReasonForPOI } from "./poi-filter.ts";
 import { dedupeRoutes } from "./route-dedup.ts";
@@ -778,7 +778,7 @@ Deno.serve(async (req: Request) => {
           // "narrative 留空、站点与分区照常产出"，并如实写进 warnings，禁止静默。
           const buildRouteMessagesFor = (plan: any, i: number, compact: boolean) => [
             { role: "system", content: "你是旅游路线规划师。只返回JSON。" },
-            { role: "user", content: `${destName}路线。**本条路线的站点及其顺序已由系统按地理动线排定，stops 必须严格按给定顺序逐字输出（这是实际游览顺序，已保证不走回头路），严禁增删替换或调整顺序；文学巡礼线除外（可自由选点与排序）。**\n\n${planTextFor(plan, i)}\n\n${trailNotes ? `参考真实动线：${trailNotes}\n\n` : ""}${graphNotes ? `路线衔接：${graphNotes}\n\n` : ""}要求：\n1. 按上面的指定站点生成完整行程（从入口/索道进 → 逐点游览 → 出口/索道出）。\n2. narrative 写 ${compact ? "60-100" : "150-300"} 字完整行程描述：从哪个入口/索道进、每段用什么交通（徒步/索道/观光车）、依次经过哪些地点、从哪里出。narrative 中必须写地点的中文名（如"玉京峰"），严禁写 id 代号。narrative 的游览顺序必须与给定站点顺序一致。山地路线从半山下降到山脚庙宇/游客中心/停车场，或从游客中心前往外围峡谷/悬空景点时，必须写清换乘观光车、摆渡车或专车，不要把长距离位移写成连续徒步。\n3. **2日全景游 narrative 必须明确「第1天前山」「第2天后山」各去哪**；主题游写明主题与串联逻辑。\n4. day_label 必须是给定标签「${plan.label}」。\n5. 地点少时压缩天数，严禁编造不存在的多日行程。\n6. stops 数组顺序必须与 narrative 中的实际游览顺序一致（入口/索道在前，依次游览，出口/索道在后）；stops 只能从上面指定 id 中逐字复制。\n7. 只输出这一条路线：routes 数组长度必须为 1。\n${plan.label === "主题游" ? `主题游额外要求：按上面给的"按景区分组"输出 sections 数组，每项 {name, text}，name 用给定的景区名原样，text 写 ${compact ? "20-40" : "60-120"} 字"这个景区里怎么玩"；不要把不同景区的点混写成一条连续步行线，景区之间如需乘车就照交通衔接写。\n` : ""}JSON: {"routes":[{"day_label":"","title":"","stops":["id1","id2"],"narrative":"完整行程描述","sections":[{"name":"","text":""}]}]}` },
+            { role: "user", content: `${destName}路线。**本条路线的站点及其顺序已由系统按地理动线排定，stops 必须严格按给定顺序逐字输出（这是实际游览顺序，已保证不走回头路），严禁增删替换或调整顺序；文学巡礼线除外（可自由选点与排序）。**\n\n${planTextFor(plan, i)}\n\n${trailNotes ? `参考真实动线：${trailNotes}\n\n` : ""}${graphNotes ? `路线衔接：${graphNotes}\n\n` : ""}要求：\n1. 按上面的指定站点生成完整行程（从入口/索道进 → 逐点游览 → 出口/索道出）。\n2. narrative 写 ${compact ? "60-100" : "150-300"} 字完整行程描述：从哪个入口/索道进、每段用什么交通（徒步/索道/观光车）、依次经过哪些地点、从哪里出。narrative 中必须写地点的中文名（如"玉京峰"），严禁写 id 代号。narrative 的游览顺序必须与给定站点顺序一致。山地路线从半山下降到山脚庙宇/游客中心/停车场，或从游客中心前往外围峡谷/悬空景点时，必须写清换乘观光车、摆渡车或专车，不要把长距离位移写成连续徒步。\n3. **2日全景游 narrative 必须明确「第1天前山」「第2天后山」各去哪**；主题游写明主题与串联逻辑。\n4. day_label 必须是给定标签「${plan.label}」。\n5. 地点少时压缩天数，严禁编造不存在的多日行程。\n6. stops 数组顺序必须与 narrative 中的实际游览顺序一致（入口/索道在前，依次游览，出口/索道在后）；stops 只能从上面指定 id 中逐字复制。\n7. 只输出这一条路线：routes 数组长度必须为 1。\n8. 交通时长只能逐字使用「交通衔接」里给过的数字（如衔接写"约 0.5 小时"就只能出现 0.5）；衔接里没有的时长一律不写，只写交通方式即可；严禁自行换算、拼接或凭印象补数字。\n${plan.label === "主题游" ? `主题游额外要求：按上面给的"按景区分组"输出 sections 数组，每项 {name, text}，name 用给定的景区名原样，text 写 ${compact ? "20-40" : "60-120"} 字"这个景区里怎么玩"；不要把不同景区的点混写成一条连续步行线，景区之间如需乘车就照交通衔接写。\n` : ""}JSON: {"routes":[{"day_label":"","title":"","stops":["id1","id2"],"narrative":"完整行程描述","sections":[{"name":"","text":""}]}]}` },
           ];
           const requestRoutePlan = async (plan: any, i: number): Promise<any | null> => {
             for (const compact of [false, true]) {
@@ -896,6 +896,26 @@ Deno.serve(async (req: Request) => {
     for (const route of routes) {
       const legs = buildRouteLegs(route.stops, dbLocs, routeKnowledge, { sections: route.sections?.map((sec: any) => sec.stopIds || []) });
       route.legs = legs;
+      // v98：交通时长确定性校验。提示词修好之外，仍要兜住模型抄错数字的残余风险
+      // （恒山 37.7h、玉龙雪山 5.3h 两轮线上事故的教训：时长这类物理事实
+      // 不能只靠"要求 AI 照抄"，必须用腿数据校验并就地改写）。
+      {
+        const fixed = repairTransportHours(route.narrative || "", legs);
+        if (fixed.fixes.length) {
+          route.narrative = fixed.text;
+          for (const f of fixed.fixes) warnings.push(`🔧 文案时长校正（${route.day_label}）：${f}`);
+        }
+        if (route.sections?.length) {
+          for (const sec of route.sections) {
+            if (!sec.text) continue;
+            const fs = repairTransportHours(String(sec.text), legs);
+            if (fs.fixes.length) {
+              sec.text = fs.text;
+              for (const f of fs.fixes) warnings.push(`🔧 文案时长校正（${route.day_label}·${sec.name}）：${f}`);
+            }
+          }
+        }
+      }
       routeDurationMinutes += estimateRouteDuration(legs, route.stops.length).totalMinutes;
       const issues = routeGraphIssues(route.stops, dbLocs, routeKnowledge, {
         allowLongTransfers: route.day_label === "主题游",

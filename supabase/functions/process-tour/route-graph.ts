@@ -954,15 +954,95 @@ export function buildRouteLegs(
   return legs;
 }
 
+/**
+ * v98：交通时长确定性校验。线上两次实测（恒山"约37.7小时车程"、玉龙雪山
+ * "约5.3小时前往玉水寨"，真值 0.3 小时）证明：无论提示词怎么要求"逐字照抄"，
+ * LLM 都会把衔接清单里的数字与距离数字拼合、错位或凭空改写。
+ * 时长属于物理事实，事实不能委托给生成器——校验/改写必须在代码层做。
+ * 规则：以 toName 为锚点找到"约X小时"，X 与该段真值不符 → 改成真值；
+ * 找不到锚点且 X 不属于本路线任何一段的真值 → 删除该时长短语（宁缺勿错）。
+ */
+export function parseDurationToHours(value: unknown): number | null {
+  const text = String(value || "").trim();
+  const hourMatch = text.match(/(\d+(?:\.\d+)?)\s*(?:小时|hr|hour)/i);
+  const minuteMatch = text.match(/(\d+(?:\.\d+)?)\s*(?:分钟|min|minute)/i);
+  let minutes: number | null = null;
+  if (hourMatch) minutes = Number(hourMatch[1]) * 60;
+  if (minuteMatch) minutes = (minutes || 0) + Number(minuteMatch[1]);
+  return minutes != null ? Math.round((minutes / 60) * 10) / 10 : null;
+}
+
+export function repairTransportHours(text: string, legs: RouteLeg[]): { text: string; fixes: string[] } {
+  const fixes: string[] = [];
+  if (!text) return { text, fixes };
+  const legal = new Map<string, number>(); // 终点名 → 真值小时（0.1 精度）
+  const allValues = new Set<number>();
+  for (const leg of legs) {
+    const hours = leg.duration ? parseDurationToHours(leg.duration) : (leg.roadMinutes != null ? Math.round((leg.roadMinutes / 60) * 10) / 10 : null);
+    if (hours == null || !leg.toName) continue;
+    legal.set(leg.toName, hours);
+    allValues.add(hours);
+  }
+  const re = /（?约\s*(\d+(?:\.\d+)?)\s*小时(?:车程)?）?/g;
+  const out = text.replace(re, (whole, raw: string, offset: number) => {
+    const value = Number(raw);
+    const after = text.slice(offset + whole.length, offset + whole.length + 24);
+    const before = text.slice(Math.max(0, offset - 24), offset);
+    let anchor: string | null = null;
+    let bestPos = Infinity;
+    for (const name of legal.keys()) {
+      const pos = after.indexOf(name);
+      if (pos >= 0 && pos < bestPos) { bestPos = pos; anchor = name; }
+    }
+    if (anchor == null) {
+      // 文案常用简称（"玉水寨" vs 腿数据"丽江玉水寨"）：从"前往/至/到/下撤至X"提取目的地再互含匹配
+      const dest = (after.match(/(?:前往|到达|下撤至|转乘[^，。]{0,12}前往|至|到)([\u4e00-\u9fa5][\u4e00-\u9fa5A-Za-z·]{1,11})/) || [])[1];
+      if (dest) {
+        for (const name of legal.keys()) {
+          if (name.includes(dest) || dest.includes(name)) { anchor = name; break; }
+        }
+      }
+    }
+    if (anchor == null) {
+      // 反向句式："前往玉水寨（约5.3小时）"——数字在前一名在后没命中时，看紧邻前文
+      const m = before.match(/(?:前往|到达|至|到)([\u4e00-\u9fa5][\u4e00-\u9fa5A-Za-z·]{1,11})[，,、（(]*$/);
+      if (m) {
+        const dest = m[1];
+        for (const name of legal.keys()) {
+          if (name.includes(dest) || dest.includes(name)) { anchor = name; break; }
+        }
+      }
+    }
+    if (anchor != null) {
+      const truth = legal.get(anchor)!;
+      if (Math.abs(truth - value) > 0.05) {
+        fixes.push(`${anchor}：约${value}小时 → 约${truth}小时（以腿数据为准）`);
+        return `约 ${truth} 小时`;
+      }
+      return whole;
+    }
+    // 无锚点：带"车程"字样的孤立数字必是交通时长，删（宁缺勿错）；
+    // 不带"车程"的可能是游览时长（"徒步环线约3小时"是合法内容），一律不动。
+    if (allValues.has(value) || !whole.includes("车程")) return whole;
+    fixes.push(`删除无来源车程"约${value}小时"（不属于本路线任何一段的真值）`);
+    return "";
+  });
+  return { text: out, fixes };
+}
+
 export function routeLegsText(legs: RouteLeg[]) {
   return legs.map(leg => {
     // 主题游片区边界段显示中性"跨区域接驳"，避免未核实场景下把方式断言成专车。
     const mode = leg.interArea ? "跨区域接驳" : (MODE_TEXT[leg.mode] || MODE_TEXT.other);
     // 车程优先用资料 duration；缺资料时用直线换算的保守山路车程，
     // 避免把 37km 的山路写成一句笼统的"需接驳"。
+    // v98 根因修复：旧公式 roadMinutes/6*10/10 实际是 ÷6，把分钟当"0.1 小时"
+    // 换算，所有车程被放大 10 倍（32 分钟 → "约 5.3 小时"）。AI 忠实照抄了
+    // 提示词里的错误数字——此前两轮"恒山 37.7 小时""玉龙雪山 5.3 小时"都
+    // 不是模型幻觉，是这个公式。正确换算：分钟/60，保留一位小数，下限 0.1。
     const eta = leg.duration
       ? leg.duration
-      : leg.roadMinutes != null ? `约 ${Math.round(leg.roadMinutes / 6 * 10) / 10} 小时车程` : "";
+      : leg.roadMinutes != null ? `约 ${Math.max(0.1, Math.round((leg.roadMinutes / 60) * 10) / 10)} 小时车程` : "";
     const detail = [mode, eta, leg.note].filter(Boolean).join("，");
     const directive = leg.interArea ? INTER_AREA_DIRECTIVE : MODE_DIRECTIVE[leg.mode];
     return `${leg.fromName} → ${leg.toName}：${detail}${directive ? `（${directive}）` : ""}`;

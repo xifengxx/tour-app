@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { blockingIssues, buildRouteGraph, buildRouteLegs, elevationDeltaM, estimateRouteDuration, inferTransferMode, matchLocsToGraph, minModeForTransfer, parseElevationM, planGraphStops, routeGraphSegments, routeGraphIssues, routeGraphNotes, repairPlanStops, routeLegsText, SCENIC_SHUTTLE_MAX_M, stripFacilitySuffix, crossAreaComponents } from "./route-graph.ts";
+import { blockingIssues, buildRouteGraph, buildRouteLegs, elevationDeltaM, repairTransportHours, estimateRouteDuration, inferTransferMode, matchLocsToGraph, minModeForTransfer, parseElevationM, planGraphStops, routeGraphSegments, routeGraphIssues, routeGraphNotes, repairPlanStops, routeLegsText, SCENIC_SHUTTLE_MAX_M, stripFacilitySuffix, crossAreaComponents } from "./route-graph.ts";
 import type { DestinationRouteKnowledge } from "./route-knowledge-types.ts";
 import { CURATED_TRAILS, orderStopsByTrail } from "./trail-routes.ts";
 
@@ -428,6 +428,33 @@ describe("route graph", () => {
     // 主题游允许长串联，但标注方式必须正确，不能再被静默放行
     const issues = routeGraphIssues(["lashihai", "hutiaoxia"], farLocs, { ...knowledge, edges: [] }, { allowLongTransfers: true });
     expect(issues.some(i => i.type === "long-transfer" && i.message.includes("无车程估算"))).toBe(false);
+  });
+
+  it("车程换算与文案时长校正：分钟→小时不再放大10倍（v98 玉龙雪山根因）", () => {
+    const leg = { fromId: "g", toId: "y", fromName: "甘海子", toName: "丽江玉水寨", mode: "shuttle" as const, distanceM: 11500, roadMinutes: 32 };
+    const text = routeLegsText([leg]);
+    expect(text).toContain("约 0.5 小时车程");
+    expect(text).not.toContain("5.3");
+    // AI 仍抄错时：以腿数据真值就地改写
+    const bad = "再乘景区观光车（约5.3小时）前往玉水寨，然后前往东巴谷。";
+    const fixed = repairTransportHours(bad, [leg]);
+    expect(fixed.text).toContain("约 0.5 小时");
+    expect(fixed.text).not.toContain("5.3");
+    expect(fixed.fixes.length).toBeGreaterThan(0);
+    // 正确数字不动
+    const good = repairTransportHours("乘观光车约 0.5 小时前往丽江玉水寨。", [leg]);
+    expect(good.fixes).toEqual([]);
+    // 无锚点但明写"车程"的孤立数字 → 删除（宁缺勿错）
+    const ghost = repairTransportHours("约 7.2 小时车程后可达。", [leg]);
+    expect(ghost.text).not.toContain("7.2");
+    expect(ghost.fixes.length).toBe(1);
+    // 不带"车程"的孤立数字可能是游览时长（合法内容），绝不误删
+    const visit = repairTransportHours("徒步环线约 3 小时，风景绝佳。", [leg]);
+    expect(visit.text).toContain("约 3 小时");
+    expect(visit.fixes).toEqual([]);
+    // 反向句式"前往X（约Y小时）"也能锚定
+    const rev = repairTransportHours("前往丽江玉水寨（约5.3小时）。", [leg]);
+    expect(rev.text).toContain("约 0.5 小时");
   });
 
   it("主题游片区边界的跨区段改用中性接驳表述（v96）", () => {
