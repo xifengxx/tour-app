@@ -572,14 +572,25 @@ Deno.serve(async (req: Request) => {
     const dbLocById = new Map(dbLocs.map((l: any) => [l.id, l]));
     const stopEligibility = { destName, protectedNames: trailStopKeys };
     const trailNotes = getTrailNotes(destName, dbLocs, routeKnowledge.trails);
+    // v97：目的地坐标可信性校验。gaode("黄山","安徽省黄山市") 解析到屯溪市区
+    // （距真实山体 47km，报告实测 destLoc=118.338,29.715），以它为动线起点/半径闸
+    // 圆心等于整站弃山——"黄山"既是山名又是市名，这类歧义不止一处。
+    // 候选非地区点已聚成明显一团而 destLoc 距其质心 >40km 时，判 destLoc 不可信，
+    // 改用候选质心作路线锚（候选点全部经过地区坐标校验，它们在哪，目的地就在哪）。
+    const candCore = locs.filter(l => !(l.tags || []).includes("地区景点") && l.lat && l.lng);
+    const candC = candCore.reduce((acc, l) => ({ lng: acc.lng + l.lng, lat: acc.lat + l.lat }), { lng: 0, lat: 0 });
+    if (candCore.length) { candC.lng /= candCore.length; candC.lat /= candCore.length; }
+    const destLocUntrusted = !!destLoc && candCore.length >= 4 && haversineM(destLoc, candC) > 40000;
+    const routeLoc = destLocUntrusted ? candC : destLoc;
+    if (destLocUntrusted) warnings.push(`📍 目的地坐标离候选地点质心 ${Math.round(haversineM(destLoc!, candC) / 1000)}km，判定解析到了行政市而非目的地本体，动线锚改用候选质心`);
     const orderStops = (stopIds: string[], source: any[]) => {
       // v81：优先用真实路线图做“整段分区 + 段内步道顺序”，避免太室山/少室山这类
       // 多徒步区被地理最近邻或重要性排序穿插。研究/策展资料缺分区时仍走旧层。
       const graphOrdered = planGraphStops(stopIds, source, routeKnowledge);
       const trailOrdered = graphOrdered.length
         ? graphOrdered
-        : orderStopsByTrail(stopIds, source, destLoc, destName, routeKnowledge.trails);
-      return trailOrdered.length ? trailOrdered : orderStopsGeographic(stopIds, source, destLoc);
+        : orderStopsByTrail(stopIds, source, routeLoc, destName, routeKnowledge.trails);
+      return trailOrdered.length ? trailOrdered : orderStopsGeographic(stopIds, source, routeLoc);
     };
 
     // DeepSeek's route step may reference stops by slug, Chinese name, or a
@@ -602,9 +613,9 @@ Deno.serve(async (req: Request) => {
     const novelName = String(tour.source?.title || tour.source?.novelTitle || '');
     const corePoolSize = locs.filter(l => !(l.tags || []).includes("地区景点") && l.scenic === coreScenicName).length;
     const suppressedPlans: { plan: string; reason: string }[] = [];
-    warnings.push(`🧮 核心池诊断 ${JSON.stringify(corePoolDiagnostics(locs, { coreScenicName, destName, destLoc }))}`);
+    warnings.push(`🧮 核心池诊断 ${JSON.stringify(corePoolDiagnostics(locs, { coreScenicName, destName, destLoc: routeLoc }))}`);
     const plans = planRoutesModule(locs, {
-      coreScenicName, mainScenicName, destName, destLoc, isNovelBased, novelName, hasRegionTour,
+      coreScenicName, mainScenicName, destName, destLoc: routeLoc, isNovelBased, novelName, hasRegionTour,
       zones: routeKnowledge.zones,
       capabilities,
       onSuppressed: (plan, reason) => suppressedPlans.push({ plan, reason }),
