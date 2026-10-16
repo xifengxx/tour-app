@@ -1,0 +1,264 @@
+{
+  "destinationName": "武汉",
+  "aliases": [
+    "武汉",
+    "江城",
+    "汉口",
+    "武昌",
+    "汉阳"
+  ],
+  "zones": [
+    {
+      "id": "zone-donghu",
+      "name": "东湖景区带",
+      "aliases": [
+        "东湖风景区",
+        "东湖绿道",
+        "武汉东湖"
+      ]
+    },
+    {
+      "id": "zone-hankou-jiangtan",
+      "name": "汉口江滩-江汉路片区",
+      "aliases": [
+        "汉口江滩",
+        "江汉路",
+        "沿江大道"
+      ]
+    },
+    {
+      "id": "zone-wuchang-oldtown",
+      "name": "武昌古城-黄鹤楼片区",
+      "aliases": [
+        "武昌古城",
+        "黄鹤楼",
+        "昙华林",
+        "司门口"
+      ]
+    }
+  ],
+  "trails": [
+    {
+      "id": "trail-donghu-lvdao",
+      "aliases": [
+        "武汉",
+        "东湖绿道·听涛-磨山段",
+        "东湖绿道骑行",
+        "东湖听涛-磨山线"
+      ],
+      "scenicName": "东湖绿道·听涛-磨山段",
+      "zoneId": "zone-donghu",
+      "stops": [
+        {
+          "name": "听涛景区",
+          "aliases": [
+            "东湖听涛"
+          ],
+          "evidenceBound": false,
+          "required": true
+        },
+        {
+          "name": "湖中道",
+          "aliases": [
+            "东湖绿道湖中道"
+          ],
+          "evidenceBound": false,
+          "required": true
+        },
+        {
+          "name": "磨山景区",
+          "aliases": [
+            "东湖磨山"
+          ],
+          "evidenceBound": false,
+          "required": true
+        },
+        {
+          "name": "落雁景区",
+          "aliases": [
+            "东湖落雁"
+          ],
+          "evidenceBound": false,
+          "required": false
+        }
+      ],
+      "notes": "东湖绿道串联听涛、磨山、落雁等景区，湖中道为最常被选择的骑行路线，适合普通游客；机动车和电动自行车未经许可不得入内。",
+      "evidence": [
+        "东湖绿道全部位于东湖风景区内，是国内首条城区内5A级旅游景区绿道，目前已开发的一期工程全长28.7公里，宽6米，串联起东湖磨山、听涛、落雁、渔光、喻家湖五大景区，由湖中道、湖山道、磨山道、郊野道4段主题绿道组成。",
+        "湖中道是最常被选择的骑行路线，因为距离不长，也适合普通游客。",
+        "东湖风景区分为听涛、磨山、落雁、白马、吹笛、珞洪六个游览区。"
+      ]
+    },
+    {
+      "id": "trail-hankou-jiangtan",
+      "aliases": [
+        "武汉",
+        "汉口江滩-江汉路步行线",
+        "汉口江滩漫步",
+        "江汉路-江滩线"
+      ],
+      "scenicName": "汉口江滩-江汉路步行线",
+      "zoneId": "zone-hankou-jiangtan",
+      "stops": [
+        {
+          "name": "江汉路",
+          "aliases": [
+            "江汉路步行街"
+          ],
+          "evidenceBound": false,
+          "required": true
+        },
+        {
+          "name": "汉口江滩",
+          "aliases": [
+            "江滩公园"
+          ],
+          "evidenceBound": false,
+          "required": true
+        },
+        {
+          "name": "沿江大道",
+          "aliases": [],
+          "evidenceBound": false,
+          "required": false
+        }
+      ],
+      "notes": "汉口江滩与江汉路步行街相邻，适合半日步行游览；周边餐饮密集，可结合沿江大道历史建筑群。",
+      "evidence": [
+        "一澜·江宴(江滩公园店) @30.58639,114.30313",
+        "粗茶淡饭·壹号餐房(洞庭街店) @30.58833,114.30282",
+        "老八门·湖北菜(大智路店) @30.59512,114.29863"
+      ]
+    },
+    {
+      "id": "trail-wuchang-oldtown",
+      "aliases": [
+        "武汉",
+        "武昌古城·黄鹤楼-昙华林线",
+        "黄鹤楼-昙华林线",
+        "武昌古城半日游"
+      ],
+      "scenicName": "武昌古城·黄鹤楼-昙华林线",
+      "zoneId": "zone-wuchang-oldtown",
+      "stops": [
+        {
+          "name": "黄鹤楼",
+          "aliases": [],
+          "evidenceBound": false,
+          "required": true
+        },
+        {
+          "name": "昙华林",
+          "aliases": [],
+          "evidenceBound": false,
+          "required": true
+        },
+        {
+          "name": "司门口",
+          "aliases": [],
+          "evidenceBound": false,
+          "required": false
+        }
+      ],
+      "notes": "武昌古城片区以黄鹤楼、昙华林为核心，适合半日步行游览；可结合司门口、户部巷等周边街区。",
+      "evidence": [
+        "武昌古城-黄鹤楼片区为武汉核心历史风貌区。",
+        "昙华林为武昌古城内历史文化街区。"
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "from": "听涛景区",
+      "to": "湖中道",
+      "mode": "walk",
+      "duration": "10分钟",
+      "note": "东湖绿道内部步行衔接"
+    },
+    {
+      "from": "湖中道",
+      "to": "磨山景区",
+      "mode": "shuttle",
+      "duration": "15分钟",
+      "note": "东湖绿道观光车或骑行"
+    },
+    {
+      "from": "磨山景区",
+      "to": "落雁景区",
+      "mode": "shuttle",
+      "duration": "20分钟",
+      "note": "东湖绿道观光车或骑行"
+    },
+    {
+      "from": "江汉路",
+      "to": "汉口江滩",
+      "mode": "walk",
+      "duration": "10分钟",
+      "note": "步行经沿江大道进入江滩"
+    },
+    {
+      "from": "黄鹤楼",
+      "to": "昙华林",
+      "mode": "walk",
+      "duration": "15分钟",
+      "note": "步行经司门口、得胜桥"
+    },
+    {
+      "from": "东湖景区带",
+      "to": "汉口江滩-江汉路片区",
+      "mode": "other",
+      "duration": "40分钟",
+      "note": "地铁8号线转2号线"
+    },
+    {
+      "from": "东湖景区带",
+      "to": "武昌古城-黄鹤楼片区",
+      "mode": "other",
+      "duration": "30分钟",
+      "note": "地铁8号线转4号线"
+    },
+    {
+      "from": "汉口江滩-江汉路片区",
+      "to": "武昌古城-黄鹤楼片区",
+      "mode": "other",
+      "duration": "20分钟",
+      "note": "地铁2号线过江"
+    }
+  ],
+  "source": "auto-research",
+  "confidence": 0.49,
+  "quality": {
+    "score": 0.49,
+    "grade": "unusable",
+    "parts": {
+      "sourceTrust": 0.55,
+      "coordCoverage": 0,
+      "evidenceCoverage": 0,
+      "sitePurity": 1,
+      "structureCompleteness": 1
+    },
+    "transportCoverage": 0.71,
+    "stops": 10,
+    "trails": 3,
+    "edges": 8,
+    "zones": 3,
+    "zoneTrailCoverage": 1
+  },
+  "generatedAt": "2026-10-16T10:09:37.726Z",
+  "evidence": [
+    {
+      "provider": "wikipedia",
+      "title": "东湖 (武汉)",
+      "url": "https://zh.wikipedia.org/wiki/%E4%B8%9C%E6%B9%96%20(%E6%AD%A6%E6%B1%89)"
+    },
+    {
+      "provider": "wikipedia",
+      "title": "武汉地铁",
+      "url": "https://zh.wikipedia.org/wiki/%E6%AD%A6%E6%B1%89%E5%9C%B0%E9%93%81"
+    },
+    {
+      "provider": "amap",
+      "title": "周边景点"
+    }
+  ]
+}

@@ -1181,3 +1181,36 @@ sections 文案，**整批**输出的 token 需求翻了一倍还多，v95 的"�
 地理全集残缺 ≥4"的支配性判据，且不依赖 destLoc 存在。
 
 268 tests passed；生产文件 deno check 干净；lint 19 持平基线。
+
+## v98：非山岳知识入口 + 创作者确认飞轮实测通 + 密钥出库
+
+### 1) 研究入口对全部目的地类型开放（片区模板）
+`loadOrResearchRouteKnowledge` 不再只看 `type=mountain`；destinationType 透传到
+route-research，非山岳走"片区模板"：zones=可独立成半天以上游览的片区、
+trails=片区内实际走法、edges 支持地铁/轮渡（other+note 写线路名）与
+观光车/直通车（shuttle）。本地实测 `--type city 武汉 湖北`：
+产出 东湖景区带/武昌古城-黄鹤楼片区/汉口江滩-江汉路片区 三个 zone 各配一条
+片区内 trail（黄鹤楼→昙华林→司门口），证据句可追溯。未写库（脚本本就只读）。
+
+### 2) 创作者确认飞轮端到端实测（伪造行验证后即删）
+写入一条 route_confirmations（照 TourView.confirmRoute 的载荷形状）→
+`loadRouteKnowledge("三清山")` 选中 creator-confirmed → **tier=L3**，
+multiDay/trailOrder 解锁，zoneDriven/assertTransport 因数据形态自动关闭
+（zones 空、交通边覆盖不足）——分层语义正确。重跑测试导览：status=done、
+tier=L3、1日线按确认骨架排序；无第二片区标签时两日线不虚构（符合设计）。
+测试行已删除，route_confirmations 回到 0 行。前端 RLS 策略核对：
+authenticated 仅可插/查自己拥有的导览，函数侧走 service key——链路无断点。
+**结论：功能没坏，是从没人点。** 使用姿势：导览详情（创作者本人）→ 路线卡
+→ "确认这条路线" → 该目的地后续生成直接吃这份知识。
+
+### 3) P0 仓库侧完成，平台侧待用户
+高德 Web 服务密钥（2ff1bf…）已从 APP-DOCS.md 移除，本地工作副本转入 .env；
+amap.js 的 JS key/安全密钥保留硬编码缺省——它们按高德模式本就该随浏览器
+公开，真正防护是控制台"域名白名单"绑定（历史公网可见性不变，故轮换照旧必要）。
+**待用户执行（约10分钟）**：高德控制台重置 Web 服务密钥 + JS密钥配白名单并
+重新生成安全密钥；Supabase roll service_role key、吊销 sbp_ CLI token。
+之后：新值进 .env，执行
+`export SUPABASE_ACCESS_TOKEN=<新token>; supabase secrets set GAODE_KEY=<新webkey> --project-ref qxunedraoviaonjdanag`
+并重新部署两个函数。git 历史里的旧值无法靠删除失效，轮换是唯一解。
+
+268 tests passed；deno check 干净；process-tour v120 / route-research v7 已部署。
