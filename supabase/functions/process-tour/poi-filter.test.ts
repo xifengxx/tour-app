@@ -59,8 +59,8 @@ describe("poi-filter", () => {
   });
 
   it("自定义规则可由调用方追加", () => {
-    expect(isNonSitePOI("某某雕刻厂", { extra: [/雕刻厂/] })).toBe(true);
-    expect(rejectReasonForPOI("某某雕刻厂", { extra: [/雕刻厂/] })).toBe("自定义规则");
+    expect(isNonSitePOI("星光夜市", { extra: [/夜市/] })).toBe(true);
+    expect(rejectReasonForPOI("星光夜市", { extra: [/夜市/] })).toBe("自定义规则");
   });
 
   it("对现网 181 个公开地点的实测精度：只剔除 3 个脏数据", () => {

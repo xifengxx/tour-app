@@ -38,7 +38,14 @@ export function isTransferPOI(name: unknown): boolean {
  * 只认"省+市"链条或纯城市名，"黄陂木兰文化生态旅游区""湖北省博物馆-盘龙城展厅"
  * 这类带真实地标的名字不受影响。
  */
-export const ADMIN_REGION_RE = /省.*市|^\p{Script=Han}{2,8}市$/u;
+export const ADMIN_REGION_RE = /省.*市|^\p{Script=Han}{2,10}(?<![夜早集菜花超])市$/u;
+
+/**
+ * 建设与商业主体名：高德会把在建工程的**注册公司名**作为 POI 返回
+ * （黄山线上实测"黄山东海景区开发有限公司东海索道分公司(建设中)"进了 1日线）。
+ */
+export const COMPANY_RE = /公司|集团|有限(责任)?公司|合作社|工厂|厂$|水泥厂|煤矿|煤业|电站|水厂|基站|变电站|分公司|总部|大楼$|大厦$/;
+export const UNDER_CONSTRUCTION_RE = /[（(](?:建设|施工|装修|改建|扩建|封闭)中[）)]/;
 
 /** 地质与科研描述：高德/维基会把"两期岩体穿插关系""断层构造"这类条目作为 POI 返回。 */
 export const NON_SIGHT_RE = /岩体|地层|地质构造|断层|剖面|化石|群核|观测站|监测站|气象站|科研|试验基地|保护区管理局|婚礼|旅拍|婚纱摄影|演艺中心|大剧院|会展/;
@@ -59,6 +66,8 @@ export function rejectReasonForPOI(name: unknown, options: PoiFilterOptions = {}
   if (JUNK_RE.test(value)) return "餐饮住宿商业";
   if (AMUSE_RE.test(value)) return "游乐商业场所";
   if (ADMIN_REGION_RE.test(value)) return "行政区名而非景点";
+  if (COMPANY_RE.test(value)) return "公司/工业主体而非景点";
+  if (UNDER_CONSTRUCTION_RE.test(value)) return "在建工程，非可游览点";
   if (NON_SIGHT_RE.test(value)) return "非游览对象（地质/科研/商业场地）";
   for (const re of options.extra || []) if (re.test(value)) return "自定义规则";
   return null;

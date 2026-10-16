@@ -679,7 +679,10 @@ Deno.serve(async (req: Request) => {
     const planTextFor = (p: any, i: number) => {
       const stopsTxt = p.allow
         ? p.allow.map((id: string) => { const l = locs.find(x => x.id === id); return l ? `${id}: ${l.name}` : id; }).join(", ")
-        : "（文学巡礼线：自由选点）";
+        // v97：逐路线模式下自由选点也必须拿到候选清单。不给 id 表时 AI 会自创
+        // "ciguangge"这类拼音假 id，10 站全部无法 resolve，只能回退核心 4 站
+        //（黄山重跑实测）。
+        : `（文学巡礼线：自由选点，stops 只能从以下候选中逐字复制 id：${locs.filter((l: any) => !(l.tags || []).includes("地区景点") && !(l.tags || []).includes("景区泛指")).slice(0, 24).map((l: any) => `${l.id}: ${l.name}`).join("、")}）`;
       const traffic = routeTrafficHints.get(p.label);
       const sectionText = p.sections?.map((sec: any) => {
         const secStops = sec.allow.map((id: string) => { const l = locs.find(x => x.id === id); return l ? `${id}: ${l.name}` : id; }).join(", ");
