@@ -229,6 +229,33 @@ export function buildThemeSections(
   return sections;
 }
 
+/**
+ * v97 观测：复现 planRoutes 的三个核心池计算（同一套过滤/圆心/半径），
+ * 供报告记录"标签池 vs 地理全集"的真实数字——两次"差一点触发"的
+ * 兜底都只能靠推理猜，说明缺的是观测不是更多阈值。
+ */
+export function corePoolDiagnostics(locs: any[], ctx: { coreScenicName: string; destName: string; destLoc?: { lng: number; lat: number } | null }) {
+  const isRouteSite = (l: any) => isRouteStopEligible(l, { destName: ctx.destName }) && !JUNK_RE.test(String(l.name || "")) && !ROAD_RE.test(String(l.name || ""));
+  const isRegion = (l: any) => (l.tags || []).includes("地区景点");
+  const corePool = locs.filter((l: any) => !isRegion(l) && l.scenic === ctx.coreScenicName);
+  const rawCorePool = (corePool.length ? corePool : locs.filter((l: any) => !isRegion(l))).filter(isRouteSite);
+  const routeableCore = corePool.filter((l: any) => isRouteStopEligible(l, { destName: ctx.destName }));
+  const centerPool = routeableCore.length ? routeableCore : corePool;
+  const coreCenter = centerPool.reduce((acc: any, l: any) => ({ lng: acc.lng + l.lng, lat: acc.lat + l.lat }), { lng: 0, lat: 0 });
+  const cc = { lng: coreCenter.lng / (centerPool.length || 1), lat: coreCenter.lat / (centerPool.length || 1) };
+  const routeCenter = ctx.destLoc || cc;
+  const nearAll = locs.filter((l: any) => !isRegion(l)).filter(isRouteSite).filter((l: any) => haversineM(routeCenter, l) <= CORE_ROUTE_RADIUS_M);
+  const coherentLabel = rawCorePool.filter((l: any) => haversineM(routeCenter, l) <= CORE_ROUTE_RADIUS_M);
+  return {
+    destLoc: ctx.destLoc ? `${ctx.destLoc.lng.toFixed(3)},${ctx.destLoc.lat.toFixed(3)}` : "null",
+    cc: centerPool.length ? `${cc.lng.toFixed(3)},${cc.lat.toFixed(3)}` : "empty",
+    corePoolLabel: corePool.length,
+    coherentLabel: coherentLabel.length,
+    nearAllGeo: nearAll.length,
+    fallbackTriggers: nearAll.length >= coherentLabel.length + 4,
+  };
+}
+
 export function planRoutes(locs: any[], ctx: PlanRoutesContext) {
   // v89：能力授权。缺省全开，只有显式传入 capabilities 时才收敛，
   // 避免这个改动在调用方接入前就改变既有行为。

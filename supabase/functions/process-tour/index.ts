@@ -9,7 +9,7 @@ import { regeo } from "./gaode-validation.ts";
 import { gaodeNearbyCulturalPOIs, isDestinationUmbrella, JUNK_RE, semanticDedupLocations } from "./gaode-scan.ts";
 import { AMUSE_RE, FACILITY_RE, gaode, gaodeRegionScenics } from "./gaode-search.ts";
 import { haversineM } from "./geo.ts";
-import { filterRouteStops, isRouteStopEligible, mapSectionsToDbIds, orderStopsGeographic, planRoutes as planRoutesModule } from "./routes.ts";
+import { corePoolDiagnostics, filterRouteStops, isRouteStopEligible, mapSectionsToDbIds, orderStopsGeographic, planRoutes as planRoutesModule } from "./routes.ts";
 import { applyTrailGroups, getPrimaryTrailScenicName, getTrailNotes, injectTrailSeeds, orderStopsByTrail } from "./trail-routes.ts";
 import { loadOrResearchRouteKnowledge } from "./route-knowledge.ts";
 import { capabilitiesFor, TIER_LABEL } from "./knowledge-tier.ts";
@@ -602,6 +602,7 @@ Deno.serve(async (req: Request) => {
     const novelName = String(tour.source?.title || tour.source?.novelTitle || '');
     const corePoolSize = locs.filter(l => !(l.tags || []).includes("地区景点") && l.scenic === coreScenicName).length;
     const suppressedPlans: { plan: string; reason: string }[] = [];
+    warnings.push(`🧮 核心池诊断 ${JSON.stringify(corePoolDiagnostics(locs, { coreScenicName, destName, destLoc }))}`);
     const plans = planRoutesModule(locs, {
       coreScenicName, mainScenicName, destName, destLoc, isNovelBased, novelName, hasRegionTour,
       zones: routeKnowledge.zones,
