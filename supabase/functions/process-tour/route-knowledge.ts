@@ -112,9 +112,12 @@ export function researchedToKnowledge(research: any): DestinationRouteKnowledge 
 // 自动研究最高 0.80，因此不会覆盖 0.90+ 的人工策展知识。
 export async function loadOrResearchRouteKnowledge(destName: string, destRegion: string, destinationType?: string): Promise<DestinationRouteKnowledge> {
   const loaded = await loadRouteKnowledge(destName);
-  if (loaded.source !== "builtin" || destinationType !== "mountain" || !destName) return loaded;
+  // v98：研究入口对全部目的地类型开放。此前只认 mountain，城市/湖泊/古镇型
+  // 目的地永远停在 L1"无知识"，主题游只能靠高德点位聚类起名。
+  // destinationType 继续传给研究层决定用山岳模板还是片区模板。
+  if (loaded.source !== "builtin" || !destName) return loaded;
   try {
-    const research = await researchRouteKnowledge(destName, destRegion);
+    const research = await researchRouteKnowledge(destName, destRegion, destinationType);
     const knowledge = researchedToKnowledge(research);
     if (SUPABASE_URL && SR_KEY) {
       await fetch(`${SUPABASE_URL}/rest/v1/destination_route_knowledge`, {

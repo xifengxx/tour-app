@@ -10,9 +10,9 @@
 
 | 密钥              | 值                                                              | 用途                    |
 | ----------------- | --------------------------------------------------------------- | ----------------------- |
-| 高德 Web 服务 Key | `2ff1bf71b26aed0a92eb4ab63657bb25`                              | REST API 坐标查询 ⭐    |
-| 高德 JS API Key   | `858c05dea3990ef1b900bfd298ebefa7`                              | 前端地图显示            |
-| 高德 安全码       | `f98c91fa4c7219afe557be4f0786f594`                              | JS API 安全密钥         |
+| 高德 Web 服务 Key | `<已轮换·见 .env GAODE_KEY（Web服务密钥）或高德控制台>`                              | REST API 坐标查询 ⭐    |
+| 高德 JS API Key   | `<已轮换·见 .env GAODE_KEY（Web服务密钥）或高德控制台>`                              | 前端地图显示            |
+| 高德 安全码       | `<已轮换·见 .env GAODE_KEY（Web服务密钥）或高德控制台>`                              | JS API 安全密钥         |
 | Supabase PAT      | `你的 Supabase PAT`（见 Supabase Dashboard → Account → Tokens） | Management API 写入数据 |
 | Supabase URL      | `https://qxunedraoviaonjdanag.supabase.co`                      | 数据库                  |
 | Supabase Anon Key | `sb_publishable_Pp21-3ssB3rSxwFnA-WZZw_eUHmF31E`                | 前端匿名访问            |
@@ -123,7 +123,7 @@ CREATE TRIGGER ai_process_trigger_update
 ### 2. `USERKEY_PLAT_NOMATCH`
 
 - 原因：用 JS API Key 调 REST API
-- 解决：用 Web 服务 Key (`2ff1bf71b26aed0a92eb4ab63657bb25`)
+- 解决：用 Web 服务 Key (`<已轮换·见 .env GAODE_KEY（Web服务密钥）或高德控制台>`)
 
 ### 3. 中文引号导致 SyntaxError
 

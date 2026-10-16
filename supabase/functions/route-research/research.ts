@@ -148,11 +148,25 @@ export async function collectRouteEvidence(destination: string, region: string) 
   };
 }
 
-export function buildResearchPrompt(destination: string, region: string, center: GeoPoint | null, evidence: RouteEvidence[]) {
+export function buildResearchPrompt(destination: string, region: string, center: GeoPoint | null, evidence: RouteEvidence[], destinationType?: string) {
   const evidenceText = evidence
     .map((e, i) => `【来源${i + 1}·${e.provider}】${e.title}\nURL: ${e.url || "无"}\n${e.text}`)
     .join("\n\n")
     .slice(0, 22000);
+  // v98：山岳之外的目的地（城市/湖泊/古镇/区域游）用"片区模板"。
+  // 山岳知识的骨架是"索道/登山步道/顶-腰-脚"；城市知识的骨架是
+  // "片区 + 片区内玩法线 + 片区间公共交通"。用错模板的后果现网可见：
+  // 武汉主题游只能按距离分组，认不出"黄鹤楼-昙华林-长江大桥"同属
+  // 武昌一日可串联片区，也答不出片区之间坐地铁还是坐轮渡。
+  if (destinationType && destinationType !== "mountain") {
+    return [
+      { role: "system", content: "你是旅游目的地动线研究员。只返回JSON。不要虚构景点；不要输出无法与来源或公认地理事实对应的站点顺序。" },
+      {
+        role: "user",
+        content: `目的地：${destination}（${region || "地区未填"}）\n中心：${center ? `${center.lat},${center.lng}` : "无"}\n\n外部证据：\n${evidenceText}\n\n这是城市/区域型目的地（不是单一山岳景区）。请抽取真实、静态、可复用的路线知识。规则：\n1. zones 是"可独立成半天以上游览的片区"（如 武昌黄鹤楼-昙华林片区、东湖景区带、汉口江滩-江汉路片区），用被广泛使用的专名，不要用行政区划全称。\n2. trails 是"片区内一日/半日的实际走法"，一条 trail 的站点必须全部属于同一个片区；跨片区不要串进同一条线。\n3. edges 写真实交通衔接：步行内=walk；景区观光车/电瓶车/游船/旅游直通车=shuttle；地铁/公交=other（note 注明线路名，如"地铁2号线"）；打车/包车=car。跨片区长距离禁止标 walk。\n4. 每条 trail 的 evidence 保留 1-3 条最关键来源句；没有证据的不要编造。\n5. aliases 覆盖目的地常用名；每个 trail.aliases 至少包含目的地或其片区名。\n5b. 每个 zone 都要给出一条对应 trail（zoneId 必须引用 zones 里声明过的 id）。\n6. 不要输出 confidence：可信度由系统按坐标覆盖率、证据可追溯比例与显式交通边覆盖率计算。\n\nJSON: {"destination_name":"${destination}","aliases":[],"zones":[{"id":"","name":"","aliases":[]}],"trails":[{"id":"","aliases":[],"scenicName":"","zoneId":"","stops":[{"name":"","aliases":[],"required":true}],"notes":"","evidence":["来源句"]}],"edges":[{"from":"","to":"","mode":"walk","duration":"","note":""}]}`,
+      },
+    ];
+  }
   return [
     { role: "system", content: "你是景区动线研究员。只返回JSON。不要虚构景点；不要输出无法与来源或公认地理事实对应的站点顺序。" },
     {
@@ -304,9 +318,9 @@ export function normalizeResearchResult(destination: string, raw: any, _evidence
   };
 }
 
-export async function researchRouteKnowledge(destination: string, region: string) {
+export async function researchRouteKnowledge(destination: string, region: string, destinationType?: string) {
   const { center, evidence } = await collectRouteEvidence(destination, region);
-  const raw = await deepseek(buildResearchPrompt(destination, region, center, evidence), {
+  const raw = await deepseek(buildResearchPrompt(destination, region, center, evidence, destinationType), {
     temperature: 0.1,
     maxTokens: 4096,
     retries: 1,
