@@ -36,10 +36,12 @@ if (!Deno.env.get("GAODE_KEY")) {
 }
 const outIdx = rest.indexOf("--out");
 const outFile = outIdx >= 0 ? rest[outIdx + 1] : "";
+const typeIdx = rest.indexOf("--type");
+const destType = typeIdx >= 0 ? String(rest[typeIdx + 1] || "") : "";
 
 const started = Date.now();
-console.log(`研究 ${dest}（${region || "未填地区"}）...`);
-const result = await researchRouteKnowledge(dest, region);
+console.log(`研究 ${dest}（${region || "未填地区"}）${destType ? " type=" + destType : ""}...`);
+const result = await researchRouteKnowledge(dest, region, destType || undefined);
 const seconds = ((Date.now() - started) / 1000).toFixed(1);
 
 console.log(`\n耗时 ${seconds}s，外部证据 ${result.evidence.length} 组来源：`);
