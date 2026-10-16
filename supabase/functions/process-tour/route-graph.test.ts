@@ -180,6 +180,33 @@ describe("route graph", () => {
     expect(repairPlanStops(["入口"], graphLocs, knowledge).repairs).toEqual([]);
   });
 
+  it("跨步道共享枢纽不参与单条步道的顺序断言（黄山光明顶回归）", () => {
+    const hubKnowledge: DestinationRouteKnowledge = {
+      destinationName: "示例二山", aliases: [],
+      zones: [{ id: "zp", name: "玉屏线" }, { id: "bh", name: "北海线" }],
+      trails: [
+        { id: "t-yuping", zoneId: "zp", stops: [{ name: "索道站" }, { name: "迎客松" }, { name: "莲花峰" }, { name: "光明顶" }] },
+        { id: "t-beihai", zoneId: "bh", stops: [{ name: "光明顶" }, { name: "始信峰" }, { name: "清凉台" }, { name: "飞来石" }] },
+      ],
+      edges: [], source: "auto-research", confidence: 0.5,
+    };
+    const hubLocs = [
+      loc("ciguang", "索道站", 118.11, 30.11), loc("guest", "迎客松", 118.12, 30.11),
+      loc("lotus", "莲花峰", 118.13, 30.12), loc("bright", "光明顶", 118.14, 30.13),
+      loc("shixin", "始信峰", 118.16, 30.15), loc("qingliang", "清凉台", 118.17, 30.15),
+      loc("feilai", "飞来石", 118.18, 30.16),
+    ];
+    // 前山上、北海下的合法换乘线：光明顶是两条步道的连接器，
+    // 它在玉屏段末尾=北海段开头，不构成任何一条步道的"回退"。
+    const lawful = ["ciguang", "guest", "lotus", "bright", "shixin", "qingliang", "feilai"];
+    expect(routeGraphIssues(lawful, hubLocs, hubKnowledge).filter(i => i.type === "trail-backtrack")).toEqual([]);
+    // 但真折返不豁免：非枢纽点（清凉台→始信峰）在北海段内部倒退仍然阻断。
+    const zig = ["ciguang", "guest", "lotus", "bright", "qingliang", "shixin", "feilai"];
+    expect(routeGraphIssues(zig, hubLocs, hubKnowledge)).toEqual(
+      expect.arrayContaining([expect.objectContaining({ type: "trail-backtrack" })]),
+    );
+  });
+
   it("整条步道反向串联是合法下撤，不报顺序回退", () => {
     // 恒山 1日线曾按下山方向串联，若把它误判为回退，P1-2 闸门会拦下正确路线。
     const reversed = routeGraphIssues(["主峰", "中亭", "入口"], graphLocs, knowledge);

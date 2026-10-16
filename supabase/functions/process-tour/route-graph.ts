@@ -633,11 +633,29 @@ export function routeGraphIssues(
   const longTransferM = options.longTransferM ?? 8000;
 
   // 1. 同一条已知步道的匹配点必须按资料顺序推进，禁止 A→C→B。
+  // v97：共享枢纽不参与单条步道的顺序断言。黄山知识里光明顶同时是
+  // 玉屏/北海/白云三条步道的换乘点（前山上、北海下环线必经），它在任何
+  // 一条步道里的"索引"都不代表"必须走到那个位置"——把枢纽计入序列，
+  // 规划器产出的合法换乘顺序会被自己的校验器判成回退（线上黄山因此
+  // needs_review 三处阻断）。只有**只属于这一条步道**的点才构成该步道的
+  // 顺序骨架；出现在 ≥2 条步道的点是连接器，位置由行程结构决定。
+  // 这不是放宽阈值：恒山式"下到山脚又折回半山"的真折返里，
+  // 折返点都是单步道点，仍然会逐字命中本检查。
+  const trailMembership = new Map<string, number>();
+  for (const trail of knowledge.trails) {
+    const seenInThisTrail = new Set<string>();
+    for (const stop of trail.stops) {
+      const key = normalizeName(stop.name);
+      if (!key || seenInThisTrail.has(key)) continue;
+      seenInThisTrail.add(key);
+      trailMembership.set(key, (trailMembership.get(key) || 0) + 1);
+    }
+  }
   for (const trail of knowledge.trails) {
     const indexes = new Map(trail.stops.map((stop, index) => [normalizeName(stop.name), index]));
     const positions = stopIds
       .map(id => matches.get(id)?.key)
-      .filter((key): key is string => !!key && indexes.has(key))
+      .filter((key): key is string => !!key && indexes.has(key) && (trailMembership.get(key) || 1) < 2)
       .map(key => indexes.get(key)!);
     // 整体反向（严格递减）是合法的下撤方向，不是回退：同一批站点既可能上山走也可能下山走。
     // 只有既非递增也非递减的序列才是真正的折返乱序（恒山 1日线实测：
