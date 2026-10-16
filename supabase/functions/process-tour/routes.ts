@@ -258,7 +258,10 @@ export function planRoutes(locs: any[], ctx: PlanRoutesContext) {
   // 三套语义，黄山线上实测 coreScenic 被 loose 匹配到"温泉景区"这种 1 点子区，
   // 一日精华游只剩 3 站）。当名称匹配的核心池不足 4 站时，退回数据本身的定义：
   // "目的地坐标 15km 内的全部非地区、可游览点"——这才是一日精华游的物理含义。
-  if (ctx.destLoc) {
+  {
+    // 不以 destLoc 存在为前提：目的地坐标解析失败时 routeCenter 已退化为
+    // 核心池质心，兜底仍应工作（黄山线上实测 destLoc=null 让带门槛的兜底整体失效，
+    // 1日精华游只剩 2 站，比修复前还少）。
     const nearAll = locs.filter((l: any) => !isRegion(l)).filter(isRouteSite)
       .filter(l => haversineM(routeCenter, l) <= CORE_ROUTE_RADIUS_M).sort(byImp);
     // 触发条件不是"标签池绝对小"，而是"标签池相对地理全集明显残缺"
