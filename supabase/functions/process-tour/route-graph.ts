@@ -2,7 +2,7 @@ import { haversineM } from "./geo.ts";
 import { isNonSitePOI } from "./poi-filter.ts";
 import type { DestinationRouteKnowledge, RouteEdge } from "./route-knowledge-types.ts";
 
-const normalizeName = (value: unknown) =>
+export const normalizeName = (value: unknown) =>
   String(value || "")
     .toLowerCase()
     .replace(/[，。、·—\-_\s（）()《》"]/g, "");
@@ -518,7 +518,17 @@ function integrateUnmatchedStops(
       }
     }
     // 超过本地绕行容忍度的点属于接驳/延伸段，保持在整个步道骨架之后。
-    path.splice(bestCost <= 8000 ? bestIndex : path.length, 0, id);
+    // v99.5：与插入位置相邻点高差 ≥500m 的是台地隔绝点，禁止插进步道中段——
+    // 庐山线上实测东林寺（山脚 100m）被按 2D 绕行成本插进 1100m 山顶步道的
+    // "如琴湖→龙首崖"之间，产出"上山下山再上山"161km 车程的锯齿路线。
+    const adjPoints = [path[Math.max(0, bestIndex - 1)], bestIndex < path.length ? path[bestIndex] : null]
+      .map((pid) => (pid ? byId.get(pid) : null))
+      .filter((x): x is any => !!x);
+    const bandMismatch = adjPoints.length > 0 && adjPoints.every((adj) => {
+      const d = elevationDeltaM(point.elevation, adj.elevation);
+      return d != null && Math.abs(d) >= 500;
+    });
+    path.splice(bestCost <= 8000 && !bandMismatch ? bestIndex : path.length, 0, id);
   }
   return path;
 }

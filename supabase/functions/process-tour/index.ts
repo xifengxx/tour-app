@@ -15,7 +15,7 @@ import { loadOrResearchRouteKnowledge } from "./route-knowledge.ts";
 import { buildRoutePath } from "./route-paths.ts";
 import { capabilitiesFor, TIER_LABEL } from "./knowledge-tier.ts";
 import { qualityGaps } from "./knowledge-quality.ts";
-import { blockingIssues, buildRouteLegs, estimateRouteDuration, planGraphStops, repairPlanStops, repairTransportHours, routeGraphIssues, routeGraphNotes, routeLegsText } from "./route-graph.ts";
+import { blockingIssues, buildRouteLegs, estimateRouteDuration, normalizeName, parseElevationM, planGraphStops, repairPlanStops, repairTransportHours, routeGraphIssues, routeGraphNotes, routeLegsText } from "./route-graph.ts";
 import { resolveCoreDestination } from "./destination.ts";
 import { isNonSitePOI, rejectReasonForPOI } from "./poi-filter.ts";
 import { dedupeRoutes } from "./route-dedup.ts";
@@ -566,6 +566,40 @@ Deno.serve(async (req: Request) => {
     }
     // 所有来源（AI、高德、地区合并、子景点扫描、步道补全）都进入同一语义清洗层。
     // 泛指地点保留在地图数据里但带“景区泛指”标签；路线组成和补全层都不会把它当徒步站。
+    // v99.5：山脚独立景区降级（庐山实测：一日精华游把东林寺/白鹿洞/秀峰这些
+    // 山脚独立景点插进山顶步道，来回反复）。判据全部是确定信号：
+    // · 与池内有海拔点的中位数高差 ≥800m（台地隔绝，玉龙雪山犛牛坪 Δ750 不受影响）；
+    // · 且名称不属于知识里任何一条步道站点（含包含匹配；知识系统不认为它在本山行走体系内）；
+    // · 且知识至少有 1 条步道（L1 无知识不动手，宁可不作为）。
+    // 降级点打"地区景点"标签 → 自动退出 1 日池、进入主题游"周边景点"分区——
+    // 正是用户定义的产品形态：主题游=就近独立景区的分组。
+    if ((routeKnowledge.trails || []).length) {
+      const trailKeys: string[] = [];
+      for (const tr of routeKnowledge.trails) {
+        for (const st of (tr as any).stops || []) {
+          for (const alias of [st.name, ...(st.aliases || [])]) {
+            const k = normalizeName(alias);
+            if (k) trailKeys.push(k);
+          }
+        }
+      }
+      const withEle = locs.filter((l: any) => !(l.tags || []).includes("地区景点") && parseElevationM(l.elevation) != null);
+      if (withEle.length >= 4) {
+        const elevs = withEle.map((l: any) => parseElevationM(l.elevation) as number).sort((a, b) => a - b);
+        const medEle = elevs[Math.floor(elevs.length / 2)];
+        const demoted: string[] = [];
+        for (const l of withEle) {
+          const e = parseElevationM(l.elevation) as number;
+          const k = normalizeName(l.name);
+          const inTrail = !!k && trailKeys.some((tk) => tk === k || tk.includes(k) || k.includes(tk));
+          if (!inTrail && Math.abs(e - medEle) >= 800) {
+            l.tags = [...(l.tags || []), "地区景点"];
+            demoted.push(String(l.name));
+          }
+        }
+        if (demoted.length) warnings.push(`⛰️ 降级 ${demoted.length} 个与主台地高差≥800m 且不属于步道体系的独立景区到主题游：${demoted.join("/")}`);
+      }
+    }
     const semanticMerged = semanticDedupLocations(locs, destName, [destName, ...(routeKnowledge.aliases || [])]);
     if (semanticMerged.length !== locs.length) {
       warnings.push(`♻️ 语义去重移除重复地标 ${locs.length - semanticMerged.length} 个`);

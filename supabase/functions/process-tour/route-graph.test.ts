@@ -180,6 +180,22 @@ describe("route graph", () => {
     expect(repairPlanStops(["入口"], graphLocs, knowledge).repairs).toEqual([]);
   });
 
+  it("大高差未匹配点禁止插进步道中段（v99.5 庐山东林寺回归）", () => {
+    const bandK: DestinationRouteKnowledge = {
+      destinationName: "示例山", aliases: [], zones: [],
+      trails: [{ id: "top", stops: [{ name: "山顶A" }, { name: "山顶B" }] }],
+      edges: [], source: "curated", confidence: 0.9,
+    };
+    const bandLocs = [
+      { ...loc("山顶A", "山顶A", 115.90, 29.56), elevation: "1100m" },
+      { ...loc("山顶B", "山顶B", 115.99, 29.56), elevation: "1100m" },
+      { ...loc("山脚寺", "山脚寺", 115.94, 29.59), elevation: "100m" }, // 平面位置恰在两站中间
+    ];
+    const segs = routeGraphSegments(["山顶A", "山脚寺", "山顶B"], bandLocs, bandK);
+    const order = segs.flatMap((x) => x.stopIds);
+    expect(order[order.length - 1]).toBe("山脚寺"); // 挂到骨架末尾，绝不插在 山顶A→山顶B 中间
+  });
+
   it("文学巡礼线的叙事排序不触发发布阻断（v97）", () => {
     // 迎客松(7)→天都峰(3)→莲花峰(9)：对玉屏步道是回退，但对沿课本情节走的
     // 文学巡礼线这是产品设定。物理类检查仍应工作。
