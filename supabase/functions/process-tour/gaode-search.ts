@@ -22,8 +22,8 @@ function splitRegion(t: string) {
 
 async function geocodeAddress(name: string, destCity: string): Promise<{ lng: number; lat: number; name: string; level: string } | null> {
   const rawCity = (splitRegion(destCity).city || destCity).replace(/[市]$/g, "");
-  const cityIsProvince = !!rawCity && PROV_EXACT.test(rawCity.replace(/省$/g, ""));
-  const cityPart = cityIsProvince ? "" : `&city=${encodeURIComponent(rawCity)}`;
+  // 编码 API 的 city 只是权重提示（不限制结果），照传无害；限制靠下面的省市字段校验。
+  const cityPart = rawCity ? `&city=${encodeURIComponent(rawCity)}` : "";
   try {
     const url = `https://restapi.amap.com/v3/geocode/geo?address=${encodeURIComponent(name)}${cityPart}&key=${GAODE_KEY}`;
     const res = await fetch(url, { signal: AbortSignal.timeout(15000) });
@@ -32,9 +32,18 @@ async function geocodeAddress(name: string, destCity: string): Promise<{ lng: nu
     const g = (d.geocodes || [])[0];
     if (!g?.location || !g?.level) return null;
     if (!ADMIN_LEVELS.has(g.level)) return null;
+    // v99.1：geocode 的 city 参数不限制结果——线上实测 geocode("五台山",city=山西)
+    // 首条是"江苏省南京市鼓楼区五台山"，level=乡镇 恰好命中白名单，锚点直接漂到
+    // 南京并污染整条管线（地区列表/半径闸/子景点扫描三级连穿）。
+    // 结果自带的 province/city 必须与填写地区一致，否则弃用，交给带 citylimit 的 POI 检索。
+    if (destCity && !regionMatches(destCity, { province: String(g.province || ""), city: String(g.city || "") })) return null;
+    // 纯行政链条名（"四川省成都市都江堰市"）：坐标是县城中心而非景区，
+    // 且会被 poi-filter 的行政区闸当垃圾剔除——弃用，让 POI 检索找"都江堰景区"。
+    const addr = String(g.formatted_address || "");
+    if (/^(?:[\u4e00-\u9fa5]{1,10}省)?[\u4e00-\u9fa5]{1,10}市(?:[\u4e00-\u9fa5]{1,10}[区县市])?$/.test(addr)) return null;
     const [lng, lat] = g.location.split(",").map(Number);
     if (!Number.isFinite(lng) || !Number.isFinite(lat)) return null;
-    return { lng, lat, name: String(g.formatted_address || name), level: g.level };
+    return { lng, lat, name: addr || name, level: g.level };
   } catch {
     return null;
   }
@@ -48,8 +57,11 @@ export async function gaode(name: string, destCity: string, bias?: { lng: number
   const kw = encodeURIComponent(name);
   const biasParam = bias ? `&location=${bias.lng},${bias.lat}` : "";
   const rawCity = (splitRegion(destCity).city || destCity).replace(/[市]$/g, "");
+  // v99.1：关键词检索的 city= 参数本就支持省名（五台山线上事故：裸省名"山西"
+  // 丢弃城市限制 → 全国检索 → 锚点漂到南京，12 个"地区景点"全是夫子庙/明孝陵）。
+  // 只有 types-only 的地区列表检索（无 keywords）必须落到具体城市，见 gaodeRegionScenics。
   const cityIsProvince = !!rawCity && PROV_EXACT.test(rawCity.replace(/省$/g, ""));
-  const cityPart = cityIsProvince ? "" : `&city=${encodeURIComponent(rawCity)}&citylimit=true`;
+  const cityPart = rawCity ? `&city=${encodeURIComponent(rawCity)}&citylimit=true` : "";
   const overlaps = (pois: any[]) => pois.filter((p: any) => p.name?.includes(name) || name.includes(p.name || ""));
   const preferScenic = (pois: any[]) => {
     const s = pois.filter((p: any) => /风景名胜|旅游景点|名胜|景区|公园/.test(p.type || ""));
@@ -68,7 +80,9 @@ export async function gaode(name: string, destCity: string, bias?: { lng: number
   };
   let matched = overlaps(await query("风景名胜|旅游景点"));
   if (!matched.length) matched = overlaps(await query(null));
-  if (!matched.length && cityPart) {
+  // 无城市限制的全国兜底检索只对"市级地区"开放：裸省名再兜底等于给
+  // 漂移开洞（五台山事故路径就是"全国检索取到外省同名 POI"）。
+  if (!matched.length && cityPart && !cityIsProvince) {
     matched = overlaps(await query("风景名胜|旅游景点", false));
     if (!matched.length) matched = overlaps(await query(null, false));
   }
@@ -137,6 +151,33 @@ export async function gaodeRegionScenics(city: string, bias?: { lng: number; lat
     out.push(p);
   }
   return out;
+}
+
+/** 逆地理：坐标所在省/市名（高德 regeo，直辖市的 city 为空数组退回 province）。 */
+export async function regeoRegion(lng: number, lat: number): Promise<{ province: string; city: string } | null> {
+  const r = await fetch(`https://restapi.amap.com/v3/geocode/regeo?key=${GAODE_KEY}&location=${lng},${lat}`, { signal: AbortSignal.timeout(15000) });
+  if (!r.ok) return null;
+  const d = await r.json();
+  const comp = d.regeocode?.addressComponent;
+  if (!comp) return null;
+  const str = (v: unknown) => (typeof v === "string" ? v : "");
+  return { province: str(comp.province), city: str(comp.city) || str(comp.district) };
+}
+
+/**
+ * 目的地坐标是否落在填写的地区内（省级包含关系即可）。
+ * "山西" vs "山西省" / "内蒙古" vs "内蒙古自治区" 等后缀差异先剥离再互含。
+ */
+export function regionMatches(region: string, at: { province: string; city: string }): boolean {
+  const core = (v: string) => v.replace(/(省|市|自治区|特别行政区|壮族|回族|维吾尔|自治区)/g, "").trim();
+  const want = core(region);
+  if (!want) return true;
+  const prov = core(at.province);
+  const city = core(at.city);
+  if (!prov && !city) return true; // 逆地理拿不到信息时不误杀
+  if (prov && (want.includes(prov) || prov.includes(want))) return true;
+  if (city && (want.includes(city) || city.includes(want))) return true;
+  return false;
 }
 
 export { AMUSE_RE, FACILITY_RE };

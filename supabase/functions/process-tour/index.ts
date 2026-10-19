@@ -7,7 +7,7 @@ import { cors, deleteRows, json, postRows, setStatus } from "./http.ts";
 import { deepseek, mapLimit } from "./ai.ts";
 import { regeo } from "./gaode-validation.ts";
 import { gaodeNearbyCulturalPOIs, isDestinationUmbrella, JUNK_RE, semanticDedupLocations } from "./gaode-scan.ts";
-import { AMUSE_RE, FACILITY_RE, gaode, gaodeRegionScenics } from "./gaode-search.ts";
+import { AMUSE_RE, FACILITY_RE, gaode, gaodeRegionScenics, regeoRegion, regionMatches } from "./gaode-search.ts";
 import { haversineM } from "./geo.ts";
 import { corePoolDiagnostics, filterRouteStops, isRouteStopEligible, mapSectionsToDbIds, orderStopsGeographic, planRoutes as planRoutesModule } from "./routes.ts";
 import { applyTrailGroups, getPrimaryTrailScenicName, getTrailNotes, injectTrailSeeds, orderStopsByTrail } from "./trail-routes.ts";
@@ -163,7 +163,19 @@ Deno.serve(async (req: Request) => {
 
     // 目的地坐标：作所有高德搜索的 location 位置偏置。目的地地区是裸省名（如"四川"）时，
     // 没有偏置会把"祖师殿/朝阳洞/老君阁"等常见名解析到全省同名错点。
-    const destLoc = destName ? await gaode(destName, destRegion).catch(() => null) : null;
+    const warnings_early: string[] = [];
+    let destLoc = destName ? await gaode(destName, destRegion).catch(() => null) : null;
+    // v99.1：锚点区域校验。坐标逆地理出的省市必须与填写的地区匹配，
+    // 否则视为检索漂移直接弃用（五台山线上事故：全国检索把"五台山"
+    // 解析到南京附近，地区合并/半径闸/子景点扫描被逐级带穿）。
+    if (destLoc && destRegion) {
+      const at = await regeoRegion(destLoc.lng, destLoc.lat).catch(() => null);
+      if (at && !regionMatches(destRegion, at)) {
+        warnings_early.push(`📍 目的地坐标(${destLoc.lng.toFixed(3)},${destLoc.lat.toFixed(3)})位于${at.province}${at.city}，与填写地区「${destRegion}」不符，已弃用该锚点`);
+        destLoc = null;
+      }
+    }
+
 
     // 副标题：用户创建导览时没填 → AI 生成（短输出、与提取并行，不占关键路径）
     const subtitlePromise = (tour.subtitle || "").trim() ? Promise.resolve(null)
@@ -172,7 +184,7 @@ Deno.serve(async (req: Request) => {
           { role: "user", content: `为「${destName}（${destRegion}）」的导览生成一句简短有文学意境的副标题（15-30字，用于首页卡片展示）。${tour.source?.title ? `源材料来自《${tour.source.title}》${tour.source.author ? `（${tour.source.author}）` : ""}` : ""}\n参考风格：\n- "跟着语文课本，登天都峰看奇石云海"\n- "循秦始皇足迹，登岱顶祭天封禅"\n- "天上白玉京 · 云上三清看奇峰"\n要求：点出目的地最核心的看点或文化记忆点，文学味浓，不要罗列地名，不要加书名号。JSON: {"subtitle":"一句话副标题"}` },
         ]).then((r: any) => String(r?.subtitle || "").trim()).catch(() => null);
 
-    const warnings: string[] = [];
+    const warnings: string[] = [...warnings_early];
     // 2. Extract locations（v70：temperature 0.7→0.2，提取/路线要稳定性；源文本 6000→12000 字）
     // v96.4：这是管线里最后一个没有截断兜底的 AI 调用。"宁可多列"的指令偶发让
     // 模型输出上百个条目、超 8192 token（青城山重跑实测 status=error，
@@ -456,7 +468,10 @@ Deno.serve(async (req: Request) => {
     }
     try {
       // 只扫描非核心伞形/景区锚点（核心景区子景点已由 AI 提取覆盖；省 API 调用与时间）
-      const scanAnchors = anchors.filter(a => a.weight >= 4 && !(destName && a.scenicName.includes(destName)));
+      // v99.1：扫描锚点必须离目的地可信锚点/候选质心 ≤40km（五台山实测：
+      // 漂移到南京的"地区景点"被建成锚点后，子景点扫描又在南京拉回 2 个点）。
+      const scanAnchors = anchors.filter(a => a.weight >= 4 && !(destName && a.scenicName.includes(destName)))
+        .filter(a => !destLoc || haversineM(a, destLoc) <= 40000);
       const aiKnown = new Set(aiAttractions);
       const subs: any[] = [];
       for (const a of scanAnchors.slice(0, 3)) {
@@ -579,8 +594,14 @@ Deno.serve(async (req: Request) => {
     // 候选非地区点已聚成明显一团而 destLoc 距其质心 >40km 时，判 destLoc 不可信，
     // 改用候选质心作路线锚（候选点全部经过地区坐标校验，它们在哪，目的地就在哪）。
     const candCore = locs.filter(l => !(l.tags || []).includes("地区景点") && l.lat && l.lng);
-    const candC = candCore.reduce((acc, l) => ({ lng: acc.lng + l.lng, lat: acc.lat + l.lat }), { lng: 0, lat: 0 });
-    if (candCore.length) { candC.lng /= candCore.length; candC.lat /= candCore.length; }
+    // v99.1：候选质心用"中位数聚类"而非简单平均——五台山实测 2 个被污染的
+    // 南京子点就把平均质心拖离真山 120km，让 40km 可信性闸形同虚设。
+    const medianOf = (vals: number[]) => { const s = vals.slice().sort((a, b) => a - b); return s[Math.floor(s.length / 2)]; };
+    const medC = { lng: medianOf(candCore.map(l => l.lng)), lat: medianOf(candCore.map(l => l.lat)) };
+    const tightCore = candCore.filter(l => haversineM(medC, l) <= 20000);
+    const candPool = tightCore.length >= 3 ? tightCore : candCore;
+    const candC = candPool.reduce((acc, l) => ({ lng: acc.lng + l.lng, lat: acc.lat + l.lat }), { lng: 0, lat: 0 });
+    if (candPool.length) { candC.lng /= candPool.length; candC.lat /= candPool.length; }
     const destLocUntrusted = !!destLoc && candCore.length >= 4 && haversineM(destLoc, candC) > 40000;
     const routeLoc = destLocUntrusted ? candC : destLoc;
     if (destLocUntrusted) warnings.push(`📍 目的地坐标离候选地点质心 ${Math.round(haversineM(destLoc!, candC) / 1000)}km，判定解析到了行政市而非目的地本体，动线锚改用候选质心`);

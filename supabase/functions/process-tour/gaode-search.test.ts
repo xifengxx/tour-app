@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { gaode } from "./gaode-search.ts";
+import { gaode, regionMatches } from "./gaode-search.ts";
 import { cleanName } from "./gaode-scan.ts";
 import { FACILITY_RE } from "./gaode-search.ts";
 
@@ -41,5 +41,17 @@ describe("gaode 限流处理", () => {
     await vi.advanceTimersByTimeAsync(20000);
     expect(await pending).toBeNull();
     expect(fetchMock).toHaveBeenCalledTimes(9); // 1 geocode + 4 retries × 2 queries
+  });
+});
+
+describe("regionMatches 区域一致性校验（v99.1 五台山漂移回归）", () => {
+  it("省市字段与填写地区互含才算匹配", () => {
+    expect(regionMatches("山西", { province: "山西省", city: "忻州市" })).toBe(true);
+    expect(regionMatches("山西", { province: "江苏省", city: "南京市" })).toBe(false);
+    expect(regionMatches("山西大同", { province: "山西省", city: "大同市" })).toBe(true);
+    expect(regionMatches("湖北武汉", { province: "湖北省", city: "武汉市" })).toBe(true);
+    expect(regionMatches("四川", { province: "四川省", city: "成都市" })).toBe(true);
+    expect(regionMatches("", { province: "任意", city: "任意" })).toBe(true);
+    expect(regionMatches("内蒙古", { province: "内蒙古自治区", city: "呼和浩特市" })).toBe(true);
   });
 });
