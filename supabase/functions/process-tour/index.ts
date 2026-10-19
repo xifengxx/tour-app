@@ -12,6 +12,7 @@ import { haversineM } from "./geo.ts";
 import { corePoolDiagnostics, filterRouteStops, isRouteStopEligible, mapSectionsToDbIds, orderStopsGeographic, planRoutes as planRoutesModule } from "./routes.ts";
 import { applyTrailGroups, getPrimaryTrailScenicName, getTrailNotes, injectTrailSeeds, orderStopsByTrail } from "./trail-routes.ts";
 import { loadOrResearchRouteKnowledge } from "./route-knowledge.ts";
+import { buildRoutePath } from "./route-paths.ts";
 import { capabilitiesFor, TIER_LABEL } from "./knowledge-tier.ts";
 import { qualityGaps } from "./knowledge-quality.ts";
 import { blockingIssues, buildRouteLegs, estimateRouteDuration, planGraphStops, repairPlanStops, repairTransportHours, routeGraphIssues, routeGraphNotes, routeLegsText } from "./route-graph.ts";
@@ -953,16 +954,35 @@ Deno.serve(async (req: Request) => {
     ].map(ly => ({ ...ly, tour_id: tourId })));
     // v86a: 路线海拔剖面。每条路线一次 OpenTopoData 采样，失败静默跳过。
     const routeProfiles = new Map<string, any[]>();
-    await Promise.all(routes.map(async (route) => {
+    // v99：真实路径 + 海拔剖面共用同一几何。路线沿高德步行/驾车路径成线
+    // （索道段与规划失败段回退直线并计数上报），剖面沿真实路径采样，
+    // 里程即真实步道/公路里程——此前"点间直线"把地图和剖面一起带假。
+    // 并发 2：单条路线内部逐段串行，避免高德 direction QPS 风暴。
+    await mapLimit(routes, 2, async (route: any) => {
       const stopCoords = (route.stops || [])
         .map((sid: string) => { const l = dbLocs.find((x: any) => x.id === sid); return l?.lat && l?.lng ? { lng: l.lng, lat: l.lat } : null; })
         .filter(Boolean);
-      if (stopCoords.length >= 2) {
-        const prof = await elevationProfile(stopCoords as { lng: number; lat: number }[], 80);
-        if (prof) routeProfiles.set(route.id, prof);
+      if (stopCoords.length < 2) return;
+      let pathModel: Awaited<ReturnType<typeof buildRoutePath>> = null;
+      try {
+        pathModel = await buildRoutePath(
+          stopCoords.map((c: any) => [c.lng, c.lat] as [number, number]),
+          (route.legs || []).map((l: any) => l.mode),
+        );
+      } catch { /* 路径规划整体异常 → 直线剖面兜底 */ }
+      if (pathModel && pathModel.planned > 0) {
+        route.path = pathModel;
+        warnings.push(pathModel.fellBack
+          ? `🛣 路线"${route.day_label}"真实路径覆盖 ${pathModel.planned}/${pathModel.planned + pathModel.fellBack} 段，${pathModel.fellBack} 段回退直线（索道或规划失败）`
+          : `🛣 路线"${route.day_label}"全程按高德真实路径成线（${pathModel.totalKm} km）`);
       }
-    }));
-    await postRows("routes", routes.map(r => ({ id: r.id, tour_id: tourId, day_label: r.day_label, title: r.title, stops: r.stops, sections: r.sections || [], legs: r.legs || [], prof: routeProfiles.get(r.id) || [], narrative: r.narrative, sort_order: r.sort_order })));
+      const profileCoords = pathModel && pathModel.geom.length >= 2
+        ? pathModel.geom.map(([lng, lat]: any) => ({ lng, lat }))
+        : stopCoords;
+      const prof = await elevationProfile(profileCoords as { lng: number; lat: number }[], pathModel ? 100 : 80);
+      if (prof) routeProfiles.set(route.id, prof);
+    });
+    await postRows("routes", routes.map(r => ({ id: r.id, tour_id: tourId, day_label: r.day_label, title: r.title, stops: r.stops, sections: r.sections || [], legs: r.legs || [], path: r.path || null, prof: routeProfiles.get(r.id) || [], narrative: r.narrative, sort_order: r.sort_order })));
 
     // Quality report
     const report = {

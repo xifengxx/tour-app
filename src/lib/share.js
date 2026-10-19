@@ -10,7 +10,9 @@
  * @param {string|undefined} tourId 路由参数
  * @param {object} [tour] 导览对象（兜底读取 meta.tourId / id）
  */
-export function buildShareUrl(origin, tourId, tour) {
+export function buildShareUrl(origin, tourId, tour, routeId) {
   const id = tourId || tour?.meta?.tourId || tour?.id;
-  return `${origin}/tour/${id}`;
+  // v99：分享可直达某条路线（借鉴 trail-planet 的 #路线id 深链），
+  // TourView 挂载时解析 #r= 并选中对应路线。
+  return `${origin}/tour/${id}${routeId ? `#r=${encodeURIComponent(routeId)}` : ''}`;
 }

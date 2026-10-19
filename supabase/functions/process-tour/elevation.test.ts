@@ -87,3 +87,16 @@ describe("elevationProfile", () => {
     expect(result).toBeNull();
   });
 });
+
+// v99：数据源与坐标纪律
+import { gcj02ToWgs84 } from "./elevation.ts";
+
+describe("GCJ-02 → WGS-84（v99 坐标纪律）", () => {
+  it("中国境内产生 100-800m 量级偏移，境外原样返回", () => {
+    const [wLng, wLat] = gcj02ToWgs84(116.397, 39.909); // 北京
+    const dKm = Math.hypot((116.397 - wLng) * 85, (39.909 - wLat) * 111);
+    expect(dKm).toBeGreaterThan(0.3);
+    expect(dKm).toBeLessThan(1.2);
+    expect(gcj02ToWgs84(-73.98, 40.75)).toEqual([-73.98, 40.75]); // 纽约
+  });
+});

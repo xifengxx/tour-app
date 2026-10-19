@@ -1,8 +1,12 @@
 // v86a: OpenTopoData（免费、无 key、JSON 响应，单次 ≤100 点）。
-// etopo1 全球覆盖（分辨率约 1.8 km），对路线剖面足够。
-// 失败静默返回 null——海拔是增强信息，不能因它阻断导览生成。
+// v99：主源换 srtm30m（约 30m 网格）——借鉴 map-motion 的海拔工艺。
+// etopo1 的 1.8km 网格会把"2900m→4506m 爬升 5km"的雪山剖面抹成近似直线，
+// 累计爬升严重失真（玉龙雪山实测）；SRTM 覆盖中国全部国土。
+// srtm30m 失败（限流/无覆盖）时回退 etopo1；全失败静默返回 null——
+// 海拔是增强信息，不能因它阻断导览生成。
 
-const OTD_URL = "https://api.opentopodata.org/v1/etopo1";
+const OTD_BASE = "https://api.opentopodata.org/v1";
+const OTD_DATASETS = ["srtm30m", "etopo1"];
 const MAX_POINTS = 100;
 
 export type ElevationPoint = { km: number; m: number };
@@ -52,12 +56,39 @@ export function interpolateStops(
   return points;
 }
 
-async function fetchElevations(points: { lng: number; lat: number }[]): Promise<number[]> {
-  const locations = points.map((p) => `${p.lat.toFixed(5)},${p.lng.toFixed(5)}`).join("|");
-  const res = await fetch(`${OTD_URL}?locations=${encodeURIComponent(locations)}`, {
+const PI = Math.PI;
+const DATUM_A = 6378245.0;
+const DATUM_EE = 0.00669342162296594;
+const tfLat = (x: number, y: number) => -100 + 2 * x + 3 * y + 0.2 * y * y + 0.1 * x * y + 0.2 * Math.sqrt(Math.abs(x));
+const tfLng = (x: number, y: number) => 300 + x + 2 * y + 0.1 * x * x + 0.1 * x * y + 0.1 * Math.sqrt(Math.abs(x));
+/**
+ * GCJ-02（高德坐标）→ WGS-84（GPS/DEM 坐标）。
+ * OpenTopoData/AWS 高程网格按 WGS-84 索引；中国境内 GCJ 偏移约 100-700m，
+ * 在 30m 分辨率 + 陡坡地形上会把海拔读错几十到上百米。
+ * （借鉴 map-motion 的坐标纪律："全程 GCJ-02，查海拔时转回 WGS-84"。）
+ */
+export function gcj02ToWgs84(lng: number, lat: number): [number, number] {
+  if (!(lng > 72.004 && lng < 137.8347 && lat > 0.8293 && lat < 55.8271)) return [lng, lat];
+  let dLat = tfLat(lng - 105, lat - 35);
+  let dLng = tfLng(lng - 105, lat - 35);
+  const radLat = (lat / 180) * PI;
+  let magic = Math.sin(radLat);
+  magic = 1 - DATUM_EE * magic * magic;
+  const sqrtMagic = Math.sqrt(magic);
+  dLat = (dLat * 180) / (((DATUM_A * (1 - DATUM_EE)) / (magic * sqrtMagic)) * PI);
+  dLng = (dLng * 180) / ((DATUM_A / sqrtMagic) * Math.cos(radLat) * PI);
+  return [lng - dLng, lat - dLat];
+}
+
+async function fetchElevations(points: { lng: number; lat: number }[], dataset: string): Promise<number[]> {
+  const locations = points.map((p) => {
+    const [wLng, wLat] = gcj02ToWgs84(p.lng, p.lat);
+    return `${wLat.toFixed(5)},${wLng.toFixed(5)}`;
+  }).join("|");
+  const res = await fetch(`${OTD_BASE}/${dataset}?locations=${encodeURIComponent(locations)}`, {
     signal: AbortSignal.timeout(15000),
   });
-  if (!res.ok) throw new Error(`OpenTopoData HTTP ${res.status}`);
+  if (!res.ok) throw new Error(`OpenTopoData[${dataset}] HTTP ${res.status}`);
   const data = await res.json();
   if (data.status !== "OK") throw new Error(`OpenTopoData: ${data.status}`);
   return (data.results || []).map((r: any) => Math.round(Number(r.elevation) || 0));
@@ -78,10 +109,18 @@ export async function elevationProfile(
     for (let i = 0; i < interpolated.length; i += MAX_POINTS) {
       chunks.push(interpolated.slice(i, i + MAX_POINTS));
     }
-    const results = await Promise.all(chunks.map(fetchElevations));
-    const elevations = results.flat();
-    if (elevations.length !== interpolated.length) return null;
-    return interpolated.map((p, i) => ({ km: p.km, m: elevations[i] }));
+    for (const dataset of OTD_DATASETS) {
+      try {
+        const results = await Promise.all(chunks.map((c) => fetchElevations(c, dataset)));
+        const elevations = results.flat();
+        if (elevations.length !== interpolated.length) throw new Error("结果数量不匹配");
+        if (dataset !== OTD_DATASETS[0]) console.warn(`elevationProfile 回退到 ${dataset}`);
+        return interpolated.map((p, i) => ({ km: p.km, m: elevations[i] }));
+      } catch (e: any) {
+        console.warn(`elevationProfile[${dataset}] failed: ${e?.message || e}`);
+      }
+    }
+    return null;
   } catch (e: any) {
     console.warn(`elevationProfile failed: ${e?.message || e}`);
     return null;

@@ -99,6 +99,10 @@ const stopKmInRoute = (route, stopId, locById) => {
   if (!route || !stopId) return 0;
   const idx = route.stops.indexOf(stopId);
   if (idx <= 0) return 0;
+  // 真实路径的沿线里程优先（与剖面同一坐标系）；旧数据回退站点直连累计。
+  if (Array.isArray(route.path?.stopKm) && Number.isFinite(route.path.stopKm[idx])) {
+    return route.path.stopKm[idx];
+  }
   const stopLocs = route.stops.map(id => locById[id]).filter(Boolean);
   if (stopLocs.length < 2) return 0;
   let km = 0;
@@ -169,6 +173,25 @@ export default function TourView() {
     };
     requestAnimationFrame(tick);
   }, [cancelRouteProgressAnimation]);
+
+  // v99：#r=<routeId> 深链——分享链接直达某条路线。
+  // 折线注册在地图异步初始化完成后才可用，用轻量轮询等待就绪（5s 超时放弃）。
+  useEffect(() => {
+    const m = /^#r=([^&]+)$/.exec(window.location.hash || '');
+    if (!m || !tour?.routes?.length) return;
+    const target = tour.routes.find(r => r.id === decodeURIComponent(m[1]));
+    if (!target) return;
+    let tries = 0;
+    const iv = setInterval(() => {
+      tries += 1;
+      if (routePolylinesRef.current[target.id]) {
+        clearInterval(iv);
+        if (currentRouteIdRef.current !== target.id) selectRouteRef.current?.(target);
+      } else if (tries > 25) clearInterval(iv);
+    }, 200);
+    return () => clearInterval(iv);
+  }, [tour]);
+  const selectRouteRef = useRef(null);
 
   // 记录导览第一个内容层 id：泰山等自定义层(无 novel)时选中地点默认落到第一个层
   useEffect(() => {
@@ -360,10 +383,14 @@ export default function TourView() {
       // Draw routes
       (tour.routes || []).forEach((route, ri) => {
         if (route.id === 'extra') return;
-        const path = route.stops.map(id => {
-          const l = locByIdRef.current[id];
-          return l ? [l.lng, l.lat] : null;
-        }).filter(Boolean);
+        // v99：优先用服务端规划的高德真实路径（routes.path.geom），
+        // 旧数据/回退时才用站点直连。
+        const path = (Array.isArray(route.path?.geom) && route.path.geom.length > 1)
+          ? route.path.geom
+          : route.stops.map(id => {
+              const l = locByIdRef.current[id];
+              return l ? [l.lng, l.lat] : null;
+            }).filter(Boolean);
         if (path.length > 1) {
           const poly = new window.AMap.Polyline({
             path, map,
@@ -443,6 +470,10 @@ export default function TourView() {
 
     const newId = currentRouteId === route.id ? null : route.id;
     setCurrentRouteId(newId);
+    // 深链同步：选中路线写入 #r=，取消选中还原干净地址（分享/刷新都落在同一路线）
+    try {
+      window.history.replaceState(null, '', newId ? `${window.location.pathname}#r=${encodeURIComponent(newId)}` : window.location.pathname);
+    } catch { /* 忽略沙箱环境下的 history 异常 */ }
     const firstStop = newId ? locByIdRef.current[route.stops[0]] : null;
     setCurrentLoc(firstStop);
     if (firstStop) { setCurrentLayer(firstLayerIdRef.current); setShowCard(true); }
@@ -484,6 +515,8 @@ export default function TourView() {
       if (mapInstance.current) mapInstance.current.setFitView();
     }
   }, [currentRouteId, animateRouteProgress]);
+
+  selectRouteRef.current = selectRoute;
 
   // ── Computed ──
   const filteredLocations = currentRouteId
@@ -669,7 +702,7 @@ export default function TourView() {
         />
       )}
 
-      {showShare && <ShareModal tour={tour} tourId={tourId} onClose={() => setShowShare(false)} />}
+      {showShare && <ShareModal tour={tour} tourId={tourId} onClose={() => setShowShare(false)} routeId={currentRouteId} />}
 
       {showComments && <CommentsModal tourId={tourId} onClose={() => setShowComments(false)} />}
 

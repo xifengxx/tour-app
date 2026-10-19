@@ -4,14 +4,14 @@ import { drawTourPoster } from '../lib/poster';
 import { buildShareUrl } from '../lib/share';
 import { Check, Download, Link2, X } from 'lucide-react';
 
-export default function ShareModal({ tour, tourId, onClose }) {
+export default function ShareModal({ tour, tourId, onClose, routeId }) {
   const qrRef = useRef(null);
   const posterRef = useRef(null);
   const [copied, setCopied] = useState(false);
   const [saved, setSaved] = useState(false);
 
   // tourId 用路由参数（静态导览的 tour.id 可能为 undefined，meta.tourId 才是 id）
-  const shareUrl = buildShareUrl(window.location.origin, tourId, tour);
+  const shareUrl = buildShareUrl(window.location.origin, tourId, tour, routeId);
   const title = tour.meta?.title || tour.title || '';
 
   // 打开时绘制海报预览
