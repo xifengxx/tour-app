@@ -1214,3 +1214,32 @@ amap.js 的 JS key/安全密钥保留硬编码缺省——它们按高德模式�
 并重新部署两个函数。git 历史里的旧值无法靠删除失效，轮换是唯一解。
 
 268 tests passed；deno check 干净；process-tour v120 / route-research v7 已部署。
+
+## v99：借鉴三仓库第一批（真实路径 + SRTM30m + 坐标纪律 + 路线深链）
+
+对 SpaceZephyr 三仓库（map-motion / travel-vlog / trail-planet）的研究报告结论：
+它们不做路线规划（路线是输入），价值在**地图表现力、地理数据工艺、内容产品化**三层。
+第一批落地其中零架构风险的三项：
+
+1. **真实路径成线**（`route-paths.ts`，学 map-motion"路线是高德真实路径"）：
+   legs 的 walk→步行 API、shuttle/car/other→驾车 API、cableway→直线；
+   `routes.path = {geom, stopKm, totalKm, planned, fellBack}` 落库（迁移已执行）。
+   此前地图是"景点连直线"、剖面里程是直线距离（系统性低估 20-60%）。
+   玉龙雪山实测：1日线真实步道里程 67.2km（直线版约 40km），
+   8/9 段真实路径、索道段正确回退并计数上报（禁止静默降级）。
+   Douglas-Peucker 抽稀（20m 容差）：5982 点/130KB → 809 点/18KB。
+2. **海拔数据升级**（`elevation.ts`）：etopo1（1.8km 网格，把雪山剖面抹成直线）
+   → **srtm30m**（30m），失败自动回退 etopo1；剖面改为沿真实路径采样。
+3. **坐标纪律**（学 map-motion"全程 GCJ-02，查海拔时转回 WGS-84"）：
+   `gcj02ToWgs84()`——30m 网格上 GCJ 数百米偏移会把陡坡海拔读错几十米。
+4. **#r=\<routeId\> 深链**（学 trail-planet）：选中路线同步 hash、分享链接直达该路线、
+   带 hash 打开自动等折线就绪后选中（轮询 5s 超时）。
+
+发现并诚实记录：报告里 A1/A2 预想要做的"剖面看点标注/里程插值"其实**已经存在**
+（ElevationProfile 的 stopPositions/routePathAtKm 弧长插值），本轮真正的增量是
+把三者统一到**同一套真实几何**上。275 tests passed；lint 19 基线；已部署。
+
+### 遗留（第二批候选）
+- 网页内"路线回放模式"（trail-planet 的相机跟随 + travel-vlog 情绪配方 + 文学卡弹出）
+- 存量导览的 path 回填（批量 --all 重跑，建议低峰期执行）
+- 回顾视频离线导出（map-motion 管线复用）、日照金山光线推演
