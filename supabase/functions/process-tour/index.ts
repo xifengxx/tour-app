@@ -574,15 +574,22 @@ Deno.serve(async (req: Request) => {
     // 降级点打"地区景点"标签 → 自动退出 1 日池、进入主题游"周边景点"分区——
     // 正是用户定义的产品形态：主题游=就近独立景区的分组。
     if ((routeKnowledge.trails || []).length) {
-      const trailKeys: string[] = [];
-      for (const tr of routeKnowledge.trails) {
-        for (const st of (tr as any).stops || []) {
-          for (const alias of [st.name, ...(st.aliases || [])]) {
-            const k = normalizeName(alias);
-            if (k) trailKeys.push(k);
-          }
-        }
+      // 每条步道归属一个片区（zoneId/scenicName），点按名称包含关系挂到步道。
+      const trailInfos = (routeKnowledge.trails as any[]).map((tr) => ({
+        zone: String(tr.zoneId || tr.scenicName || tr.id || ""),
+        keys: ((tr.stops || []) as any[]).flatMap((st) => [st.name, ...(st.aliases || [])]).map(normalizeName).filter(Boolean) as string[],
+      }));
+      const locZone = new Map<string, string>();
+      for (const l of locs) {
+        const k = normalizeName(l.name);
+        if (!k) continue;
+        const hit = trailInfos.find((ti) => ti.keys.some((tk) => tk === k || tk.includes(k) || k.includes(tk)));
+        if (hit) locZone.set(String(l.id), hit.zone);
       }
+      // 核心片区 = 挂点最多的片区（庐山=牯岭核心区 7 点 vs 山南文化区 2 点）。
+      const zoneCount = new Map<string, number>();
+      for (const z of locZone.values()) zoneCount.set(z, (zoneCount.get(z) || 0) + 1);
+      const coreZone = [...zoneCount.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || "";
       const withEle = locs.filter((l: any) => !(l.tags || []).includes("地区景点") && parseElevationM(l.elevation) != null);
       if (withEle.length >= 4) {
         const elevs = withEle.map((l: any) => parseElevationM(l.elevation) as number).sort((a, b) => a - b);
@@ -590,14 +597,15 @@ Deno.serve(async (req: Request) => {
         const demoted: string[] = [];
         for (const l of withEle) {
           const e = parseElevationM(l.elevation) as number;
-          const k = normalizeName(l.name);
-          const inTrail = !!k && trailKeys.some((tk) => tk === k || tk.includes(k) || k.includes(tk));
-          if (!inTrail && Math.abs(e - medEle) >= 800) {
+          // 只有核心片区的步道成员才受保护；非核心片区（如"山南文化区"）的
+          // 山脚点不豁免——否则秀峰永远留在山顶一日池里（v99.6 庐山实测）。
+          const protectedByCore = !!coreZone && locZone.get(String(l.id)) === coreZone;
+          if (!protectedByCore && Math.abs(e - medEle) >= 800) {
             l.tags = [...(l.tags || []), "地区景点"];
             demoted.push(String(l.name));
           }
         }
-        if (demoted.length) warnings.push(`⛰️ 降级 ${demoted.length} 个与主台地高差≥800m 且不属于步道体系的独立景区到主题游：${demoted.join("/")}`);
+        if (demoted.length) warnings.push(`⛰️ 降级 ${demoted.length} 个高差≥800m 且不属于核心片区「${coreZone || "?"}」步道的独立景区到主题游：${demoted.join("/")}`);
       }
     }
     const semanticMerged = semanticDedupLocations(locs, destName, [destName, ...(routeKnowledge.aliases || [])]);
@@ -886,6 +894,12 @@ Deno.serve(async (req: Request) => {
             } else {
               stops = resolved; // 文学巡礼线：AI 自由选点
               warnings.push(`📖 路线"${plan.label}"AI 自由选点 resolve ${resolved.length} 站（raw ${rawStops.length} 站）`);
+              // v99.6：自由选点容量上限（嵩山实测 15 站 → 12.8 小时被容量闸阻断）。
+              // 按 AI 的叙事顺序保留前 12 站，截断也写进报告，不静默。
+              if (stops.length > 12) {
+                warnings.push(`📖 路线"${plan.label}"自由选点 ${stops.length} 站超容量，按叙事顺序保留前 12 站`);
+                stops = stops.slice(0, 12);
+              }
               if (!stops.length) stops = coreFallbackStops(plan.label, "AI 选点无法匹配");
             }
             // v88：统一站点资格闸。文学巡礼线由 AI 自由选点，绕过了 planRoutes 的
@@ -978,6 +992,7 @@ Deno.serve(async (req: Request) => {
         // v97：文学巡礼线是自由选点+叙事排序（沿课本情节走），
         // 步道回退/跨区隔断对它只作提示，不作发布阻断。
         allowNarrativeOrder: route.day_label === "文学巡礼线",
+        allowSectionGroups: route.day_label === "主题游",
         dayLabel: route.day_label,
         // 主题游是 N 个可连着玩的景区，按 N 日计容量；
         // 按 1 日算会把正常的分组主题游全判成超容量（v93）。

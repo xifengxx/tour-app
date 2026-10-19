@@ -196,6 +196,27 @@ describe("route graph", () => {
     expect(order[order.length - 1]).toBe("山脚寺"); // 挂到骨架末尾，绝不插在 山顶A→山顶B 中间
   });
 
+  it("主题游的分组形态不误判跨区隔断（v99.6 庐山回归）", () => {
+    // 主题游站点 = 各景区分组的拼接，不存在连续动线；
+    // 同一徒步区出现在两个分组之间是结构使然，不该 blocking。
+    const secK: DestinationRouteKnowledge = {
+      destinationName: "示例三山", aliases: [],
+      zones: [{ id: "z1", name: "山顶区" }, { id: "z2", name: "山南区" }],
+      trails: [
+        { id: "t1", zoneId: "z1", stops: [{ name: "A" }, { name: "B" }] },
+        { id: "t2", zoneId: "z2", stops: [{ name: "C" }, { name: "D" }] },
+      ],
+      edges: [], source: "curated", confidence: 0.9,
+    };
+    const secLocs = [loc("A", "A", 116.0, 39.0), loc("B", "B", 116.01, 39.01), loc("C", "C", 116.1, 39.05), loc("D", "D", 116.11, 39.06)];
+    const interleaved = ["A", "C", "B", "D"]; // z1 被 z2 隔断
+    const plain = routeGraphIssues(interleaved, secLocs, secK);
+    expect(plain.some(i => i.type === "zone-interleaved" && i.level === "blocking")).toBe(true);
+    const theme = routeGraphIssues(interleaved, secLocs, secK, { allowSectionGroups: true, allowLongTransfers: true });
+    expect(theme.some(i => i.type === "zone-interleaved" && i.level === "advisory")).toBe(true);
+    expect(theme.some(i => i.level === "blocking" && i.type === "zone-interleaved")).toBe(false);
+  });
+
   it("文学巡礼线的叙事排序不触发发布阻断（v97）", () => {
     // 迎客松(7)→天都峰(3)→莲花峰(9)：对玉屏步道是回退，但对沿课本情节走的
     // 文学巡礼线这是产品设定。物理类检查仍应工作。

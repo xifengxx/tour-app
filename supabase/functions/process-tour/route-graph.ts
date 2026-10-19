@@ -81,6 +81,8 @@ export type RouteGraphOptions = {
    * 物理类检查（长距离衔接标注、每日容量）保持 blocking。
    */
   allowNarrativeOrder?: boolean;
+  /** 主题游专用：站点数组是"按景区分组"的拼接，不存在连续动线，隔断类检查降 advisory。 */
+  allowSectionGroups?: boolean;
   longTransferM?: number;
   dayLabel?: string;
   maxDailyHours?: number;
@@ -714,7 +716,8 @@ export function routeGraphIssues(
     if (previous !== zone && firstSeen.get(zone)! < index - 0) {
       issues.push({
         type: "zone-interleaved",
-        level: options.allowNarrativeOrder ? "advisory" : "blocking",
+        // 主题游是"若干景区的分组"而非连续动线，隔断检查对它没有对象（v99.6 庐山实测误拦）。
+        level: options.allowNarrativeOrder || options.allowSectionGroups ? "advisory" : "blocking",
         message: `「${zone}」被其他徒步区隔断，存在跨区往返${options.allowNarrativeOrder ? "（文学/叙事线路按情节排序，仅供参考）" : ""}`,
       });
     }
