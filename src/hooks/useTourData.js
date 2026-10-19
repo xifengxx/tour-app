@@ -96,6 +96,10 @@ export function normalizeTour(row) {
     title: r.title,
     stops: r.stops,
     legs: r.legs || [],
+    // v99.7 根因修复：这里以前不透传 path，管线写库的真实路径在
+    // normalize 这一步被整层丢弃——所有数据库导览（含一日精华游）在
+    // 地图上永远退回点间直线。用户抽查"一日精华游没有贴地线"的真凶。
+    path: r.path && Array.isArray(r.path.geom) && r.path.geom.length > 1 ? r.path : null,
     // v93：主题游分区（主题 → 景区 → 景区内游览点）。线性路线为空数组。
     sections: (r.sections || []).map(sec => ({
       key: sec?.key || String(sec?.name || ''),
