@@ -295,6 +295,10 @@ export default function TourView() {
       return;
     }
     const { data, error } = await supabase.from('route_confirmations').insert({
+      // v99.9 根修：此前载荷缺 user_id——RLS 的 WITH CHECK 是
+      // user_id = auth.uid()，NULL 永远不等于任何 uuid，插入必被拒。
+      // 也就是说"创作者确认"自 v83 上线起从未成功写入过一条（0 行的真因）。
+      user_id: user.id,
       tour_id: tourId,
       route_id: route.id,
       route_label: [route.day, route.title].filter(Boolean).join(' · '),
