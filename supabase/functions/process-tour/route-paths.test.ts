@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { amapLegPath, buildRoutePath } from "./route-paths.ts";
+import { amapLegPath, buildRoutePath, simplifyPath } from "./route-paths.ts";
 
 const dirResponse = (points: string[][], meters: number) => ({
   ok: true,
@@ -45,7 +45,8 @@ describe("route-paths 真实路径拼接（v99）", () => {
     );
     expect(model!.planned).toBe(0);
     expect(model!.fellBack).toBe(2);
-    expect(model!.geom.length).toBe(3);
+    // 三点共线的直线回退会被 DP 抽稀成两点（里程仍按真实累计）
+    expect(model!.geom.length).toBe(2);
     // 直线回退里程≈真实球面距离（0.1° 经度 @27°N ≈ 9.92km，累计 19.84km）
     expect(Math.abs(model!.stopKm[1] - 9.92)).toBeLessThan(0.5);
     expect(Math.abs(model!.stopKm[2] - 29.76)).toBeLessThan(0.8);
@@ -66,5 +67,20 @@ describe("route-paths 真实路径拼接（v99）", () => {
     const leg = await amapLegPath("walking", [100.0, 27.0], [100.02, 27.01], fetchImpl, "k");
     expect(leg!.geom).toEqual([[100.0, 27.0], [100.01, 27.0], [100.02, 27.0], [100.02, 27.01]]);
     expect(leg!.km).toBe(0.8);
+  });
+});
+
+describe("Douglas-Peucker 抽稀（v99 payload 瘦身）", () => {
+  it("直线上的密集点被削到两端，弯折点保留", () => {
+    const straight: [number, number][] = Array.from({ length: 500 }, (_, i) => [100 + i * 0.0001, 27]);
+    expect(simplifyPath(straight).length).toBe(2);
+    const bent: [number, number][] = [
+      ...Array.from({ length: 200 }, (_, i) => [100 + i * 0.0002, 27] as [number, number]),
+      [100.04, 27.02],
+      ...Array.from({ length: 200 }, (_, i) => [100.04 + i * 0.0002, 27] as [number, number]),
+    ];
+    const out = simplifyPath(bent);
+    expect(out.length).toBeLessThan(20);
+    expect(out).toContainEqual([100.04, 27.02]);
   });
 });

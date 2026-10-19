@@ -71,6 +71,41 @@ export async function amapLegPath(
 }
 
 /**
+ * Douglas-Peucker 折线抽稀（借鉴 map-motion 同款算法）。
+ * 真实路径动辄数千点，JSONB 存储与前端渲染都不必要——20m 容差内
+ * 视觉上与原始路径无差别（地图缩放级别下人眼分辨不了）。
+ * 只在超长时启用，返回点数上限约 1500。
+ */
+export function simplifyPath(points: [number, number][], toleranceDeg = 0.0002): [number, number][] {
+  if (points.length < 3) return points;
+  const keep = new Array(points.length).fill(false);
+  keep[0] = keep[points.length - 1] = true;
+  const stack: [number, number][] = [[0, points.length - 1]];
+  const perpDist = (p: number[], a: number[], b: number[]) => {
+    const dx = b[0] - a[0];
+    const dy = b[1] - a[1];
+    const len2 = dx * dx + dy * dy;
+    if (len2 === 0) return Math.hypot(p[0] - a[0], p[1] - a[1]);
+    const t = Math.max(0, Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / len2));
+    return Math.hypot(p[0] - (a[0] + t * dx), p[1] - (a[1] + t * dy));
+  };
+  while (stack.length) {
+    const [first, last] = stack.pop()!;
+    let maxD = 0;
+    let index = -1;
+    for (let i = first + 1; i < last; i++) {
+      const d = perpDist(points[i], points[first], points[last]);
+      if (d > maxD) { maxD = d; index = i; }
+    }
+    if (maxD > toleranceDeg && index > 0) {
+      keep[index] = true;
+      stack.push([first, index], [index, last]);
+    }
+  }
+  return points.filter((_, i) => keep[i]);
+}
+
+/**
  * 沿站点顺序拼接真实路径。
  * @param coords 站点坐标（GCJ-02 [lng,lat]，长度 n）
  * @param modes  相邻站点间的交通方式（长度 n-1，来自 buildRouteLegs）
@@ -107,5 +142,6 @@ export async function buildRoutePath(
     }
     stopKm.push(Math.round(acc * 100) / 100);
   }
-  return { geom, stopKm, totalKm: stopKm[stopKm.length - 1], planned, fellBack };
+  // 抽稀在拼接完成后做；stopKm 基于原始真实里程累计，不受抽稀影响。
+  return { geom: simplifyPath(geom), stopKm, totalKm: stopKm[stopKm.length - 1], planned, fellBack };
 }
