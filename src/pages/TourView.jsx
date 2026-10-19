@@ -324,7 +324,13 @@ export default function TourView() {
       confidence: 0.85,
     }).select('id, route_id, stops, route_fingerprint, created_at').single();
     setConfirmingRouteId(null);
-    if (error) { setToast(getErrorMessage(error, '路线确认失败')); return; }
+    if (error) {
+      // RLS 拒绝几乎都是登录态过期（前端缓存的 user 还在，JWT 已不被接受）
+      setToast(String(error?.message || '').includes('row-level security')
+        ? '登录状态已过期，请退出后重新登录，再点一次确认'
+        : getErrorMessage(error, '路线确认失败'));
+      return;
+    }
     setRouteConfirmations(prev => [data, ...prev]);
     setToast('路线确认已沉淀，后续同目的地导览可复用');
   };
