@@ -49,7 +49,22 @@ export function isDestinationUmbrella(name: unknown, destination?: unknown): boo
   return false;
 }
 
-export function semanticDedupLocations(locs: any[], destination?: string): any[] {
+/**
+ * 目的地别名前缀剥离（v99.2）。恒山线上实测：子景点扫描带回"恒山天峰岭"，
+ * 与策展点"天峰岭"同岭异名——landmarkKey 只会剥完整目的地名"北岳恒山"，
+ * 剥不掉别名"恒山"，两个键不相等 → 同一座岭进了主题游两次 →
+ * 一对一图匹配后步道索引序列 1→3→9→8，被校验器判"顺序回退"阻断。
+ */
+function stripAliasPrefix(name: string, aliases: string[]): string {
+  const list = [...new Set(aliases.filter(a => a && a.length >= 2))].sort((a, b) => b.length - a.length);
+  for (const a of list) {
+    if (name.startsWith(a) && name.length > a.length + 1) return name.slice(a.length);
+  }
+  return name;
+}
+
+export function semanticDedupLocations(locs: any[], destination?: string, aliases: string[] = []): any[] {
+  const keyOf = (loc: any) => landmarkKey(stripAliasPrefix(String(loc.name || ""), aliases), destination);
   const semanticScore = (loc: any) => {
     const tags = loc.tags || [];
     return (loc.importance || 3)
@@ -61,12 +76,12 @@ export function semanticDedupLocations(locs: any[], destination?: string): any[]
     if (isDestinationUmbrella(loc.name, destination) && !(loc.tags || []).includes("景区泛指")) {
       loc.tags = [...(loc.tags || []), "景区泛指"];
     }
-    const key = landmarkKey(loc.name, destination);
+    const key = keyOf(loc);
     if (!key) {
       accepted.push(loc);
       continue;
     }
-    const existingIndex = accepted.findIndex(item => landmarkKey(item.name, destination) === key);
+    const existingIndex = accepted.findIndex(item => keyOf(item) === key);
     if (existingIndex < 0) {
       accepted.push(loc);
       continue;

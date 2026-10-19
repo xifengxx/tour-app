@@ -566,7 +566,7 @@ Deno.serve(async (req: Request) => {
     }
     // 所有来源（AI、高德、地区合并、子景点扫描、步道补全）都进入同一语义清洗层。
     // 泛指地点保留在地图数据里但带“景区泛指”标签；路线组成和补全层都不会把它当徒步站。
-    const semanticMerged = semanticDedupLocations(locs, destName);
+    const semanticMerged = semanticDedupLocations(locs, destName, [destName, ...(routeKnowledge.aliases || [])]);
     if (semanticMerged.length !== locs.length) {
       warnings.push(`♻️ 语义去重移除重复地标 ${locs.length - semanticMerged.length} 个`);
     }

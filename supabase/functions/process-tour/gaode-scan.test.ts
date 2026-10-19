@@ -26,3 +26,19 @@ describe("地名语义清洗", () => {
     expect(merged.find(l => l.id === "c")?.tags).toContain("景区泛指");
   });
 });
+
+describe("别名前缀语义去重（v99.2 恒山天峰岭回归）", () => {
+  it("『恒山天峰岭』与『天峰岭』合并为一条", () => {
+    const a = { id: "tf", name: "天峰岭", importance: 5, tags: [] };
+    const b = { id: "hstf", name: "恒山天峰岭", importance: 3, tags: ["子景点"] };
+    const out = semanticDedupLocations([a, b], "北岳恒山", ["北岳恒山", "恒山"]);
+    expect(out.length).toBe(1);
+    expect(out[0].name).toBe("天峰岭"); // 高重要性保留
+    expect(out[0].tags).toContain("子景点"); // 标签合并保留
+  });
+  it("无别名参数时行为不变", () => {
+    const a = { id: "tf", name: "天峰岭", importance: 5, tags: [] };
+    const b = { id: "hstf", name: "恒山天峰岭", importance: 3, tags: [] };
+    expect(semanticDedupLocations([a, b], "北岳恒山").length).toBe(2);
+  });
+});
