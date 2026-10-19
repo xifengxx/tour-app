@@ -13,6 +13,7 @@ import ElevationProfile from '../components/ElevationProfile';
 import ThemeSections from '../components/ThemeSections';
 import DetailModal from '../components/DetailModal';
 import ShareModal from '../components/ShareModal';
+import { LEGACY_SLUG_REDIRECTS } from '../lib/staticTours';
 import CommentsModal from '../components/CommentsModal';
 import { Share2, Check, Heart, MessageCircle, MapPinned } from 'lucide-react';
 import { extractMarkerLoc, findNearestLocation, buildPinIcon } from '../lib/mapUtils';
@@ -113,6 +114,11 @@ const stopKmInRoute = (route, stopId, locById) => {
 export default function TourView() {
   const { tourId } = useParams();
   const navigate = useNavigate();
+  // v99.9：旧静态演示导览的 slug 链接 → 301 到迁入后的数据库导览
+  useEffect(() => {
+    const target = LEGACY_SLUG_REDIRECTS[tourId];
+    if (target) navigate(`/tour/${target}`, { replace: true });
+  }, [tourId, navigate]);
   const { user } = useAuth();
   const mapRef = useRef(null);
   const mapInstance = useRef(null);
