@@ -85,13 +85,30 @@ async function fetchElevations(points: { lng: number; lat: number }[], dataset: 
     const [wLng, wLat] = gcj02ToWgs84(p.lng, p.lat);
     return `${wLat.toFixed(5)},${wLng.toFixed(5)}`;
   }).join("|");
-  const res = await fetch(`${OTD_BASE}/${dataset}?locations=${encodeURIComponent(locations)}`, {
-    signal: AbortSignal.timeout(15000),
-  });
-  if (!res.ok) throw new Error(`OpenTopoData[${dataset}] HTTP ${res.status}`);
-  const data = await res.json();
-  if (data.status !== "OK") throw new Error(`OpenTopoData: ${data.status}`);
-  return (data.results || []).map((r: any) => Math.round(Number(r.elevation) || 0));
+  // v99.8：OpenTopoData 免费额度约 1 req/s，批量重跑必撞 429
+  // （玉龙雪山 1日线剖面实测被限流吞掉：两档数据源各失败一次 → prof 空 →
+  // 前端没有海拔剖面图）。429 单独退避重试，不消耗数据集回退链的机会。
+  let lastErr = "OpenTopoData 未知失败";
+  for (let attempt = 0; attempt < 4; attempt++) {
+    try {
+      const res = await fetch(`${OTD_BASE}/${dataset}?locations=${encodeURIComponent(locations)}`, {
+        signal: AbortSignal.timeout(15000),
+      });
+      if (res.status === 429) {
+        lastErr = `OpenTopoData[${dataset}] HTTP 429（限流）`;
+        await new Promise((s) => setTimeout(s, 1500 * (attempt + 1)));
+        continue;
+      }
+      if (!res.ok) throw new Error(`OpenTopoData[${dataset}] HTTP ${res.status}`);
+      const data = await res.json();
+      if (data.status !== "OK") throw new Error(`OpenTopoData: ${data.status}`);
+      return (data.results || []).map((r: any) => Math.round(Number(r.elevation) || 0));
+    } catch (e: any) {
+      lastErr = e?.message || String(e);
+      if (!/429|限流/.test(lastErr)) throw e;
+    }
+  }
+  throw new Error(lastErr);
 }
 
 // 主入口：给定路线站点坐标，返回海拔剖面；失败返回 null。
