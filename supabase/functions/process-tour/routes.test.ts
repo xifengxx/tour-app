@@ -199,6 +199,43 @@ describe("orderStopsGeographic", () => {
     expect(ordered).toContain("gate");
   });
 });
+describe("L3 已验证主步道决定 1 日站点（v99.9 庐山创作者纠错）", () => {
+  it("步道匹配 ≥5 个核心点时，1日线=该步道的站点与顺序", () => {
+    const locs = [
+      point("牯岭镇", "示例山", [], 4, 115.98, 29.57),
+      point("花径公园", "示例山", [], 4, 115.968, 29.565),
+      point("如琴湖", "示例山", [], 4, 115.972, 29.566),
+      point("仙人洞", "示例山", [], 4, 115.963, 29.563),
+      point("含鄱口", "示例山", [], 5, 115.986, 29.543),
+      point("五老峰", "示例山", [], 5, 116.008, 29.545),
+      point("三叠泉", "示例山", [], 4, 116.044, 29.555),
+      point("汉阳峰", "示例山", [], 5, 115.96, 29.498), // 高重要性但不在步道上 → 不进 1 日线
+      point("山北寺", "示例山", [], 5, 115.9, 29.6),    // 干扰项
+    ];
+    const trails = [{
+      id: "day-loop", scenicName: "示例山", zoneId: "z1",
+      stops: [{ name: "牯岭镇" }, { name: "花径公园", aliases: ["庐山花径公园"] }, { name: "如琴湖" }, { name: "仙人洞" }, { name: "含鄱口" }, { name: "五老峰" }, { name: "三叠泉" }],
+    }];
+    const l3 = { multiDay: true, themeTour: true, zoneDriven: true, trailOrder: true, assertTransport: true };
+    const plans = planRoutes(locs, {
+      coreScenicName: "示例山", mainScenicName: "", destName: "示例山",
+      destLoc: { lng: 115.98, lat: 29.55 }, isNovelBased: false, novelName: "", hasRegionTour: false,
+      zones: [{ id: "z1", name: "示例山" }], trails, capabilities: l3,
+    });
+    expect(plans[0].label).toBe("1日精华游");
+    expect(plans[0].allow).toEqual(["牯岭镇", "花径公园", "如琴湖", "仙人洞", "含鄱口", "五老峰", "三叠泉"]);
+    expect(plans[0].allow).not.toContain("汉阳峰");
+    // L2（multiDay 关）不启用步道选点，维持旧行为
+    const l2 = { multiDay: false, themeTour: true, zoneDriven: false, trailOrder: true, assertTransport: false };
+    const p2 = planRoutes(locs, {
+      coreScenicName: "示例山", mainScenicName: "", destName: "示例山",
+      destLoc: { lng: 115.98, lat: 29.55 }, isNovelBased: false, novelName: "", hasRegionTour: false,
+      zones: [{ id: "z1", name: "示例山" }], trails, capabilities: l2,
+    });
+    expect(p2[0].allow).toContain("汉阳峰");
+  });
+});
+
 describe("核心池地理兜底（v97 黄山回归）", () => {
   it("标签把核心池切到 3 站时，一日退回目的地 15km 内的全部可游览点", () => {
     // 线上实况：黄山 coreScenic 被 loose 匹配到只含 1 个凉亭点的"温泉景区"子区，

@@ -680,7 +680,7 @@ Deno.serve(async (req: Request) => {
     warnings.push(`🧮 核心池诊断 ${JSON.stringify(corePoolDiagnostics(locs, { coreScenicName, destName, destLoc: routeLoc }))}`);
     const plans = planRoutesModule(locs, {
       coreScenicName, mainScenicName, destName, destLoc: routeLoc, isNovelBased, novelName, hasRegionTour,
-      zones: routeKnowledge.zones,
+      zones: routeKnowledge.zones, trails: routeKnowledge.trails,
       capabilities,
       onSuppressed: (plan, reason) => suppressedPlans.push({ plan, reason }),
     });

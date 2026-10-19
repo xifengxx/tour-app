@@ -174,6 +174,8 @@ export type PlanRoutesContext = {
   novelName: string;
   hasRegionTour: boolean;
   zones?: RouteZone[];
+  /** 知识层步道（含站点顺序）。L3 时主步道直接决定 1 日站点集合与顺序。 */
+  trails?: any[];
   /** 路线知识能力授权（缺省视为全部允许，兼容既有调用方与测试）。 */
   capabilities?: TierCapabilities;
   /** 因授权不足而**没有生成**的路线回调（只报真实缺失，选点降级不走这里）。 */
@@ -317,7 +319,34 @@ export function planRoutes(locs: any[], ctx: PlanRoutesContext) {
   const clusterReps = regionClusters.map((c) => ({ c, rep: pickRep(c, ctx.destName) }));
   const unifiedRegion60 = clusterReps.map((x) => x.rep).filter((l: any) => isRouteSite(l) && nearCore(l, REGION_RADIUS));
   const plans: RoutePlan[] = [];
-  if (ctx.zones?.length && caps.zoneDriven) {
+  // v99.9：L3 已验证主步道直接决定 1 日精华游的站点集合与顺序。
+  // 触发场景（创作者实地纠错）：庐山 1 日线按重要性抓取，混进了需要专门
+  // 徒步的汉阳峰与远处独立景区秀峰，却漏了牯岭镇起点和三叠泉——
+  // "已验证知识优先于启发式"在选点层的落地：只要已验证步道匹配到 ≥5 个
+  // 核心池站点，1 日线就是这条步道本身，重要性排序退居其次。
+  let trailDayIds: string[] | null = null;
+  if (caps.multiDay && caps.trailOrder && ctx.trails?.length) {
+    let best: { ids: string[]; hits: number } | null = null;
+    for (const tr of ctx.trails as any[]) {
+      const stops = (tr.stops || []) as any[];
+      if (stops.length < 5) continue;
+      const ids: string[] = [];
+      for (const st of stops) {
+        const keys = [st.name, ...(st.aliases || [])].map(normalizeStopName).filter(Boolean) as string[];
+        if (!keys.length) continue;
+        const hit = coherentCorePool.find((l: any) => !ids.includes(l.id) && keys.some((k) => {
+          const lk = normalizeStopName(l.name);
+          return !!lk && (lk === k || lk.includes(k) || k.includes(lk));
+        }));
+        if (hit) ids.push(hit.id);
+      }
+      if (ids.length >= 5 && (!best || ids.length > best.hits)) best = { ids, hits: ids.length };
+    }
+    if (best) trailDayIds = best.ids;
+  }
+  if (trailDayIds) {
+    plans.push({ label: "1日精华游", title: `${ctx.destName}一日精华游`, allow: trailDayIds });
+  } else if (ctx.zones?.length && caps.zoneDriven) {
     const { pools } = zonePools(routeCorePool, ctx.zones);
     const oneDay = pools.length >= 2
       ? [...pools[0].items.slice(0, 2), ...pools[1].items.slice(0, 3)].slice(0, 5)
