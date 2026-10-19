@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { getErrorMessage } from '../lib/errorMessage';
-import { STATIC_TOURS } from '../lib/staticTours';
+import { STATIC_TOURS, LEGACY_SLUG_REDIRECTS } from '../lib/staticTours';
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 import { searchTours, filterByCategory } from '../lib/filterTours';
 import { useAuth } from '../contexts/AuthContext';
 import NavBar from '../components/NavBar';
@@ -96,7 +97,10 @@ export default function Home() {
       const ids = data.map(f => f.tour_id);
       setFavIds(new Set(ids));
       const staticFavs = STATIC_TOURS.filter(s => ids.includes(s.id));
-      const dbIds = ids.filter(id => !STATIC_TOURS.find(s => s.id === id));
+      // v99.9：静态导览迁入后，收藏里的旧 slug 先映射到新 UUID，
+      // 再按 uuid 形状过滤——防止任何残留字符串打进入 tours.id 查询
+      // （线上实测报 invalid input syntax for type uuid: "nanyue-hengshan"）。
+      const dbIds = [...new Set(ids.map(id => LEGACY_SLUG_REDIRECTS[id] || id))].filter(id => UUID_RE.test(id));
       let dbFavs = [];
       if (dbIds.length > 0) {
         const { data: rows, error: rowsError } = await supabase
