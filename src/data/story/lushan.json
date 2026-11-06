@@ -12,7 +12,7 @@
           "function": "寺院 · 念佛道场",
           "change": "佛教南传，名僧驻锡，地方官出资建寺",
           "evidence": "《高僧传·慧远传》",
-          "order": 1
+          "order": 317
         },
         {
           "era": "唐代",
@@ -20,7 +20,7 @@
           "function": "江南名刹",
           "change": "唐代佛教兴盛，江州当交通要冲",
           "evidence": "《庐山志》",
-          "order": 2
+          "order": 618
         }
       ],
       "figures": [
@@ -54,7 +54,7 @@
           "function": "私人读书处",
           "change": "士人隐居读书之风",
           "evidence": "《白鹿洞书院志》",
-          "order": 2
+          "order": 618
         },
         {
           "era": "五代至北宋",
@@ -62,7 +62,7 @@
           "function": "官学",
           "change": "南唐设庐山国学，北宋赐额赐书，书院制度成形",
           "evidence": "《白鹿洞书院志》",
-          "order": 3
+          "order": 907
         },
         {
           "era": "南宋",
@@ -70,7 +70,7 @@
           "function": "书院教育典范",
           "change": "朱熹知南康军，理学教化需要一套可复用的学规",
           "evidence": "《朱文公文集》",
-          "order": 4
+          "order": 1127
         }
       ],
       "figures": [
@@ -104,7 +104,7 @@
           "function": "山水名胜",
           "change": "唐代士人漫游山水、以诗题景之风",
           "evidence": "《李太白全集》",
-          "order": 2
+          "order": 618
         },
         {
           "era": "民国",
@@ -112,7 +112,7 @@
           "function": "观景地",
           "change": "避暑地修路建墅，山间步道通达",
           "evidence": "《庐山志》",
-          "order": 5
+          "order": 1912
         }
       ],
       "figures": [
@@ -147,7 +147,7 @@
           "function": "文人别业",
           "change": "贬谪江州后的山水寄托",
           "evidence": "《庐山草堂记》",
-          "order": 2
+          "order": 618
         },
         {
           "era": "当代",
@@ -155,7 +155,7 @@
           "function": "公园 · 景点",
           "change": "民国以后庐山整体景区化",
           "evidence": "《庐山志》",
-          "order": 7
+          "order": 2000
         }
       ],
       "figures": [
@@ -198,7 +198,7 @@
           "function": "避暑山城",
           "change": "外侨避暑需求，叠加当时的不平等租地条件",
           "evidence": "《庐山志》",
-          "order": 5
+          "order": 1644
         },
         {
           "era": "民国",
@@ -206,7 +206,7 @@
           "function": "政治夏都 · 避暑地",
           "change": "国民政府定都南京后择庐山为夏季驻地，别墅群与教会、学校、医院随之而成",
           "evidence": "《庐山志》",
-          "order": 6
+          "order": 1912
         },
         {
           "era": "当代",
@@ -214,7 +214,7 @@
           "function": "旅游服务镇",
           "change": "1949 年后转疗养功能，1996 年庐山列入世界遗产后转向旅游",
           "evidence": "《庐山志》",
-          "order": 7
+          "order": 2000
         }
       ],
       "figures": [
@@ -246,7 +246,7 @@
           "function": "避暑别墅",
           "change": "牯岭避暑地开发，侨民与教会在此建房",
           "evidence": "别墅说明牌",
-          "order": 5
+          "order": 1644
         },
         {
           "era": "民国",
@@ -254,7 +254,7 @@
           "function": "政要居所",
           "change": "庐山成为夏都，要人聚居",
           "evidence": "别墅说明牌",
-          "order": 6
+          "order": 1912
         }
       ],
       "figures": [
@@ -293,7 +293,7 @@
           "function": "训练与集会场所",
           "change": "庐山成为夏都，需要大型集会建筑",
           "evidence": "旧址说明牌",
-          "order": 6
+          "order": 1912
         },
         {
           "era": "1959–1970",
@@ -301,7 +301,7 @@
           "function": "会议场所 · 纪念地",
           "change": "中共中央在庐山召开工作会议，建筑随之转为会议使用",
           "evidence": "旧址说明牌",
-          "order": 7
+          "order": 1959
         }
       ],
       "figures": [
