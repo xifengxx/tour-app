@@ -179,7 +179,7 @@ const nextLegInfo = (route, stopIdx, locById) => {
 };
 
 // 当前站条：站在哪、下一站多远、怎么去。地图给的是“全局”，这一条给的是“下一步”。
-function StopBar({ route, loc, locById, overviewOpen, onToggleOverview, onGoto }) {
+function StopBar({ route, loc, locById, overviewStage = 0, onToggleOverview, onGoto }) {
   const total = route?.stops?.length || 0;
   const idx = loc ? route.stops.indexOf(loc.id) : -1;
   const info = idx >= 0 ? nextLegInfo(route, idx, locById) : null;
@@ -202,11 +202,12 @@ function StopBar({ route, loc, locById, overviewOpen, onToggleOverview, onGoto }
         <button
           type="button"
           onClick={onToggleOverview}
-          aria-expanded={overviewOpen}
+          aria-expanded={overviewStage > 0}
+          aria-label={`行程概览：${['已收起', '半开', '全开'][overviewStage]}`}
           className="shrink-0 inline-flex items-center gap-0.5 text-[10px] text-muted-foreground hover:text-foreground"
         >
-          行程
-          <ChevronDown className={`h-3 w-3 transition-transform ${overviewOpen ? 'rotate-180' : ''}`} />
+          {['行程', '行程 · 半', '行程 · 全'][overviewStage]}
+          <ChevronDown className={`h-3 w-3 transition-transform ${overviewStage > 0 ? 'rotate-180' : ''}`} />
         </button>
       </div>
       {(info || isLast) && (
@@ -289,7 +290,9 @@ export default function TourView() {
   const [currentRouteId, setCurrentRouteId] = useState(null);
   currentRouteIdRef.current = currentRouteId;
   const [showCard, setShowCard] = useState(true);
-  const [showOverview, setShowOverview] = useState(false);
+  // P2-1 概览三档：0 收起 / 1 半开 / 2 全开。点「行程」逐档循环，卡片高度跟着走
+  const [overviewStage, setOverviewStage] = useState(0);
+  const cycleOverview = () => setOverviewStage(v => (v + 1) % 3);
   // 首访案头：初值同步判定（不等异步数据），否则会先渲染地图再切成案头，闪一下。
   const prologueRequested = useMemo(() => {
     try { return new URLSearchParams(window.location.search).get('prologue') === '1'; } catch { return false; }
@@ -905,7 +908,10 @@ export default function TourView() {
 
       {/* Bottom card zone — 手卷式卡片：置于正常文档流而非覆盖地图，地图容器止于卡片上缘，
           高德版权条不再压在卡片底部内容上；卡片折叠时地图随之扩展 */}
-      <div className="z-20 bg-card rounded-t-2xl max-h-[50vh] flex flex-col border-t border-x border-border shadow-[0_-10px_32px_-14px_rgba(28,26,22,0.3)] safe-bottom">
+      <div
+        className="z-20 bg-card rounded-t-2xl flex flex-col border-t border-x border-border shadow-[0_-10px_32px_-14px_rgba(28,26,22,0.3)] safe-bottom transition-[max-height] duration-300 ease-out"
+        style={{ maxHeight: ['50vh', '64vh', '88vh'][overviewStage] }}
+      >
         {/* 卷轴杆拉手：两端轴头 + 杆身 */}
         <div className="flex justify-center items-center gap-1.5 py-2.5 cursor-pointer" onClick={() => setShowCard(s => !s)}>
           <span className="w-1.5 h-1.5 rounded-full bg-primary/60" />
@@ -921,15 +927,15 @@ export default function TourView() {
                 route={activeRoute}
                 loc={currentLoc}
                 locById={locByIdRef.current}
-                overviewOpen={showOverview}
-                onToggleOverview={() => setShowOverview(v => !v)}
+                overviewStage={overviewStage}
+                onToggleOverview={cycleOverview}
                 onGoto={selectLoc}
               />
             )}
 
             {/* 行程概览（卷首语 / 交通分段 / 主题分区）：默认收起，把高度让给正文 */}
-            {showOverview && (
-            <div className="pb-2 max-h-[38vh] overflow-y-auto overscroll-contain">
+            {overviewStage > 0 && (
+            <div className={`pb-2 shrink-0 overflow-y-auto overscroll-contain ${overviewStage === 2 ? 'max-h-[62vh]' : 'max-h-[30vh]'}`}>
             {/* Route narrative · 卷首语：完整行程描述（入口/交通方式/出口） */}
             {activeRoute?.narrative && (
               <div className="px-4 pb-2">
