@@ -47,10 +47,11 @@ describe('机位卡片 (ShotGuide)', () => {
 });
 
 describe('机位内容来源', () => {
-  it('庐山 JSON 里有 6 处机位，覆盖 5 个地点', () => {
+  it('庐山 JSON 里每个地点都有机位，总量不少于地点数', () => {
     const seed = storySeedFor('b47e3d39-212f-44ff-acb4-7aa2b9b7ef6e');
-    const withShot = Object.values(seed.locations).filter(v => v.shot?.length);
-    expect(withShot.length).toBe(5);
-    expect(withShot.reduce((n, v) => n + v.shot.length, 0)).toBe(6);
+    const all = Object.values(seed.locations);
+    const withShot = all.filter(v => v.shot?.length);
+    expect(withShot.length).toBe(all.length);
+    expect(withShot.reduce((n, v) => n + v.shot.length, 0)).toBeGreaterThanOrEqual(all.length);
   });
 });
