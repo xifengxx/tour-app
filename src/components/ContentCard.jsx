@@ -1,4 +1,9 @@
-import { Star, Mountain, Footprints, Zap, Lightbulb, Feather, Navigation, BookOpen } from 'lucide-react';
+import { Star, Mountain, Footprints, Zap, Lightbulb, Feather, Navigation, BookOpen, Landmark, Users, ScrollText, Bookmark } from 'lucide-react';
+
+// 内容层用线性图标（DESIGN.md：UI 一律 lucide，不用 emoji）。
+// 数据里的 icon 字段仍是 emoji，只在这里做展示映射，不动库。
+const LAYER_ICON = { novel: BookOpen, history: Landmark, folklore: Feather, customs: Users };
+const layerIconOf = (layer) => LAYER_ICON[layer.id] || (String(layer.id || '').startsWith('custom') ? ScrollText : Bookmark);
 
 // 重要度：藤黄小星（最多 5 颗）
 export function ImportanceStars({ importance, className = 'h-3 w-3' }) {
@@ -21,6 +26,7 @@ export default function ContentCard({ loc, layer, layers, onLayerChange, onShowD
       <div className="flex gap-1.5 px-4 pb-2 overflow-x-auto">
         {(layers || []).map(l => {
           const active = layer === l.id;
+          const Icon = layerIconOf(l);
           return (
             <button
               key={l.id}
@@ -30,8 +36,7 @@ export default function ContentCard({ loc, layer, layers, onLayerChange, onShowD
                   ? 'bg-primary text-primary-foreground border-primary'
                   : 'bg-transparent text-muted-foreground border-border hover:border-primary/40 hover:text-foreground'}`}
             >
-              {!active && <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: l.color }} />}
-              {l.icon} {l.name}
+              <Icon className="h-3.5 w-3.5 shrink-0" style={active ? undefined : { color: l.color }} /> {l.name}
             </button>
           );
         })}

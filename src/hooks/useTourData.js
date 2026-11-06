@@ -88,6 +88,9 @@ export function normalizeTour(row) {
     layers: loc.layers,
     reflection: loc.reflection,
     practical: loc.practical,
+    // P1-5 案头：时期演变（何时/是什么/为何变/依据）与关联人物（人物/作品/依据）
+    timeline: Array.isArray(loc.timeline) ? loc.timeline : [],
+    figures: Array.isArray(loc.figures) ? loc.figures : [],
   }));
 
   const routes = (row.routes || []).map(r => ({

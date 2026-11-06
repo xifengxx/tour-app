@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useTourData } from '../hooks/useTourData';
 import { supabase } from '../lib/supabase';
@@ -15,12 +15,38 @@ import DetailModal from '../components/DetailModal';
 import ShareModal from '../components/ShareModal';
 import { LEGACY_SLUG_REDIRECTS } from '../lib/staticTours';
 import CommentsModal from '../components/CommentsModal';
-import { Share2, Check, Heart, MessageCircle, MapPinned } from 'lucide-react';
+import TourPrologue from '../components/TourPrologue';
+import { summarizeStory, applyStorySeed } from '../lib/story';
+import { storySeedFor, hasSeedStory } from '../lib/storySeed';
+import { Share2, Check, Heart, MessageCircle, MapPinned, CornerDownRight, ChevronDown, ChevronRight, Navigation, ScrollText } from 'lucide-react';
 import { extractMarkerLoc, findNearestLocation, buildPinIcon } from '../lib/mapUtils';
 import { ROUTE_COLORS, cnOrdinal } from '../lib/routeColors';
+import { routeLegsSummary } from '../lib/routeLegs.js';
 
 const DEFAULT_PIN_COLOR = '#a39d8c'; // 未选中标记：暖灰
 const SELECTED_COLOR = '#c2402a'; // 选中标记：朱砂（亮底高对比）
+
+// 游客藏印：未登录先存本机，登录后自动并入云端。
+// 只记 tour 级收藏（与现有 favorites 表同口径），不记“到访”——到访必须另外主动盖行印。
+const GUEST_FAV_KEY = 'tour-app:guest-favorites';
+const readGuestFavs = () => {
+  try {
+    const raw = JSON.parse(localStorage.getItem(GUEST_FAV_KEY) || '[]');
+    return Array.isArray(raw) ? raw.map(String) : [];
+  } catch { return []; }
+};
+const writeGuestFavs = (ids) => {
+  try { localStorage.setItem(GUEST_FAV_KEY, JSON.stringify(ids)); } catch { /* 隐私模式写不进，忽略 */ }
+};
+
+// 案头读完（或跳过）后记一笔：复访直接落地图，不再挡一屏。
+const PROLOGUE_KEY = 'tour-app:prologue-seen';
+const hasSeenPrologue = (tourId) => {
+  try { return !!localStorage.getItem(`${PROLOGUE_KEY}:${tourId}`); } catch { return false; }
+};
+const markPrologueSeen = (tourId) => {
+  try { localStorage.setItem(`${PROLOGUE_KEY}:${tourId}`, '1'); } catch { /* 忽略 */ }
+};
 
 // 统一给标记套上「普通 / 选中」样式。
 // 未选中：统一灰色小图钉；选中：琥珀金 + 白色描边 + 放大 + 置顶。
@@ -96,6 +122,131 @@ const routePathAtKm = (path, km) => {
 
 const routeTotalKm = route => Number(route?.prof?.at(-1)?.[0]) || 0;
 
+// ── 当前站条用的少量推导 ──
+// 交通方式文案与 routeLegs 同一套口径，避免两处说法不一致
+const MODE_TEXT = {
+  walk: '徒步',
+  cableway: '索道',
+  shuttle: '观光车',
+  car: '专车',
+  other: '接驳',
+};
+const MODE_SPEED_KMH = { walk: 4.2, cableway: 6, shuttle: 22, car: 30, other: 20 };
+
+const fmtDistance = (meters) => {
+  if (!Number.isFinite(meters) || meters <= 0) return '';
+  if (meters < 1000) return `${Math.round(meters / 10) * 10}米`;
+  return `${(meters / 1000).toFixed(1)}公里`;
+};
+
+// 到下一站的距离与预计用时。距离优先取管线算好的 leg.distanceM；
+// 老数据没有 legs 时用沿线里程差，再退化为站点直连距离。时长优先用 leg.duration 文本。
+const nextLegInfo = (route, stopIdx, locById) => {
+  const stops = route?.stops || [];
+  const fromId = stops[stopIdx];
+  const toId = stops[stopIdx + 1];
+  if (!fromId || !toId) return null;
+  const nextLoc = locById[toId];
+  if (!nextLoc) return null;
+
+  const legs = route.legs || [];
+  const leg = legs.find(l => l.fromId === fromId && l.toId === toId) || legs[stopIdx] || null;
+  const mode = leg?.mode || 'walk';
+
+  let meters = Number(leg?.distanceM);
+  if (!Number.isFinite(meters) || meters <= 0) {
+    const kmA = stopKmInRoute(route, fromId, locById);
+    const kmB = stopKmInRoute(route, toId, locById);
+    if (kmB > kmA) meters = (kmB - kmA) * 1000;
+  }
+  if (!Number.isFinite(meters) || meters <= 0) {
+    const a = locById[fromId];
+    const b = locById[toId];
+    if (a && b) meters = havKm(a, b) * 1000;
+  }
+
+  const speed = MODE_SPEED_KMH[mode] || MODE_SPEED_KMH.walk;
+  const minutes = Number.isFinite(meters) && meters > 0 ? Math.max(1, Math.round((meters / 1000) / speed * 60)) : null;
+
+  return {
+    nextLoc,
+    meters: Number.isFinite(meters) && meters > 0 ? meters : null,
+    minutes,
+    mode,
+    durationText: leg?.duration || '',
+    note: leg?.note || '',
+  };
+};
+
+// 当前站条：站在哪、下一站多远、怎么去。地图给的是“全局”，这一条给的是“下一步”。
+function StopBar({ route, loc, locById, overviewOpen, onToggleOverview, onGoto }) {
+  const total = route?.stops?.length || 0;
+  const idx = loc ? route.stops.indexOf(loc.id) : -1;
+  const info = idx >= 0 ? nextLegInfo(route, idx, locById) : null;
+  const isLast = idx >= 0 && idx === total - 1;
+
+  return (
+    <div className="mx-4 mb-2 rounded-lg bg-background border border-border/60 border-l-2 border-l-primary px-3 py-2">
+      <div className="flex items-center gap-1.5 min-w-0">
+        {idx >= 0 ? (
+          <span className="font-serif text-[11px] font-semibold text-primary shrink-0">
+            第{cnOrdinal(idx)}站
+          </span>
+        ) : (
+          <span className="font-serif text-[11px] font-semibold text-primary shrink-0">路线</span>
+        )}
+        <span className="text-[10px] text-muted-foreground shrink-0">/ 共 {total} 站</span>
+        <span className="text-xs font-semibold text-foreground truncate flex-1 min-w-0">
+          {loc?.name || route?.title || ''}
+        </span>
+        <button
+          type="button"
+          onClick={onToggleOverview}
+          aria-expanded={overviewOpen}
+          className="shrink-0 inline-flex items-center gap-0.5 text-[10px] text-muted-foreground hover:text-foreground"
+        >
+          行程
+          <ChevronDown className={`h-3 w-3 transition-transform ${overviewOpen ? 'rotate-180' : ''}`} />
+        </button>
+      </div>
+      {(info || isLast) && (
+        <div className="flex items-center gap-1 mt-1 text-[11px] text-muted-foreground min-w-0">
+          {isLast ? (
+            <span className="text-foreground/70">已到终点站 · 本路线到此结束</span>
+          ) : (
+            <>
+              {/* 点这一行＝跳到下一站（现场最常用的动作），右侧另给一个直接导航的入口 */}
+              <button
+                type="button"
+                onClick={() => onGoto?.(info.nextLoc)}
+                className="flex items-baseline gap-1 min-w-0 flex-1 text-left hover:text-foreground"
+              >
+                <CornerDownRight className="h-3 w-3 text-dai/80 shrink-0 self-center" />
+                <span className="truncate text-foreground/80">下一站 {info.nextLoc.name}</span>
+                {info.meters && <span className="shrink-0">· {fmtDistance(info.meters)}</span>}
+                <span className="shrink-0">
+                  · {MODE_TEXT[info.mode] || MODE_TEXT.other} {info.durationText || (info.minutes ? `约${info.minutes}分钟` : '')}
+                </span>
+                <ChevronRight className="h-3 w-3 shrink-0 self-center" />
+              </button>
+              <a
+                href={`https://uri.amap.com/marker?position=${info.nextLoc.lng},${info.nextLoc.lat}&name=${encodeURIComponent(info.nextLoc.name)}`}
+                target="_blank"
+                rel="noreferrer"
+                aria-label={`导航到${info.nextLoc.name}`}
+                className="shrink-0 inline-flex items-center gap-0.5 rounded-full border border-border/70 px-2 py-0.5 text-[10px] text-foreground/70 hover:text-foreground"
+              >
+                <Navigation className="h-3 w-3" />导航
+              </a>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+
 const stopKmInRoute = (route, stopId, locById) => {
   if (!route || !stopId) return 0;
   const idx = route.stops.indexOf(stopId);
@@ -131,12 +282,25 @@ export default function TourView() {
   const currentRouteIdRef = useRef(null);
   const routeProgressMarkerRef = useRef(null);
   const routeProgressTokenRef = useRef(0);
+  const autoRouteAppliedRef = useRef(false); // 首屏默认锁路线的“只做一次”开关
 
   const [currentLoc, setCurrentLoc] = useState(null);
   const [currentLayer, setCurrentLayer] = useState('novel');
   const [currentRouteId, setCurrentRouteId] = useState(null);
   currentRouteIdRef.current = currentRouteId;
   const [showCard, setShowCard] = useState(true);
+  const [showOverview, setShowOverview] = useState(false);
+  // 首访案头：初值同步判定（不等异步数据），否则会先渲染地图再切成案头，闪一下。
+  const prologueRequested = useMemo(() => {
+    try { return new URLSearchParams(window.location.search).get('prologue') === '1'; } catch { return false; }
+  }, []);
+  const prologueDismissedRef = useRef(false);
+  const [showPrologue, setShowPrologue] = useState(() => {
+    if (!tourId) return false;
+    if (prologueRequested) return true;
+    if (window.location.hash || hasSeenPrologue(tourId)) return false;
+    return hasSeedStory(storySeedFor(tourId));
+  });
   const [showDetail, setShowDetail] = useState(false);
   const [showShare, setShowShare] = useState(false);
   const [showComments, setShowComments] = useState(false);
@@ -180,33 +344,72 @@ export default function TourView() {
     requestAnimationFrame(tick);
   }, [cancelRouteProgressAnimation]);
 
-  // v99：#r=<routeId> 深链——分享链接直达某条路线。
+  // ── 首屏默认锁定一条路线 ──
+  // 以前进来看的是一张“全域景点图”：地点条一屏列出二十多个点，游客站在山脚不知道该从哪个开始。
+  // 现在：有 #r= 深链就直达那条线；没有就默认选中第一条有站点的路线，并把第壹站作为当前站。
   // 折线注册在地图异步初始化完成后才可用，用轻量轮询等待就绪（5s 超时放弃）。
+  const selectRouteRef = useRef(null);
+
+  // 同页内改 hash（粘贴分享链接到已打开的标签页）也要生效：
+  // #r= 由 selectRoute 用 replaceState 写入，不会触发 hashchange，因此这里不会自激。
   useEffect(() => {
-    const m = /^#r=([^&]+)$/.exec(window.location.hash || '');
-    if (!m || !tour?.routes?.length) return;
-    const target = tour.routes.find(r => r.id === decodeURIComponent(m[1]));
-    if (!target) return;
+    const onHashChange = () => {
+      const m = /^#r=([^&]+)$/.exec(window.location.hash || '');
+      const id = m ? decodeURIComponent(m[1]) : null;
+      const target = id && tour?.routes?.find(r => r.id === id);
+      if (target && currentRouteIdRef.current !== target.id) selectRouteRef.current?.(target);
+    };
+    window.addEventListener('hashchange', onHashChange);
+    return () => window.removeEventListener('hashchange', onHashChange);
+  }, [tour]);
+
+  // 换一条导览时重置“只做一次”的开关（组件实例在 /tour/a → /tour/b 之间是复用的）
+  useEffect(() => {
+    autoRouteAppliedRef.current = false;
+  }, [tourId]);
+
+  useEffect(() => {
+    if (!tour || tour.id !== tourId || !tour.routes?.length) return;
+    if (autoRouteAppliedRef.current) return;
+    const hashMatch = /^#r=([^&]+)$/.exec(window.location.hash || '');
+    const hashId = hashMatch ? decodeURIComponent(hashMatch[1]) : null;
+    const target = hashId
+      ? tour.routes.find(r => r.id === hashId)
+      : (tour.routes.find(r => r.id !== 'extra' && r.stops?.length) || null);
+    if (!target || target.stops.length === 0) return;
     let tries = 0;
     const iv = setInterval(() => {
       tries += 1;
       if (routePolylinesRef.current[target.id]) {
         clearInterval(iv);
-        if (currentRouteIdRef.current !== target.id) selectRouteRef.current?.(target);
-      } else if (tries > 25) clearInterval(iv);
+        autoRouteAppliedRef.current = true;
+        if (currentRouteIdRef.current !== target.id) {
+          // 深链是按链接来的，保持原行为（贴近起点）；首屏默认选线时不动镜头，
+          // 让用户先看到整片山与这条线，再自己决定走向。
+          selectRouteRef.current?.(target, { keepView: !hashMatch });
+        }
+      } else if (tries > 25) {
+        // 折线没注册成功（路线只有一站或缺路径）也要把路线锁上，不能干等超时
+        clearInterval(iv);
+        if (!autoRouteAppliedRef.current) {
+          autoRouteAppliedRef.current = true;
+          if (currentRouteIdRef.current !== target.id) {
+            selectRouteRef.current?.(target, { keepView: !hashMatch });
+          }
+        }
+      }
     }, 200);
     return () => clearInterval(iv);
-  }, [tour]);
-  const selectRouteRef = useRef(null);
+  }, [tour, tourId]);
 
   // 记录导览第一个内容层 id：泰山等自定义层(无 novel)时选中地点默认落到第一个层
   useEffect(() => {
     firstLayerIdRef.current = tour?.contentLayers?.[0]?.id || 'novel';
   }, [tour]);
 
-  // 收藏状态（登录后）
+  // 收藏状态：登录读云端；未登录读本机藏印（山上不该被登录墙拦住）
   useEffect(() => {
-    if (!user) { setIsFav(false); return; }
+    if (!user) { setIsFav(readGuestFavs().includes(tourId)); return; }
     supabase
       .from('favorites')
       .select('id')
@@ -217,6 +420,20 @@ export default function TourView() {
         if (error) setToast(getErrorMessage(error, '收藏状态加载失败'));
         else setIsFav(!!data);
       });
+  }, [user, tourId]);
+
+  // 登录后把本机藏印并进云端，成功才清本机（失败留着下次再试，不打扰用户）
+  useEffect(() => {
+    if (!user) return;
+    const pending = readGuestFavs().filter(Boolean);
+    if (!pending.length) return;
+    (async () => {
+      const rows = pending.map(id => ({ user_id: user.id, tour_id: id }));
+      const { error } = await supabase.from('favorites').insert(rows);
+      if (error && error.code !== '23505') return; // 非"已存在"的错误：保留本机数据待重试
+      writeGuestFavs([]);
+      if (pending.includes(tourId)) setIsFav(true);
+    })();
   }, [user, tourId]);
 
   const selectLoc = useCallback((loc) => {
@@ -237,7 +454,15 @@ export default function TourView() {
   }, [tour, cancelRouteProgressAnimation]);
 
   const toggleFav = async () => {
-    if (!user) { navigate('/login'); return; }
+    if (!user) {
+      const cur = readGuestFavs();
+      const next = cur.includes(tourId) ? cur.filter(id => id !== tourId) : [...cur, tourId];
+      writeGuestFavs(next);
+      const on = next.includes(tourId);
+      setIsFav(on);
+      setToast(on ? '已盖藏印 · 存本机，登录后自动同步' : '已取消本机藏印');
+      return;
+    }
     if (isFav) {
       const { error } = await supabase.from('favorites').delete().eq('user_id', user.id).eq('tour_id', tourId);
       if (error) { setToast(getErrorMessage(error, '取消收藏失败')); return; }
@@ -469,7 +694,7 @@ export default function TourView() {
 
   // ── Actions ──
 
-  const selectRoute = useCallback((route) => {
+  const selectRoute = useCallback((route, opts = {}) => {
     if (!route || !route.stops || route.stops.length === 0) {
       setCurrentRouteId(null);
       setCurrentLoc(null);
@@ -486,9 +711,15 @@ export default function TourView() {
 
     const newId = currentRouteId === route.id ? null : route.id;
     setCurrentRouteId(newId);
-    // 深链同步：选中路线写入 #r=，取消选中还原干净地址（分享/刷新都落在同一路线）
+    // 深链同步：选中路线写入 #r=，取消选中还原干净地址（分享/刷新都落在同一路线）。
+    // 首屏默认选线（keepView）不写 hash：否则刷新会从“全览”跳成“贴到起点”，两版体验不一致。
     try {
-      window.history.replaceState(null, '', newId ? `${window.location.pathname}#r=${encodeURIComponent(newId)}` : window.location.pathname);
+      const keepHash = opts.keepView && window.location.hash;
+      window.history.replaceState(
+        null,
+        '',
+        newId && !opts.keepView ? `${window.location.pathname}#r=${encodeURIComponent(newId)}` : (keepHash || window.location.pathname)
+      );
     } catch { /* 忽略沙箱环境下的 history 异常 */ }
     const firstStop = newId ? locByIdRef.current[route.stops[0]] : null;
     setCurrentLoc(firstStop);
@@ -517,7 +748,7 @@ export default function TourView() {
       const map = mapInstance.current;
       if (!map) return;
       const firstLoc = locByIdRef.current[route.stops[0]];
-      if (firstLoc) {
+      if (firstLoc && !opts.keepView) {
         map.setZoomAndCenter(14, [firstLoc.lng, firstLoc.lat]);
       }
     } else {
@@ -540,6 +771,58 @@ export default function TourView() {
         .map(id => locByIdRef.current[id]).filter(Boolean)
     : (tour?.locations || []);
   const activeRoute = currentRouteId ? (tour?.routes || []).find(r => r.id === currentRouteId) : null;
+
+  // 案头摘要从 tour.locations 派生（不能用 locByIdRef：可变 ref 不会触发重渲染）。
+  // 库里的 timeline/figures 还没建列时，用仓库 JSON 兜底，保证本地就能看到完整案头。
+  const prologueLocById = useMemo(() => {
+    const base = Object.fromEntries((tour?.locations || []).map(l => [l.id, l]));
+    return applyStorySeed(base, storySeedFor(tourId));
+  }, [tour, tourId]);
+  const storySummary = useMemo(
+    () => summarizeStory(activeRoute, prologueLocById),
+    [activeRoute, prologueLocById],
+  );
+
+  // 首访先读案头再进地图；读过一次（或带路线 hash 的分享链接）就直接给地图。
+  // 不要用「检查一次就永久置位」的 ref：进页时路线还没锁定，has 一开始是 false，
+  // 会被误判成「这条线没有案头」而永远不弹。改为等数据到位再补弹，用户关闭后才彻底不再弹。
+  useEffect(() => {
+    if (!tour || !tourId) return;
+    if (prologueDismissedRef.current) return;
+    if (hasSeenPrologue(tourId) || window.location.hash) return;
+    if (!storySummary.has) return;
+    setShowPrologue(true);
+  }, [tour, tourId, storySummary.has]);
+
+  // 从「开始导览 / 跳过」两个出口离开案头：记住已读，并把 ?prologue=1 清掉
+  const closePrologue = useCallback(() => {
+    prologueDismissedRef.current = true;
+    markPrologueSeen(tourId);
+    setShowPrologue(false);
+    if (window.location.search) {
+      window.history.replaceState(null, '', window.location.pathname + window.location.hash);
+    }
+  }, [tourId]);
+
+  // 剖面按交通方式分段：里程与剖面共用同一套沿线累计（path.stopKm），避免图和字对不上。
+  const routeSegments = (() => {
+    const stops = activeRoute?.stops || [];
+    if (stops.length < 2) return null;
+    const total = routeTotalKm(activeRoute);
+    const legs = activeRoute.legs || [];
+    const out = [];
+    for (let i = 0; i < stops.length - 1; i++) {
+      const fromKm = stopKmInRoute(activeRoute, stops[i], locByIdRef.current);
+      let toKm = stopKmInRoute(activeRoute, stops[i + 1], locByIdRef.current);
+      if (!Number.isFinite(toKm) || toKm <= fromKm) {
+        toKm = i + 1 === stops.length - 1 ? total : fromKm;
+      }
+      if (toKm <= fromKm) continue;
+      const leg = legs.find(l => l.fromId === stops[i] && l.toId === stops[i + 1]) || legs[i] || null;
+      out.push({ fromKm, toKm: total ? Math.min(toKm, total) : toKm, mode: leg?.mode || 'walk' });
+    }
+    return out;
+  })();
 
   // 红色进度圆点位置随 routeProgressKm 同步到地图路线
   useEffect(() => {
@@ -569,6 +852,12 @@ export default function TourView() {
           title={tour.meta.title}
           rightContent={
             <div className="flex items-center gap-0.5">
+              {/* 案头常驻入口：和收藏/评论/分享同一排，属于「这条线的内容」，不占站条工具区 */}
+              {storySummary.has && (
+                <Button variant="ghost" size="icon" onClick={() => setShowPrologue(true)} title="行前案头 · 时代演变与人物">
+                  <ScrollText className="h-4 w-4" />
+                </Button>
+              )}
               <Button variant="ghost" size="icon" onClick={toggleFav} title={isFav ? '取消收藏' : '收藏'}>
                 <Heart className={`h-4 w-4 ${isFav ? 'fill-primary text-primary' : ''}`} />
               </Button>
@@ -602,6 +891,7 @@ export default function TourView() {
               prof={activeRoute.prof}
               activeKm={routeProgressKm}
               onProgressChange={handleRouteProgressChange}
+              segments={routeSegments}
               stops={(activeRoute.stops || []).map(id => locByIdRef.current[id]).filter(Boolean).map(l => [l.lng, l.lat])}
             />
           </div>
@@ -625,10 +915,25 @@ export default function TourView() {
 
         {showCard && (
           <div className="anim-content flex flex-col flex-1 min-h-0">
+            {/* 当前站条：第几站 / 下一站多远、怎么去 */}
+            {activeRoute && (
+              <StopBar
+                route={activeRoute}
+                loc={currentLoc}
+                locById={locByIdRef.current}
+                overviewOpen={showOverview}
+                onToggleOverview={() => setShowOverview(v => !v)}
+                onGoto={selectLoc}
+              />
+            )}
+
+            {/* 行程概览（卷首语 / 交通分段 / 主题分区）：默认收起，把高度让给正文 */}
+            {showOverview && (
+            <div className="pb-2 max-h-[38vh] overflow-y-auto overscroll-contain">
             {/* Route narrative · 卷首语：完整行程描述（入口/交通方式/出口） */}
             {activeRoute?.narrative && (
               <div className="px-4 pb-2">
-                <p className="font-kai text-xs text-muted-foreground leading-relaxed bg-background rounded-lg p-3 border-l-2 border-dai max-h-24 overflow-y-auto">{activeRoute.narrative}</p>
+                <p className="font-kai text-xs text-muted-foreground leading-relaxed bg-background rounded-lg p-3 border-l-2 border-dai">{activeRoute.narrative}</p>
               </div>
             )}
             {/* v93：主题游按片区呈现（片区 → 片区内游览点），与线性行程区分开 */}
@@ -639,11 +944,14 @@ export default function TourView() {
             />
             {activeRoute?.legs?.length > 0 && (
               <div className="px-4 pb-2">
-                <p className="text-[11px] leading-relaxed text-muted-foreground bg-background rounded-lg p-2 border border-border/60 max-h-16 overflow-y-auto">
-                  <span className="font-semibold text-foreground/70">交通分段：</span>{routeLegsText(activeRoute.legs)}
+                <p className="text-[11px] leading-relaxed text-muted-foreground bg-background rounded-lg p-2 border border-border/60">
+                  <span className="font-semibold text-foreground/70">交通概况：</span>{routeLegsSummary(activeRoute.legs)}
                 </p>
               </div>
             )}
+            </div>
+            )}
+            {/* 创作者路线确认：留在概览之外，不影响普通游客的阅读区 */}
             {user && tour.userId === user.id && activeRoute && (
               <div className="px-4 pb-2">
                 {activeRouteConfirmed ? (
@@ -718,6 +1026,17 @@ export default function TourView() {
         />
       )}
 
+      {showPrologue && (
+        <TourPrologue
+          tour={tour}
+          route={activeRoute || tour?.routes?.[0]}
+          locById={prologueLocById}
+          loading={!tour}
+          onStart={closePrologue}
+          onLookMap={closePrologue}
+        />
+      )}
+
       {showShare && <ShareModal tour={tour} tourId={tourId} onClose={() => setShowShare(false)} routeId={currentRouteId} />}
 
       {showComments && <CommentsModal tourId={tourId} onClose={() => setShowComments(false)} />}
@@ -732,4 +1051,3 @@ export default function TourView() {
     </div>
   );
 }
-import { routeLegsText } from '../lib/routeLegs.js';

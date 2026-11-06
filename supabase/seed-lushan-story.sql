@@ -1,0 +1,67 @@
+-- P1-5 庐山「案头」数据草稿 —— 待人工核对后再执行
+--
+-- 用途：让前端「案头」在一条真实导览上先跑起来，验证形态（时间轴 / 人物 / 关系图）。
+-- 约束：每条都带 evidence（书名或说明牌）；写不出出处的条目请直接删掉，不要保留。
+-- 执行前建议先跑 supabase/route-story.sql 加列。
+-- 全部 UPDATE 都以地点 id 定位，可重复执行（幂等）。
+
+-- ── 东林寺 ──────────────────────────────────────────────
+UPDATE public.locations SET timeline = '[
+  {"era":"东晋","label":"慧远入山，江州刺史为建寺","function":"寺院 · 念佛道场","change":"佛教南传，名僧驻锡，地方官出资建寺","evidence":"《高僧传·慧远传》","order":1},
+  {"era":"唐代","label":"殿宇扩修，文士往来不绝","function":"江南名刹","change":"唐代佛教兴盛，江州当交通要冲","evidence":"《庐山志》","order":2}
+]'::jsonb, figures = '[
+  {"name":"慧远","role":"东晋高僧，庐山教团领袖","relation":"太元年间入庐山，江州刺史桓伊为建东林寺，与僧俗结白莲社","works":["《沙门不敬王者论》"],"evidence":"《高僧传·慧远传》"}
+]'::jsonb
+WHERE id = 'b47e3d39-donglin-temple';
+
+-- ── 白鹿洞书院 ────────────────────────────────────────────
+UPDATE public.locations SET timeline = '[
+  {"era":"唐代","label":"李渤隐居读书，白鹿相伴得名","function":"私人读书处","change":"士人隐居读书之风","evidence":"《白鹿洞书院志》","order":2},
+  {"era":"五代至北宋","label":"庐山国学 → 赐额白鹿洞书院","function":"官学","change":"南唐设庐山国学，北宋赐额赐书，书院制度成形","evidence":"《白鹿洞书院志》","order":3},
+  {"era":"南宋","label":"朱熹重修书院，订《白鹿洞书院揭示》","function":"书院教育典范","change":"朱熹知南康军，理学教化需要一套可复用的学规","evidence":"《朱文公文集》","order":4}
+]'::jsonb, figures = '[
+  {"name":"朱熹","role":"南宋理学家","relation":"知南康军时重修白鹿洞书院，订立学规","works":["《白鹿洞书院揭示》"],"evidence":"《朱文公文集》"}
+]'::jsonb
+WHERE id = 'b47e3d39-bailu-shuyuan';
+
+-- ── 五老峰 ──────────────────────────────────────────────
+UPDATE public.locations SET timeline = '[
+  {"era":"唐代","label":"李白登临赋诗","function":"山水名胜","change":"唐代士人漫游山水、以诗题景之风","evidence":"《李太白全集》","order":2},
+  {"era":"民国","label":"牯岭开发后游者渐多","function":"观景地","change":"避暑地修路建墅，山间步道通达","evidence":"《庐山志》","order":5}
+]'::jsonb, figures = '[
+  {"name":"李白","role":"唐代诗人","relation":"数度游庐山，写五老峰与秀峰瀑布","works":["《望庐山瀑布》","《登庐山五老峰》"],"evidence":"《李太白全集》"}
+]'::jsonb
+WHERE id = 'b47e3d39-wulao-feng';
+
+-- ── 花径 ────────────────────────────────────────────────
+UPDATE public.locations SET timeline = '[
+  {"era":"唐代","label":"白居易游庐山，筑草堂于香炉峰下","function":"文人别业","change":"贬谪江州后的山水寄托","evidence":"《庐山草堂记》","order":2},
+  {"era":"当代","label":"辟为花径公园","function":"公园 · 景点","change":"民国以后庐山整体景区化","evidence":"《庐山志》","order":7}
+]'::jsonb, figures = '[
+  {"name":"白居易","role":"唐代诗人，曾任江州司马","relation":"在庐山筑草堂并作记，另有大林寺桃花诗","works":["《庐山草堂记》","《大林寺桃花》"],"evidence":"《白居易集》"}
+]'::jsonb
+WHERE id = 'b47e3d39-huajing';
+
+-- ── 牯岭镇 ──────────────────────────────────────────────
+UPDATE public.locations SET timeline = '[
+  {"era":"清末","label":"李德立租借长冲谷，规划避暑地","function":"避暑山城","change":"外侨避暑需求，叠加当时的不平等租地条件","evidence":"《庐山志》","order":5},
+  {"era":"民国","label":"成为国民政府夏季办公地","function":"政治夏都 · 避暑地","change":"国民政府定都南京后择庐山为夏季驻地，别墅群与教会、学校、医院随之而成","evidence":"《庐山志》","order":6},
+  {"era":"当代","label":"疗养与旅游城镇","function":"旅游服务镇","change":"1949 年后转疗养功能，1996 年庐山列入世界遗产后转向旅游","evidence":"《庐山志》","order":7}
+]'::jsonb, figures = '[
+  {"name":"李德立","role":"英国传教士","relation":"1895 年租借长冲谷，规划牯岭避暑地","works":[],"evidence":"《庐山志》"}
+]'::jsonb
+WHERE id = 'b47e3d39-trail-28';
+
+-- ── 美庐别墅 ──────────────────────────────────────────────
+UPDATE public.locations SET timeline = '[
+  {"era":"清末","label":"西式别墅建于牯岭","function":"避暑别墅","change":"牯岭避暑地开发，侨民与教会在此建房","evidence":"别墅说明牌","order":5},
+  {"era":"民国","label":"蒋宋夏季居所，题名「美庐」","function":"政要居所","change":"庐山成为夏都，要人聚居","evidence":"别墅说明牌","order":6}
+]'::jsonb, figures = '[]'::jsonb
+WHERE id = 'b47e3d39-meilu-villa';
+
+-- ── 庐山会议旧址 ──────────────────────────────────────────
+UPDATE public.locations SET timeline = '[
+  {"era":"民国","label":"原为传习学舍（庐山大厦）","function":"训练与集会场所","change":"庐山成为夏都，需要大型集会建筑","evidence":"旧址说明牌","order":6},
+  {"era":"1959–1970","label":"三次庐山会议在此召开","function":"会议场所 · 纪念地","change":"中共中央在庐山召开工作会议，建筑随之转为会议使用","evidence":"旧址说明牌","order":7}
+]'::jsonb, figures = '[]'::jsonb
+WHERE id = 'b47e3d39-lushan-huiyi-jiuzhi';

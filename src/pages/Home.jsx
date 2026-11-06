@@ -11,8 +11,9 @@ import SealLogo from '../components/SealLogo';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import {
   Plus, MoreHorizontal, Heart, MapPin, Route as RouteIcon, Search,
-  Compass, LibraryBig, Bookmark, Pencil, Lock, Globe, Trash2,
+  Compass, LibraryBig, Bookmark, Pencil, Lock, Globe, Trash2, ScrollText,
 } from 'lucide-react';
+import { storySeedFor, hasSeedStory } from '../lib/storySeed';
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -196,6 +197,27 @@ export default function Home() {
             <span className="px-2 py-0.5 rounded-full bg-black/[0.04] border border-border/60">
               {tour.stats?.locations ?? tour.locations?.[0]?.count ?? '?'} 地点
             </span>
+            {/* 有案头内容的导览，在卡片上就能「先读一遍」——行前该发生在出发前 */}
+            {hasSeedStory(storySeedFor(tour.id)) && (
+              <span
+                role="link"
+                tabIndex={0}
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  navigate(`/tour/${tour.id}?prologue=1`);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key !== 'Enter') return;
+                  e.preventDefault();
+                  e.stopPropagation();
+                  navigate(`/tour/${tour.id}?prologue=1`);
+                }}
+                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary/[0.06] border border-primary/25 text-primary hover:bg-primary/10 transition-colors cursor-pointer"
+              >
+                <ScrollText className="h-3 w-3" />先读案头
+              </span>
+            )}
           </div>
         </div>
       </Link>

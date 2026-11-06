@@ -18,7 +18,8 @@ export default function ThemeSections({ sections, locationsById = {}, onSelectSp
         <p className="text-[11px] text-muted-foreground px-3 pt-2 pb-1.5">
           本主题含 {groups.length} 个片区，每个片区内按实际动线排列
         </p>
-        <ol className="divide-y divide-border/50 max-h-56 overflow-y-auto overscroll-contain">
+        {/* 不再自带滚动：外层「行程」概览已经是滚动容器，套两层在手机上会出现滚动里再滚动 */}
+        <ol className="divide-y divide-border/50">
           {groups.map((group, i) => (
             <li key={group.key || group.name} className="px-3 py-2">
               <div className="flex items-center gap-2">

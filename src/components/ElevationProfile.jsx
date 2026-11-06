@@ -1,7 +1,20 @@
 import { useMemo, useRef, useEffect } from 'react';
 
+// 交通方式分段的画法与文案：把"哪段走、哪段坐车、哪段索道"画进剖面本身。
+// 坡度曲线一张图看不出这件事，颜色/线型才是现场真正要读的信息。
+const MODE_STYLE = {
+  walk: { color: '#b24028', dash: [], width: 2, label: '徒步', faint: 'rgba(178,64,40,0.20)' },
+  cableway: { color: '#2f4f4a', dash: [6, 3], width: 1.8, label: '索道', faint: 'rgba(47,79,74,0.22)' },
+  shuttle: { color: '#9c6b3c', dash: [5, 3], width: 1.8, label: '车行', faint: 'rgba(156,107,60,0.22)' },
+  car: { color: '#9c6b3c', dash: [5, 3], width: 1.8, label: '车行', faint: 'rgba(156,107,60,0.22)' },
+  other: { color: '#8a8071', dash: [3, 3], width: 1.6, label: '接驳', faint: 'rgba(138,128,113,0.20)' },
+};
+const styleOf = mode => MODE_STYLE[mode] || MODE_STYLE.other;
+const LABEL_COLOR = { 徒步: '#b24028', 车行: '#9c6b3c', 索道: '#2f4f4a', 接驳: '#8a8071' };
+
 // 海拔剖面图。prof 为 [[km, m], ...]；activeKm 由父组件驱动，用于和地图路线进度联动。
-export default function ElevationProfile({ prof, activeKm, stops, height = 132, onProgressChange }) {
+// segments 为 [{fromKm, toKm, mode}]，缺省时整条按徒步画。
+export default function ElevationProfile({ prof, activeKm, stops, segments, height = 132, onProgressChange }) {
   const canvasRef = useRef(null);
   const layoutRef = useRef(null);
   const hoverKmRef = useRef(null);
@@ -38,6 +51,20 @@ export default function ElevationProfile({ prof, activeKm, stops, height = 132, 
     }
     return result;
   }, [data, stops]);
+
+  // 按交通方式汇总里程：图上画得清，头上再给一句"步行多少、车行多少"
+  const modeStats = useMemo(() => {
+    if (!data || !Array.isArray(segments) || segments.length === 0) return null;
+    const acc = {};
+    segments.forEach(s => {
+      const mode = s.mode || 'walk';
+      const key = styleOf(mode).label;
+      const km = Math.max(0, Math.min(s.toKm, data.totalKm) - Math.max(s.fromKm, 0));
+      if (km > 0.01) acc[key] = (acc[key] || 0) + km;
+    });
+    const entries = Object.entries(acc).sort((a, b) => b[1] - a[1]);
+    return entries.length >= 2 ? entries : null;
+  }, [data, segments]);
 
   const pointAt = km => {
     if (!data) return [0, 0];
@@ -108,13 +135,46 @@ export default function ElevationProfile({ prof, activeKm, stops, height = 132, 
     g.textAlign = 'right';
     g.fillText(`${totalKm >= 10 ? Math.round(totalKm) : totalKm}km`, W - padR, H - 2);
 
-    g.beginPath();
-    prof.forEach(([km, ele], i) => (i ? g.lineTo : g.moveTo).call(g, X(km), Y(ele)));
-    g.strokeStyle = 'rgba(125,108,92,0.22)';
-    g.lineWidth = 1.2;
-    g.setLineDash([2, 3]);
-    g.stroke();
-    g.setLineDash([]);
+    // 分段画线：每段按自己的交通方式取颜色与线型；未走到的部分用淡色同样标出，
+    // 这样一眼能看出"这 60 公里是坐车、那 3 公里才是走"。
+    const eleAt = km => pointAt(km)[1];
+    const ptsBetween = (a, b) => {
+      const pts = [[a, eleAt(a)]];
+      prof.forEach(([km, ele]) => { if (km > a && km < b) pts.push([km, ele]); });
+      pts.push([b, eleAt(b)]);
+      return pts;
+    };
+    const segList = (Array.isArray(segments) && segments.length)
+      ? segments
+      : [{ fromKm: 0, toKm: data.totalKm, mode: 'walk' }];
+    const strokeSegments = (clipKm, revealed) => {
+      segList.forEach(seg => {
+        const a = Math.max(0, Math.min(seg.fromKm, clipKm));
+        const b = Math.min(data.totalKm, seg.toKm, clipKm);
+        if (b - a <= 0.0005) return;
+        const st = styleOf(seg.mode);
+        const pts = ptsBetween(a, b);
+        g.beginPath();
+        pts.forEach(([km, ele], i) => (i ? g.lineTo(X(km), Y(ele)) : g.moveTo(X(km), Y(ele))));
+        g.strokeStyle = revealed ? st.color : st.faint;
+        g.lineWidth = revealed ? st.width : 1.2;
+        g.setLineDash(revealed ? st.dash : [2, 3]);
+        g.lineCap = 'round';
+        g.lineJoin = 'round';
+        if (revealed && st.dash.length === 0) {
+          g.shadowColor = 'rgba(178,64,40,0.18)';
+          g.shadowBlur = 5;
+          g.shadowOffsetY = 1;
+        }
+        g.stroke();
+        g.shadowColor = 'transparent';
+        g.shadowBlur = 0;
+        g.shadowOffsetY = 0;
+        g.setLineDash([]);
+      });
+    };
+
+    strokeSegments(data.totalKm, false);
 
     const boundedReveal = Math.max(0, Math.min(progressKm ?? totalKm, totalKm));
     const revealEle = pointAt(boundedReveal)[1];
@@ -134,22 +194,8 @@ export default function ElevationProfile({ prof, activeKm, stops, height = 132, 
       g.fillStyle = grad;
       g.fill();
 
-      g.beginPath();
-      prof.forEach(([km, ele], i) => {
-        if (km <= boundedReveal) (i ? g.lineTo : g.moveTo).call(g, X(km), Y(ele));
-      });
-      g.lineTo(X(boundedReveal), Y(revealEle));
-      g.strokeStyle = '#b24028';
-      g.lineWidth = 2;
-      g.lineCap = 'round';
-      g.lineJoin = 'round';
-      g.shadowColor = 'rgba(178,64,40,0.18)';
-      g.shadowBlur = 5;
-      g.shadowOffsetY = 1;
-      g.stroke();
-      g.shadowColor = 'transparent';
-      g.shadowBlur = 0;
-      g.shadowOffsetY = 0;
+      // 已走到的部分按交通方式描线（徒步朱砂实线、车行赭石虚线、索道黛青点线）
+      strokeSegments(boundedReveal, true);
     }
 
     if (data.maxPoint) {
@@ -229,7 +275,7 @@ export default function ElevationProfile({ prof, activeKm, stops, height = 132, 
   useEffect(() => {
     if (!data) return;
     draw(activeKm);
-  }, [data, activeKm, stopPositions, height]);
+  }, [data, activeKm, stopPositions, height, segments]);
 
   const movePointer = event => {
     const layout = layoutRef.current;
@@ -259,6 +305,16 @@ export default function ElevationProfile({ prof, activeKm, stops, height = 132, 
           {data.minEle.toLocaleString('en-US')}–{data.maxEle.toLocaleString('en-US')}m · 爬升 {gainText} · {data.totalKm.toFixed(1)}km
         </span>
       </div>
+      {modeStats && (
+        <div className="flex items-center gap-3 px-1 pb-1 text-[10px] text-foreground/55">
+          {modeStats.map(([label, km]) => (
+            <span key={label} className="inline-flex items-center gap-1">
+              <span className="w-2.5 h-[2px] rounded-full" style={{ background: LABEL_COLOR[label] || '#8a8071' }} />
+              {label} {km >= 1 ? `${km.toFixed(1)}km` : `${Math.round(km * 1000)}m`}
+            </span>
+          ))}
+        </div>
+      )}
       <canvas
         ref={canvasRef}
         className="w-full cursor-crosshair touch-none rounded-md bg-foreground/[0.02]"
