@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../lib/supabase';
+import { storySeedFor } from '../lib/storySeed';
 import { STATIC_DATA } from '../lib/staticTours';
 
 /**
@@ -77,6 +78,13 @@ export function normalizeTour(row) {
     color: l.color,
   }));
 
+  // 案头与机位内容随仓库 JSON 落地：库里有值优先，没建列时用 JSON 兜底，
+  // 这样地图、内容卡、详情弹层拿到的是同一份完整数据。
+  const seed = storySeedFor(row.id);
+  const pickSeed = (loc, key, raw) => (Array.isArray(raw) && raw.length
+    ? raw
+    : (Array.isArray(seed?.locations?.[loc.id]?.[key]) ? seed.locations[loc.id][key] : []));
+
   const locations = (row.locations || []).map(loc => ({
     id: loc.id,
     name: loc.name,
@@ -89,8 +97,10 @@ export function normalizeTour(row) {
     reflection: loc.reflection,
     practical: loc.practical,
     // P1-5 案头：时期演变（何时/是什么/为何变/依据）与关联人物（人物/作品/依据）
-    timeline: Array.isArray(loc.timeline) ? loc.timeline : [],
-    figures: Array.isArray(loc.figures) ? loc.figures : [],
+    timeline: pickSeed(loc, 'timeline', loc.timeline),
+    figures: pickSeed(loc, 'figures', loc.figures),
+    // P1-7 机位：站位 / 朝向 / 构图公式 / 时段 / 避开
+    shot: pickSeed(loc, 'shot', loc.shot),
   }));
 
   const routes = (row.routes || []).map(r => ({

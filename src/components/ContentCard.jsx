@@ -1,9 +1,9 @@
-import { Star, Mountain, Footprints, Zap, Lightbulb, Feather, Navigation, BookOpen, Landmark, Users, ScrollText, Bookmark } from 'lucide-react';
+import { Star, Mountain, Footprints, Zap, Lightbulb, Feather, Navigation, BookOpen } from 'lucide-react';
+import ShotGuide from './ShotGuide';
+import { layerIconOf } from '../lib/layerIcons';
 
 // 内容层用线性图标（DESIGN.md：UI 一律 lucide，不用 emoji）。
 // 数据里的 icon 字段仍是 emoji，只在这里做展示映射，不动库。
-const LAYER_ICON = { novel: BookOpen, history: Landmark, folklore: Feather, customs: Users };
-const layerIconOf = (layer) => LAYER_ICON[layer.id] || (String(layer.id || '').startsWith('custom') ? ScrollText : Bookmark);
 
 // 重要度：藤黄小星（最多 5 颗）
 export function ImportanceStars({ importance, className = 'h-3 w-3' }) {
@@ -96,6 +96,9 @@ export default function ContentCard({ loc, layer, layers, onLayerChange, onShowD
             <div className="text-[#6b5a44] text-xs leading-relaxed">{loc.reflection}</div>
           </div>
         )}
+
+        {/* 机位 · 构图（P1-7）：现场最需要，默认收起，不挤正文 */}
+        <ShotGuide shots={loc.shot} />
 
         {/* Practical info */}
         {loc.practical && (loc.practical.access || loc.practical.difficulty || loc.practical.tip) && (

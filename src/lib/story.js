@@ -69,7 +69,8 @@ export function applyStorySeed(locById, seed) {
     if (!loc) continue;
     const timeline = loc.timeline?.length ? loc.timeline : (Array.isArray(extra.timeline) ? extra.timeline : []);
     const figures = loc.figures?.length ? loc.figures : (Array.isArray(extra.figures) ? extra.figures : []);
-    out[id] = { ...loc, timeline, figures };
+    const shot = loc.shot?.length ? loc.shot : (Array.isArray(extra.shot) ? extra.shot : []);
+    out[id] = { ...loc, timeline, figures, shot };
   }
   return out;
 } 

@@ -1,5 +1,7 @@
 import { X, Mountain, Feather } from 'lucide-react';
 import { ImportanceStars } from './ContentCard';
+import ShotGuide from './ShotGuide';
+import { layerIconOf } from '../lib/layerIcons';
 
 export default function DetailModal({ loc, layers, onClose }) {
   if (!loc) return null;
@@ -33,7 +35,8 @@ export default function DetailModal({ loc, layers, onClose }) {
             <div key={layer.id} className="mb-4">
               <h3 className="font-serif text-sm font-bold mb-2 flex items-center gap-1.5" style={{ color: layer.color }}>
                 <span className="w-1.5 h-1.5 rounded-full" style={{ background: layer.color }} />
-                {layer.icon} {layer.name}
+                {(() => { const Icon = layerIconOf(layer); return <Icon className="h-3.5 w-3.5" style={{ color: layer.color }} />; })()}
+                {layer.name}
               </h3>
               {ld.scenes ? ld.scenes.map((s, i) => (
                 <div key={i} className="bg-secondary/50 rounded-lg p-3 pl-4 mb-2 border-l-2 border-gamboge">
@@ -51,6 +54,8 @@ export default function DetailModal({ loc, layers, onClose }) {
             </div>
           );
         })}
+
+        <ShotGuide shots={loc.shot} defaultOpen />
 
         {loc.reflection && (
           <div className="border border-primary/25 bg-primary/[0.04] rounded-lg p-3">
