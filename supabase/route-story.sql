@@ -16,20 +16,34 @@
 --   works    相关作品名（书名号内文字），用于人物—地点—作品关系图
 --   evidence 依据
 
+--
+-- shot 每项：{ title, position, direction, formula, time, avoid }
+--   title     机位名（"栈道入口回望"）
+--   position  站哪（具体站位，不是"找个好角度"）
+--   direction 朝哪、镜头怎么摆
+--   formula   构图公式（比例 + 三分点 + 画幅）
+--   time      时段（光线方向与最佳窗口）
+--   avoid     避开什么（禁拍区 / 天气 / 人流）
+
 ALTER TABLE public.locations
   ADD COLUMN IF NOT EXISTS timeline jsonb DEFAULT '[]'::jsonb,
-  ADD COLUMN IF NOT EXISTS figures  jsonb DEFAULT '[]'::jsonb;
+  ADD COLUMN IF NOT EXISTS figures  jsonb DEFAULT '[]'::jsonb,
+  ADD COLUMN IF NOT EXISTS shot     jsonb DEFAULT '[]'::jsonb;
 
 COMMENT ON COLUMN public.locations.timeline IS 'P1-5 案头：时期演变 [{era,label,function,change,evidence,order}]';
 COMMENT ON COLUMN public.locations.figures  IS 'P1-5 案头：关联人物 [{name,role,relation,works,evidence}]';
+COMMENT ON COLUMN public.locations.shot     IS 'P1-7 机位：站位/朝向/构图公式/时段/避开 [{title,position,direction,formula,time,avoid}]';
 
 -- 只允许数组，避免管线写成对象后前端 map 崩
 ALTER TABLE public.locations
   DROP CONSTRAINT IF EXISTS locations_timeline_is_array,
-  DROP CONSTRAINT IF EXISTS locations_figures_is_array;
+  DROP CONSTRAINT IF EXISTS locations_figures_is_array,
+  DROP CONSTRAINT IF EXISTS locations_shot_is_array;
 
 ALTER TABLE public.locations
   ADD CONSTRAINT locations_timeline_is_array
     CHECK (timeline IS NULL OR jsonb_typeof(timeline) = 'array'),
   ADD CONSTRAINT locations_figures_is_array
-    CHECK (figures IS NULL OR jsonb_typeof(figures) = 'array');
+    CHECK (figures IS NULL OR jsonb_typeof(figures) = 'array'),
+  ADD CONSTRAINT locations_shot_is_array
+    CHECK (shot IS NULL OR jsonb_typeof(shot) = 'array');
