@@ -44,9 +44,9 @@ describe('applyStorySeed 案头兜底', () => {
 });
 
 describe('storySeedFor 内置内容', () => {
-  it('庐山有内置案头，覆盖 7 个地点', () => {
+  it('庐山有内置案头，覆盖 11 个地点', () => {
     const s = storySeedFor('b47e3d39-212f-44ff-acb4-7aa2b9b7ef6e');
-    expect(Object.keys(s.locations)).toHaveLength(7);
+    expect(Object.keys(s.locations)).toHaveLength(11);
     expect(s.locations['b47e3d39-wulao-feng'].figures[0].name).toBe('李白');
   });
 

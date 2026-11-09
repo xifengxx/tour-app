@@ -781,9 +781,27 @@ export default function TourView() {
     const base = Object.fromEntries((tour?.locations || []).map(l => [l.id, l]));
     return applyStorySeed(base, storySeedFor(tourId));
   }, [tour, tourId]);
+  // 案头聚合不能只看路线站点：行前案头讲的是「这座山怎么变成今天这样」，
+  // 东林寺、白鹿洞、美庐这类不在当日路线上的地点同样该进案头。
+  // 站点序列 = 路线站点（优先） + 其余带案头内容的地点。
+  const prologueRoute = useMemo(() => {
+    const base = activeRoute || tour?.routes?.[0];
+    if (!base) return base;
+    const stops = [...(base.stops || [])];
+    const seen = new Set(stops);
+    for (const l of tour?.locations || []) {
+      if (seen.has(l.id)) continue;
+      const has = (l.timeline?.length || 0) + (l.figures?.length || 0) > 0;
+      if (!has) continue;
+      stops.push(l.id);
+      seen.add(l.id);
+    }
+    return stops.length === (base.stops || []).length ? base : { ...base, stops };
+  }, [activeRoute, tour]);
+
   const storySummary = useMemo(
-    () => summarizeStory(activeRoute, prologueLocById),
-    [activeRoute, prologueLocById],
+    () => summarizeStory(prologueRoute, prologueLocById),
+    [prologueRoute, prologueLocById],
   );
 
   // 首访先读案头再进地图；读过一次（或带路线 hash 的分享链接）就直接给地图。
@@ -1035,7 +1053,7 @@ export default function TourView() {
       {showPrologue && (
         <TourPrologue
           tour={tour}
-          route={activeRoute || tour?.routes?.[0]}
+          route={prologueRoute || tour?.routes?.[0]}
           locById={prologueLocById}
           loading={!tour}
           onStart={closePrologue}
