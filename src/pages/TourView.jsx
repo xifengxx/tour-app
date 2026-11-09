@@ -18,6 +18,7 @@ import CommentsModal from '../components/CommentsModal';
 import TourPrologue from '../components/TourPrologue';
 import { summarizeStory, applyStorySeed } from '../lib/story';
 import { storySeedFor, hasSeedStory } from '../lib/storySeed';
+import { fetchVisits, fetchFavorites, hydrateStampCache } from '../lib/visits';
 import { Share2, Check, Heart, MessageCircle, MapPinned, CornerDownRight, ChevronDown, ChevronRight, Navigation, ScrollText } from 'lucide-react';
 import { extractMarkerLoc, findNearestLocation, buildPinIcon } from '../lib/mapUtils';
 import { ROUTE_COLORS, cnOrdinal } from '../lib/routeColors';
@@ -424,6 +425,21 @@ export default function TourView() {
         else setIsFav(!!data);
       });
   }, [user, tourId]);
+
+  // 地点级印记（藏印/行印）：进页时用云端数据回填本地缓存，详情弹层据此显示已盖的印
+  useEffect(() => {
+    if (!user) return;
+    let alive = true;
+    (async () => {
+      try {
+        const [v, f] = await Promise.all([fetchVisits(), fetchFavorites()]);
+        if (alive) hydrateStampCache({ visits: v, favs: f });
+      } catch {
+        // 读不到就沿用本地缓存，不打扰用户
+      }
+    })();
+    return () => { alive = false; };
+  }, [user]);
 
   // 登录后把本机藏印并进云端，成功才清本机（失败留着下次再试，不打扰用户）
   useEffect(() => {
@@ -1046,6 +1062,7 @@ export default function TourView() {
         <DetailModal
           loc={currentLoc}
           layers={tour.contentLayers}
+          tourId={tourId}
           onClose={() => setShowDetail(false)}
         />
       )}

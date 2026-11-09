@@ -26,6 +26,7 @@ export default function UserMenu({ user, signOut }) {
         <DropdownMenuLabel>{user.email}</DropdownMenuLabel>
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={() => navigate('/?tab=my')}>我的导览</DropdownMenuItem>
+        <DropdownMenuItem onClick={() => navigate('/recollections')}>我的回忆</DropdownMenuItem>
         <DropdownMenuItem onClick={signOut}>退出登录</DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

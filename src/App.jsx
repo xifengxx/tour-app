@@ -6,6 +6,7 @@ const Home = lazy(() => import('./pages/Home'));
 const TourView = lazy(() => import('./pages/TourView'));
 const Login = lazy(() => import('./pages/Login'));
 const TourEdit = lazy(() => import('./pages/TourEdit'));
+const Recollections = lazy(() => import('./pages/Recollections'));
 
 export default function App() {
   return (
@@ -18,6 +19,7 @@ export default function App() {
             <Route path="/tour/:tourId/edit" element={<TourEdit />} />
             <Route path="/create" element={<TourEdit />} />
             <Route path="/login" element={<Login />} />
+            <Route path="/recollections" element={<Recollections />} />
           </Routes>
         </Suspense>
       </BrowserRouter>
