@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useAuthOptional } from '../contexts/AuthContext';
 import VisitStampModal from './VisitStampModal';
-import { hasVisitInCache } from '../lib/visits';
+import { supabase } from '../lib/supabase';
+import { hasVisitInCache, markVisitInCache } from '../lib/visits';
 
 // 行印：到访记录，重动作，只有主动点才记。带「行」小印与文案。
 export default function VisitStampButton({ loc, tourId, compact = false, className = '' }) {
@@ -10,9 +11,24 @@ export default function VisitStampButton({ loc, tourId, compact = false, classNa
   const [open, setOpen] = useState(false);
   const [visited, setVisited] = useState(() => (loc ? hasVisitInCache(loc.id) : false));
 
+  // 登录后以云端为准，缓存只做首屏兜底
   useEffect(() => {
-    if (loc) setVisited(hasVisitInCache(loc.id));
-  }, [loc]);
+    if (!loc) return;
+    let alive = true;
+    if (!user) { setVisited(hasVisitInCache(loc.id)); return; }
+    supabase
+      .from('visits')
+      .select('id')
+      .eq('loc_id', loc.id)
+      .limit(1)
+      .then(({ data, error }) => {
+        if (!alive || error) return;
+        const has = (data || []).length > 0;
+        setVisited(has);
+        markVisitInCache(loc.id, has);
+      });
+    return () => { alive = false; };
+  }, [loc, user]);
 
   if (!loc) return null;
 

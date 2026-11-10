@@ -20,7 +20,7 @@ import TourPrologue from '../components/TourPrologue';
 import { summarizeStory, applyStorySeed } from '../lib/story';
 import { storySeedFor, hasSeedStory } from '../lib/storySeed';
 import { fetchVisits, fetchFavorites, hydrateStampCache } from '../lib/visits';
-import { Share2, Check, Heart, MessageCircle, MapPinned, CornerDownRight, ChevronDown, ChevronRight, Navigation, ScrollText } from 'lucide-react';
+import { Share2, Check, Heart, MessageCircle, MapPinned, CornerDownRight, ListTree, ChevronRight, Navigation, ScrollText } from 'lucide-react';
 import { extractMarkerLoc, findNearestLocation, buildPinIcon } from '../lib/mapUtils';
 import { ROUTE_COLORS, cnOrdinal } from '../lib/routeColors';
 import { routeLegsSummary } from '../lib/routeLegs.js';
@@ -208,10 +208,11 @@ function StopBar({ route, loc, locById, tourId, overviewStage = 0, onToggleOverv
           onClick={onToggleOverview}
           aria-expanded={overviewStage > 0}
           aria-label={`行程概览：${['已收起', '半开', '全开'][overviewStage]}`}
-          className="shrink-0 inline-flex items-center gap-0.5 text-[10px] text-muted-foreground hover:text-foreground"
+          title={`行程概览（${['已收起', '半开', '全开'][overviewStage]}）`}
+          className={`shrink-0 inline-flex items-center justify-center w-6 h-6 rounded-md transition-colors
+            ${overviewStage > 0 ? 'text-primary bg-primary/[0.08]' : 'text-muted-foreground/70 hover:text-foreground hover:bg-black/[0.04]'}`}
         >
-          {['行程', '行程 · 半', '行程 · 全'][overviewStage]}
-          <ChevronDown className={`h-3 w-3 transition-transform ${overviewStage > 0 ? 'rotate-180' : ''}`} />
+          <ListTree className="h-3.5 w-3.5" />
         </button>
       </div>
       {(info || isLast) && (
