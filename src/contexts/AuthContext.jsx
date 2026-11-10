@@ -48,3 +48,9 @@ export function useAuth() {
   if (!ctx) throw new Error('useAuth must be used within AuthProvider');
   return ctx;
 }
+
+// 给「可以被独立渲染/单测」的展示组件用：没有 Provider 时按未登录处理，不抛错
+// eslint-disable-next-line react/only-export-components
+export function useAuthOptional() {
+  return useContext(AuthContext) || { user: null, loading: false };
+}

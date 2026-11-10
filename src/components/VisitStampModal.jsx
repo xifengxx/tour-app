@@ -1,4 +1,5 @@
 import { useState, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { Stamp, ImagePlus, X, Loader2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { createVisit, uploadVisitPhoto, markVisitInCache } from '../lib/visits';
@@ -58,7 +59,8 @@ export default function VisitStampModal({ tourId, loc, onClose, onSaved }) {
     }
   };
 
-  return (
+  // 用 portal 挂到 body：页面里若有 transform/animation 祖先，fixed 弹层会错位
+  return createPortal(
     <div className="fixed inset-0 z-[60] bg-black/60 flex items-center justify-center p-4" onClick={onClose}>
       <div className="bg-card rounded-lg border border-border w-full max-w-md max-h-[86vh] overflow-y-auto p-6 anim-rise" onClick={e => e.stopPropagation()}>
         <button className="float-right w-8 h-8 rounded-full bg-black/[0.05] hover:bg-black/10 flex items-center justify-center" onClick={onClose} aria-label="关闭">
@@ -133,6 +135,7 @@ export default function VisitStampModal({ tourId, loc, onClose, onSaved }) {
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

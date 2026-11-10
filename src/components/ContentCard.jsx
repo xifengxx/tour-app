@@ -1,5 +1,6 @@
 import { Star, Mountain, Footprints, Zap, Lightbulb, Feather, Navigation, BookOpen } from 'lucide-react';
 import ShotGuide from './ShotGuide';
+import VisitStampButton from './VisitStampButton';
 import { layerIconOf } from '../lib/layerIcons';
 
 // 内容层用线性图标（DESIGN.md：UI 一律 lucide，不用 emoji）。
@@ -17,29 +18,33 @@ export function ImportanceStars({ importance, className = 'h-3 w-3' }) {
   );
 }
 
-export default function ContentCard({ loc, layer, layers, onLayerChange, onShowDetail }) {
+export default function ContentCard({ loc, layer, layers, onLayerChange, onShowDetail, tourId }) {
   if (!loc) return null;
 
   return (
     <>
-      {/* Layer tabs · 书签式：色点标识内容层，选中为朱砂 */}
-      <div className="flex gap-1.5 px-4 pb-2 overflow-x-auto">
-        {(layers || []).map(l => {
-          const active = layer === l.id;
-          const Icon = layerIconOf(l);
-          return (
-            <button
-              key={l.id}
-              onClick={() => onLayerChange(l.id)}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap border transition-colors
-                ${active
-                  ? 'bg-primary text-primary-foreground border-primary'
+      {/* Layer tabs · 书签式：色点标识内容层，选中为朱砂
+          行印放这一行右端：它属于「当前这个地点」，且到访是读完内容的结论动作 */}
+      <div className="flex items-center gap-2 px-4 pb-2">
+        <div className="flex gap-1.5 overflow-x-auto flex-1 min-w-0">
+          {(layers || []).map(l => {
+            const active = layer === l.id;
+            const Icon = layerIconOf(l);
+            return (
+              <button
+                key={l.id}
+                onClick={() => onLayerChange(l.id)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap border transition-colors
+                  ${active
+                    ? 'bg-primary text-primary-foreground border-primary'
                   : 'bg-transparent text-muted-foreground border-border hover:border-primary/40 hover:text-foreground'}`}
             >
               <Icon className="h-3.5 w-3.5 shrink-0" style={active ? undefined : { color: l.color }} /> {l.name}
             </button>
           );
         })}
+        </div>
+        <VisitStampButton loc={loc} tourId={tourId} />
       </div>
 
       {/* Scrollable content — pb-12 给高德版权条留出空间，避免遮挡底部实用信息。

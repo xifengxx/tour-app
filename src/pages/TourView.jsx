@@ -12,6 +12,7 @@ import ContentCard from '../components/ContentCard';
 import ElevationProfile from '../components/ElevationProfile';
 import ThemeSections from '../components/ThemeSections';
 import DetailModal from '../components/DetailModal';
+import FavStampButton from '../components/FavStampButton';
 import ShareModal from '../components/ShareModal';
 import { LEGACY_SLUG_REDIRECTS } from '../lib/staticTours';
 import CommentsModal from '../components/CommentsModal';
@@ -180,7 +181,7 @@ const nextLegInfo = (route, stopIdx, locById) => {
 };
 
 // 当前站条：站在哪、下一站多远、怎么去。地图给的是“全局”，这一条给的是“下一步”。
-function StopBar({ route, loc, locById, overviewStage = 0, onToggleOverview, onGoto }) {
+function StopBar({ route, loc, locById, tourId, overviewStage = 0, onToggleOverview, onGoto }) {
   const total = route?.stops?.length || 0;
   const idx = loc ? route.stops.indexOf(loc.id) : -1;
   const info = idx >= 0 ? nextLegInfo(route, idx, locById) : null;
@@ -200,6 +201,8 @@ function StopBar({ route, loc, locById, overviewStage = 0, onToggleOverview, onG
         <span className="text-xs font-semibold text-foreground truncate flex-1 min-w-0">
           {loc?.name || route?.title || ''}
         </span>
+        {/* 藏印贴在地点名右边：收藏是地点级的小动作，看到名字时最顺手 */}
+        <FavStampButton loc={loc} tourId={tourId} />
         <button
           type="button"
           onClick={onToggleOverview}
@@ -961,6 +964,7 @@ export default function TourView() {
                 route={activeRoute}
                 loc={currentLoc}
                 locById={locByIdRef.current}
+                tourId={tourId}
                 overviewStage={overviewStage}
                 onToggleOverview={cycleOverview}
                 onGoto={selectLoc}
@@ -1043,6 +1047,7 @@ export default function TourView() {
                 layers={tour.contentLayers}
                 onLayerChange={setCurrentLayer}
                 onShowDetail={setShowDetail}
+                tourId={tourId}
               />
             ) : (
               <div className="flex-1 flex items-center justify-center text-center px-4 pb-6">
