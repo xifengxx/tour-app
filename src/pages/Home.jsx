@@ -7,11 +7,12 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 import { searchTours, filterByCategory } from '../lib/filterTours';
 import { useAuth } from '../contexts/AuthContext';
 import NavBar from '../components/NavBar';
+import RecollectSummary from '../components/RecollectSummary';
 import SealLogo from '../components/SealLogo';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import {
   Plus, MoreHorizontal, Heart, MapPin, Route as RouteIcon, Search,
-  Compass, LibraryBig, Bookmark, Pencil, Lock, Globe, Trash2, ScrollText,
+  Compass, LibraryBig, Bookmark, BookMarked, Pencil, Lock, Globe, Trash2, ScrollText,
 } from 'lucide-react';
 import { storySeedFor, hasSeedStory } from '../lib/storySeed';
 import {
@@ -26,7 +27,7 @@ export default function Home() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const tabFromParams = p => (p.get('tab') === 'my' || p.get('tab') === 'fav') ? p.get('tab') : 'explore';
+  const tabFromParams = p => (['my', 'fav', 'mem'].includes(p.get('tab')) ? p.get('tab') : 'explore');
   const [tab, setTab] = useState(tabFromParams(searchParams));
   const [publicTours, setPublicTours] = useState([]);
   const [myTours, setMyTours] = useState([]);
@@ -329,7 +330,7 @@ export default function Home() {
               {[
                 { v: 'explore', label: '发现', icon: Compass },
                 { v: 'my', label: '我的导览', icon: LibraryBig },
-                ...(user ? [{ v: 'fav', label: '我的收藏', icon: Bookmark }] : []),
+                ...(user ? [{ v: 'fav', label: '我的收藏', icon: Bookmark }, { v: 'mem', label: '我的回忆', icon: BookMarked }] : []),
               ].map(({ v, label, icon: Icon }) => (
                 <TabsTrigger
                   key={v}
@@ -362,6 +363,7 @@ export default function Home() {
           <p className="font-kai text-muted-foreground text-xs mt-3 mb-3 tracking-wide">
             {tab === 'explore' ? '在每一处山崖，找到书中的江湖'
               : tab === 'fav' ? '收藏想去的导览，随时出发'
+              : tab === 'mem' ? '行印是到过的，藏印是记下的'
               : '管理你创建的导览'}
           </p>
 
@@ -462,6 +464,10 @@ export default function Home() {
                 renderEmpty(<Bookmark className="h-5 w-5" />, '还没有收藏的导览，去发现页点 ♥ 收藏吧')
               )}
             </div>
+          </TabsContent>
+
+          <TabsContent value="mem" className="mt-0 pb-10">
+            <RecollectSummary />
           </TabsContent>
         </Tabs>
       </div>
