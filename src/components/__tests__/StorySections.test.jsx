@@ -44,7 +44,7 @@ describe('案头内容 (StorySections)', () => {
     expect(screen.getByText('同代另一处')).toBeInTheDocument();
     expect(screen.getByText(/当时：寺院/)).toBeInTheDocument();
     expect(screen.getByText(/为何变：避暑铁路通车/)).toBeInTheDocument();
-    expect(screen.getAllByText(/据 《高僧传》/).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText((_, el) => el?.children.length === 0 && /^来源/.test(el.textContent)).length).toBeGreaterThanOrEqual(1);
   });
 
   it('同一人物跨地点只出一条，作品与地点合并', () => {

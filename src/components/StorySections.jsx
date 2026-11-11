@@ -45,10 +45,10 @@ export default function StorySections({ timeline = [], figures = [] }) {
                         {it.change && <span>为何变：{it.change}</span>}
                       </div>
                     )}
-                    <div className="flex items-center gap-1.5 mt-1 text-[10px] text-muted-foreground/80">
-                      <span className="px-1 rounded bg-black/[0.04]">{it.locationName}</span>
+                    <div className="flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5 mt-1 text-[10px] text-muted-foreground/80">
+                      <span className="shrink-0 px-1 rounded bg-black/[0.04]">{it.locationName}</span>
                       {it.evidence
-                        ? <span className="truncate">据 {it.evidence}</span>
+                        ? <span className="leading-snug"><span className="text-muted-foreground/55">来源 · </span>{it.evidence}</span>
                         : <span className="text-gamboge">依据待考</span>}
                     </div>
                   </div>
@@ -87,8 +87,10 @@ export default function StorySections({ timeline = [], figures = [] }) {
                     ))}
                   </div>
                 )}
-                <div className="text-[10px] text-muted-foreground/80 mt-1">
-                  {f.evidence ? `据 ${f.evidence}` : <span className="text-gamboge">依据待考</span>}
+                <div className="text-[10px] text-muted-foreground/80 mt-1 leading-relaxed">
+                  {f.evidence
+                    ? <><span className="text-muted-foreground/55">来源 · </span>{f.evidence}</>
+                    : <span className="text-gamboge">依据待考</span>}
                 </div>
               </div>
             ))}
