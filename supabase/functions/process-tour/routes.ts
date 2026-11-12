@@ -340,7 +340,12 @@ export function planRoutes(locs: any[], ctx: PlanRoutesContext) {
       // 知识步道改用全量可排站地点匹配：步道站点由 injectTrailSeeds 建出来，scenic 不一定
       // 落在"核心景区"标签里，用 routeCorePool/coherentCorePool 都会漏，一漏就退回启发式，
       // 三清山实测 6 站的知识环线因此反复掉到 3~4 站。
-      const pool = tr.destinationBound ? locs.filter(canRoute) : coherentCorePool;
+      // 目的地步道可以用全量可排站地点匹配（步道站点不一定带核心景区标签），
+      // 但必须排掉"地区景点"——恒山实测知识步道把浑源古城、平型关大捷纪念馆
+      // 一起匹配进了一日线，一日线就变成"山门→县城→纪念馆"。
+      const pool = tr.destinationBound
+        ? locs.filter(canRoute).filter((l: any) => !isRegion(l))
+        : coherentCorePool;
       for (const st of stops) {
         const keys = [st.name, ...(st.aliases || [])].map(normalizeStopName).filter(Boolean) as string[];
         if (!keys.length) continue;
@@ -403,6 +408,38 @@ export function planRoutes(locs: any[], ctx: PlanRoutesContext) {
       });
     }
   }
+  // v101 硬闸：一日线只串"这个景区里面的点"。
+  // 用户口径：导览是北岳恒山，一日精华游就只能是恒山里的景点（恒山庙、会仙府、
+  // 虎风口、果老岭、飞石窟、天峰岭、悬空寺、三清殿…），
+  // 不能出现浑源古城、平型关这类别的景区/地区点。之前这条线是由知识步道匹配出来的，
+  // 步道为了兼容"种子站点没有景区标签"改用了全量可排站地点匹配，地区点因此混进来。
+  {
+    const byId = new Map<string, any>(locs.map((l: any) => [l.id, l]));
+    const insideCore = (id: string) => {
+      const l = byId.get(id);
+      return !!l && !isRegion(l) && haversineM(routeCenter, l) <= CORE_ROUTE_RADIUS_M;
+    };
+    const coreInside = routeCorePool
+      .filter((l: any) => !isRegion(l) && haversineM(routeCenter, l) <= CORE_ROUTE_RADIUS_M)
+      .sort(byImp);
+    for (const plan of plans) {
+      if (plan.label !== "1日精华游") continue;
+      const raw = plan.allow || [];
+      const allowed = raw.filter(insideCore);
+      // 只处理"确实混进了景区外的点"的情况；本来就正常的池子（分区驱动的 4 站、
+      // 未核实分区的 6 站）原样保留，不要用这条闸重排别人的选点结果。
+      if (allowed.length === raw.length) continue;
+      if (!allowed.length) continue;
+      plan.allow = allowed.length >= 5
+        ? allowed
+        : orderStopsGeographic(
+            coreInside.slice(0, Math.min(8, coreInside.length)).map((l: any) => l.id),
+            coreInside,
+            null,
+          );
+    }
+  }
+
   if (ctx.isNovelBased) plans.push({ label: "文学巡礼线", title: `《${ctx.novelName}》文学巡礼`, allow: null });
   return plans;
 }

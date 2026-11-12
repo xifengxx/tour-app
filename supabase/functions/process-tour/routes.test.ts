@@ -496,6 +496,45 @@ describe("mapSectionsToDbIds（v94 线上 bug 回归）", () => {
     ]);
   });
 
+  it("一日线只串本景区内的点，地区景点不得混入（恒山实测回归）", () => {
+    // 恒山：核心 10 点 + 浑源古城/平型关两个地区景点。
+    // 之前知识步道用全量可排站地点匹配，把两个地区点也匹配进了一日线，
+    // 一日线变成"山门→县城→纪念馆"。这里钉死：一日线成员必须都在本景区。
+    const locs = [
+      point("恒山庙", "核心", [], 4, 113.72791, 39.67053),
+      point("会仙府", "核心", [], 3, 113.732116, 39.670322),
+      point("虎风口", "核心", [], 3, 113.733802, 39.665722),
+      point("果老岭", "核心", [], 3, 113.73262, 39.667709),
+      point("飞石窟", "核心", [], 3, 113.733832, 39.668965),
+      point("天峰岭", "核心", [], 4, 113.732809, 39.672792),
+      point("悬空寺", "核心", [], 5, 113.715781, 39.661139),
+      point("三清殿", "核心", [], 4, 113.725842, 39.651853),
+      point("浑源古城", "独立", ["地区景点"], 3, 113.692764, 39.699395),
+      point("平型关大捷纪念馆", "独立", ["地区景点"], 3, 113.972903, 39.344379),
+    ];
+    const trails = [{
+      name: "恒山一日线",
+      destinationBound: true,
+      stops: [
+        { name: "天峰岭" }, { name: "悬空寺" }, { name: "浑源古城" },
+        { name: "平型关大捷纪念馆" }, { name: "恒山庙" },
+      ],
+    }];
+    const one = planRoutes(locs, {
+      coreScenicName: "核心", mainScenicName: "", destName: "北岳恒山",
+      isNovelBased: false, novelName: "", hasRegionTour: false,
+      trails,
+    } as any).find(plan => plan.label === "1日精华游");
+    const ids = one?.allow || [];
+    expect(ids).not.toContain("浑源古城");
+    expect(ids).not.toContain("平型关大捷纪念馆");
+    expect(ids.length).toBeGreaterThanOrEqual(5);
+    for (const id of ids) {
+      const loc = locs.find(l => l.id === id);
+      expect(loc && (loc.tags || []).includes("地区景点")).toBe(false);
+    }
+  });
+
   it("没有分区（线性路线）时返回空数组", () => {
     expect(mapSectionsToDbIds(undefined, slugToDbId, [])).toEqual([]);
     expect(mapSectionsToDbIds([], slugToDbId, [])).toEqual([]);
