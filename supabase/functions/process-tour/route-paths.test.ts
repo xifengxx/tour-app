@@ -10,6 +10,26 @@ const dirResponse = (points: string[][], meters: number) => ({
 });
 
 describe("route-paths 真实路径拼接（v99）", () => {
+  it("驾车里程绕行噪声改按直线：庐山五老峰→三叠泉 49.6km 不落库", async () => {
+    // 两点直线约 1.4km，驾车却给出绕山 25km（>20km 且 >5 倍）
+    const fetchImpl = (async () => dirResponse([["110.0", "29.0"], ["111.5", "29.3"]], 25000)) as unknown as typeof fetch;
+    const model = await buildRoutePath([[110.0, 29.0], [110.04, 29.02]], ["shuttle"], fetchImpl, "test-key");
+    expect(model).toBeTruthy();
+    expect(model!.directLegs).toEqual([0]);
+    // 该段按直线记里程（约 4.2km），不是 25km
+    const km = model!.stopKm[1];
+    expect(km).toBeGreaterThan(3.9);
+    expect(km).toBeLessThan(4.6);
+    expect(model!.geom.length).toBe(2);
+  });
+
+  it("正常盘山路不误改：驾车 7.2km / 直线 1.95km 保留真实路径", async () => {
+    const fetchImpl = (async () => dirResponse([["113.7", "39.6"], ["113.75", "39.65"]], 7200)) as unknown as typeof fetch;
+    const model = await buildRoutePath([[113.7, 39.6], [113.72, 39.62]], ["shuttle"], fetchImpl, "test-key");
+    expect(model!.directLegs).toEqual([]);
+    expect(model!.stopKm[1]).toBe(7.2);
+  });
+
   it("按步行/驾车规划拼接，共享端点去重，stopKm 用真实里程", async () => {
     const calls: string[] = [];
     const fetchImpl = (async (url: string) => {

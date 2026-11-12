@@ -15,6 +15,7 @@ export type RoutePathModel = {
   totalKm: number;
   planned: number;          // 高德真实路径覆盖的段数
   fellBack: number;         // 回退直线的段数
+  directLegs?: number[];    // 被判为"无公路连接"、改按直线计的段索引（这些段按徒步）
 };
 
 const havKm = (a: number[], b: number[]) => {
@@ -122,6 +123,7 @@ export async function buildRoutePath(
   let acc = 0;
   let planned = 0;
   let fellBack = 0;
+  const directLegs: number[] = [];
   for (let i = 0; i < coords.length - 1; i++) {
     const from = coords[i];
     const to = coords[i + 1];
@@ -130,6 +132,16 @@ export async function buildRoutePath(
     if (mode !== "cableway") {
       const type = mode === "walk" ? "walking" : "driving";
       leg = await amapLegPath(type, from, to, fetchImpl, key);
+    }
+    // 绕行噪声：两点之间没有直达公路时，驾车规划会给出"绕一大圈"的公路线
+    // （庐山五老峰→三叠泉直线 3.6km，驾车 49.6km）。这种线路既不是游客会走的，
+    // 也不能当里程用；按直线取景（这是唯一合理的近似），里程记真实直线距离。
+    if (leg && mode !== "walk" && mode !== "cableway") {
+      const straight = havKm(from, to);
+      if (leg.km > 20 && straight < 8 && leg.km > straight * 5) {
+        leg = { geom: [from, to], km: Math.round(straight * 100) / 100 };
+        directLegs.push(i);
+      }
     }
     if (leg && leg.geom.length >= 2) {
       planned++;
@@ -143,5 +155,7 @@ export async function buildRoutePath(
     stopKm.push(Math.round(acc * 100) / 100);
   }
   // 抽稀在拼接完成后做；stopKm 基于原始真实里程累计，不受抽稀影响。
-  return { geom: simplifyPath(geom), stopKm, totalKm: stopKm[stopKm.length - 1], planned, fellBack };
+  return {
+    geom: simplifyPath(geom), stopKm, totalKm: stopKm[stopKm.length - 1], planned, fellBack, directLegs,
+  };
 }
