@@ -356,13 +356,20 @@ export function planRoutes(locs: any[], ctx: PlanRoutesContext) {
       const pool = tr.destinationBound
         ? locs.filter(canRoute).filter((l: any) => !isRegion(l))
         : coherentCorePool;
+      // 候选顺序必须确定：池子的插入顺序来自上一轮 AI 抽取，同名候选
+      // （"三清殿" 与 "翠屏山-三清殿"）谁先出现就选谁，于是同一座山跑两次，
+      // 一日线的站会换。这里按 同名 > 重要性 > 离目的地近 > id 字典序 排序后再挑。
+      const orderedPool = [...pool].sort((a: any, b: any) =>
+        (b.importance || 3) - (a.importance || 3)
+        || haversineM(routeCenter, a) - haversineM(routeCenter, b)
+        || String(a.id).localeCompare(String(b.id)));
       for (const st of stops) {
         const keys = [st.name, ...(st.aliases || [])].map(normalizeStopName).filter(Boolean) as string[];
         if (!keys.length) continue;
         // 同名优先："禹皇顶" 在池里既有精确同名点，也有 "玉台-禹皇顶栈道"（包含关系），
         // 直接 includes 匹配会让 AI 的拼接名顶替掉知识里的规范站名。
-        const exact = pool.find((l: any) => !ids.includes(l.id) && keys.includes(normalizeStopName(l.name)));
-        const hit = exact ?? pool.find((l: any) => !ids.includes(l.id) && keys.some((k) => {
+        const exact = orderedPool.find((l: any) => !ids.includes(l.id) && keys.includes(normalizeStopName(l.name)));
+        const hit = exact ?? orderedPool.find((l: any) => !ids.includes(l.id) && keys.some((k) => {
           const lk = normalizeStopName(l.name);
           return !!lk && (lk.includes(k) || k.includes(lk));
         }));
