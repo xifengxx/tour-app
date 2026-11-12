@@ -654,7 +654,10 @@ Deno.serve(async (req: Request) => {
           const manualKey = norm(name);
           const hit = locs.find((l: any) => {
             const key = norm(l.name);
-            return !!key && (key === manualKey || key.includes(manualKey) || manualKey.includes(key));
+            // 只认两种关系：完全同名，或"手写名是 AI 简称的全称"（"东方女神（司春女神）" ⊃ "东方女神"）。
+            // 反方向必须禁止：AI 的"玉台-禹皇顶栈道"里含"禹皇顶"三字，但那是玉台到禹皇顶之间的栈道，
+            // 是两个点。上一版允许反向包含，结果禹皇顶被栈道名吞掉、山顶从路线里消失。
+            return !!key && (key === manualKey || manualKey.includes(key));
           });
           if (hit) {
             // 手写名比 AI 名更长时（"东方女神（司春女神）" vs "东方女神"）用信息更全的那个

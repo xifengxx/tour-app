@@ -231,13 +231,19 @@ export function injectTrailSeeds(
 export function applyTrailGroups(locs: any[], destName: string, trails: TrailRoute[] = CURATED_TRAILS): string[] {
   const changed: string[] = [];
   const matchedRoutes = trails.filter(route => route.scenicName && isDestinationTrail(route, destName));
+  // 同一个点常同时出现在多条步道里（三清宫属于"经典一日环线"，也属于"两日深度"）。
+  // 原来的写法是后写覆盖，谁排在后面谁抢走——三清山实测三清宫被"两日深度"抢走，
+  // 1 日线的核心人文点从此消失。改成先到先得：知识里靠前的那条（通常就是主环线）说了算。
+  const claimed = new Set<string>();
   for (const route of matchedRoutes) {
     if (!route.scenicName || !isDestinationTrail(route, destName)) continue;
     const { matches } = matchStops(route, locs);
     if (matches.size < 2) continue;
     for (const matched of matches.values()) {
       const loc = locs.find(l => l.id === matched.id);
-      if (loc && loc.scenic !== route.scenicName) {
+      if (!loc) continue;
+      claimed.add(loc.id);
+      if (loc.scenic !== route.scenicName) {
         loc.scenic = route.scenicName;
         changed.push(`${loc.name}→${route.scenicName}`);
       }
@@ -245,8 +251,10 @@ export function applyTrailGroups(locs: any[], destName: string, trails: TrailRou
     // AI/高德可能返回“少室山碑”这类未收录但语义明确的名称。按景区名做关键词兜底，
     // 避免少室山侧的点再落回嵩山核心池，混入太室山一日爬线。
     for (const loc of locs) {
+      if (claimed.has(loc.id)) continue;
       const locName = normalizeName(loc.name);
       if (!locName || !locName.includes(normalizeName(route.scenicName!))) continue;
+      claimed.add(loc.id);
       if (loc.scenic !== route.scenicName) {
         loc.scenic = route.scenicName;
         changed.push(`${loc.name}→${route.scenicName}`);
