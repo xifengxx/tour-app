@@ -1196,7 +1196,8 @@ export default function TourView() {
               const idx = secs.findIndex(s => s.key === themeSectionKey);
               const sec = idx >= 0 ? secs[idx] : null;
               // 片区内的邻点：按片区自己的顺序走，不跨片区。
-              const ids = (sec?.stops || []).filter(id => locByIdRef.current[id]);
+              const rawIds = sec?.stopIds || sec?.stops || [];
+              const ids = rawIds.filter(id => locByIdRef.current[id]);
               const pos = ids.indexOf(currentLoc.id);
               const prev = pos > 0 ? locByIdRef.current[ids[pos - 1]] : null;
               const next = pos >= 0 && pos < ids.length - 1 ? locByIdRef.current[ids[pos + 1]] : null;
