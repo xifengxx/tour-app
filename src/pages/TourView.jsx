@@ -687,6 +687,7 @@ export default function TourView() {
                 strokeWeight: 3, strokeOpacity: 0.5,
               });
               poly.hide(); // 只在选中这条主题游时显示
+              if (currentRouteIdRef.current === route.id) poly.show(); // 深链首屏已选这条，先画出来
               themePolylinesRef.current[route.id].push(poly);
             }
           });
