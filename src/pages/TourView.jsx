@@ -155,7 +155,7 @@ const nextLegInfo = (route, stopIdx, locById) => {
 
   const legs = route.legs || [];
   const leg = legs.find(l => l.fromId === fromId && l.toId === toId) || legs[stopIdx] || null;
-  const mode = leg?.mode || 'walk';
+  let mode = leg?.mode || 'walk';
 
   // 距离：真实路径里程差优先（与剖面同一坐标系）。leg.distanceM 是两点直线距离，
   // 山地场景会严重偏小——恒山会仙府→天峰岭直线 280m，实际步道 560m。
@@ -163,6 +163,13 @@ const nextLegInfo = (route, stopIdx, locById) => {
   const b = locById[toId];
   const straightM = a && b ? havKm(a, b) * 1000 : null;
   const meters = legDistanceM(route, stopIdx, straightM);
+
+  // 存量导览的 legs.mode 是管线按"直线距离"判的：天峰岭→悬空寺直线 1.95km < 3km
+  // 被判成徒步，实际 7.2km 山路。真实里程一旦超过直线 2 倍且本身超过 3km，
+  // 说明这个徒步判定站不住，就地改判（其余导览重跑前也能显示正确）。
+  if (mode === 'walk' && meters > 3000 && straightM > 0 && meters > straightM * 2) {
+    mode = meters > 12000 ? 'car' : 'shuttle';
+  }
 
   // 时间：徒步段按剖面里的真实爬升折算（Naismith），机动车段仍按均速。
   const kmA = stopKmInRoute(route, fromId, locById);
