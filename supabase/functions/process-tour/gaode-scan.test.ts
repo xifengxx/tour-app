@@ -24,6 +24,17 @@ describe("地名语义清洗", () => {
     expect(isDestinationUmbrella("西海岸栈道", "三清山")).toBe(false);
   });
 
+  it("点名是目的地名的后半截也算伞形（恒山 / 北岳恒山）", () => {
+    // 恒山实测：库里一个叫"恒山"的点被当成站点排进一日线，
+    // 造成"会仙府→恒山""恒山→天峰岭"两段几十公里的假车程。
+    expect(isDestinationUmbrella("恒山", "北岳恒山")).toBe(true);
+    expect(isDestinationUmbrella("北岳恒山", "北岳恒山")).toBe(true);
+    // 山里真实寺院的名字不会被误杀
+    expect(isDestinationUmbrella("恒山庙", "北岳恒山")).toBe(false);
+    expect(isDestinationUmbrella("悬空寺", "北岳恒山")).toBe(false);
+    expect(isDestinationUmbrella("天峰岭", "北岳恒山")).toBe(false);
+  });
+
   it("剥掉 AI 的「目的地-地标」机械拼接名，优先用策展知识里的规范名", () => {
     const known = ["三清宫", "风雷塔", "禹皇顶", "西海岸栈道"];
     expect(canonicalizeMechanicalName("三清山-三清宫", "三清山", known)).toBe("三清宫");

@@ -37,8 +37,15 @@ export function landmarkKey(name: unknown, destination?: unknown): string {
 // “武功山”“萍乡武功山国家级风景名胜区”是目的地伞形名，可做地图锚点，
 // 但不应作为徒步站点；“武功山风景名胜区金顶”剥后缀后仍是“金顶”，不是伞形名。
 export function isDestinationUmbrella(name: unknown, destination?: unknown): boolean {
-  const raw = String(name || "");
-  const dest = String(destination || "");
+  const raw = String(name || "").trim();
+  const dest = String(destination || "").trim();
+  // v102：点名本身就是目的地名的一部分，也是伞形名。
+  // 恒山实测：库里有一个叫"恒山"的点（tags 步道/登山），它是"北岳恒山"这座山的本名，
+  // 不是山里的景点。旧逻辑只判"名称里包含目的地名"（"恒山"不含"北岳恒山"），
+  // 于是它被当成站点排进一日线，还因为代表整座山，在地图上造成
+  // "会仙府→恒山""恒山→天峰岭"两段各几十公里的假车程。
+  // 反向包含（目的地名包含点名）一律按伞形处理；"恒山庙"不属于这种，"恒山庙"不含在"北岳恒山"里。
+  if (raw.length >= 2 && dest && dest.includes(raw)) return true;
   // 先移除目的地，再看剩余部分是否只是景区后缀/行政区残留。
   // 如果先对完整名取 landmarkKey，“武功山风景名胜区金顶”剩余的“金顶”太短，
   // 会被误判成泛指；这里显式区分“泛指残留”和“真实地标词”。
