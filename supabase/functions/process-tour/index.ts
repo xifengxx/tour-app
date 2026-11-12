@@ -714,6 +714,11 @@ Deno.serve(async (req: Request) => {
         // 只回填目的地 15km 内的点（地区景点/远处景区仍每轮重算，避免把旧垃圾永久固化）。
         const coreR = 15000;
         const coreCenterPt = destLoc || null;
+        // 只回填"上一轮路线真正用过"的站点，而不是 15km 内的所有旧行：
+        // 否则早期跑出来的垃圾点（"恒山索道-"、县城里的"永安寺南院"）会被永久固化，
+        // 又被当成核心点排进一日线——线上实测就是这样把一日线撑到 10 站。
+        const usedBefore = new Set<string>();
+        for (const r of oldRoutes) for (const s of (r.stops || []) as string[]) usedBefore.add(s);
         let keptRows = 0;
         for (const row of oldRows) {
           const name = String(row.name || "");
@@ -721,6 +726,10 @@ Deno.serve(async (req: Request) => {
           if ((row.tags || []).includes("人工策展")) continue; // 上面已处理
           if (isDestinationUmbrella(name, destName)) continue;
           if (JUNK_RE.test(name)) continue;
+          // 机械拼接截断留下的残名（"恒山索道-"）不是地点
+          if (/^[\s\S]*[-－—]$/.test(name)) continue;
+          const rawId0 = String(row.id || "");
+          if (!usedBefore.has(rawId0) && !usedBefore.has(rawId0.replace(`${scope}-`, ""))) continue;
           // 没有目的地锚点时不做回填，避免把旧地区点永久固化
           if (!coreCenterPt) continue;
           if (haversineM(row, coreCenterPt) > coreR) continue;
