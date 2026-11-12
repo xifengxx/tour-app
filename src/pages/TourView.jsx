@@ -300,6 +300,9 @@ export default function TourView() {
   const mapInstance = useRef(null);
   const markersRef = useRef([]);
   const routePolylinesRef = useRef({});
+  // 主题游的分段线（一条路线 → 每个片区一条线）。它不是连续动线，所以不进 routePolylinesRef，
+  // 只在选中该路线时显示，避免和其他路线的连线在同一张地图上糊成一片。
+  const themePolylinesRef = useRef({});
   const locByIdRef = useRef({});
   const clustererRef = useRef(null);
   const currentLocRef = useRef(null);
@@ -671,17 +674,20 @@ export default function TourView() {
         // 一条线，读起来就是"一趟走完"，与它的语义（几个景区可以连着玩）相反。
         const themeSecs = (route.sections || []).filter(sec => (sec.stops || []).length >= 2);
         if (themeSecs.length >= 2) {
+          themePolylinesRef.current[route.id] = [];
           themeSecs.forEach((sec, si) => {
             const secPath = sec.stops.map(id => {
               const l = locByIdRef.current[id];
               return l ? [l.lng, l.lat] : null;
             }).filter(Boolean);
             if (secPath.length > 1) {
-              new window.AMap.Polyline({
+              const poly = new window.AMap.Polyline({
                 path: secPath, map,
                 strokeColor: ROUTE_COLORS[(ri + si) % ROUTE_COLORS.length],
                 strokeWeight: 3, strokeOpacity: 0.5,
               });
+              poly.hide(); // 只在选中这条主题游时显示
+              themePolylinesRef.current[route.id].push(poly);
             }
           });
           // 片区之间不画线：那是车程/接驳，不是步行动线。
@@ -740,6 +746,7 @@ export default function TourView() {
       }
       markersRef.current = [];
       routePolylinesRef.current = {};
+      themePolylinesRef.current = {};
       routeProgressMarkerRef.current = null;
       routeProgressTokenRef.current += 1;
     };
@@ -795,6 +802,10 @@ export default function TourView() {
       } else {
         rp.polyline.setOptions({ strokeOpacity: 0.15, strokeWeight: 2 });
       }
+    });
+    // 主题游的分段线只显示当前选中那条
+    Object.entries(themePolylinesRef.current).forEach(([rid, list]) => {
+      list.forEach(poly => { if (!newId || rid === newId) poly.show(); else poly.hide(); });
     });
 
     if (newId) {
