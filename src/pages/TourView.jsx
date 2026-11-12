@@ -684,7 +684,8 @@ export default function TourView() {
               const poly = new window.AMap.Polyline({
                 path: secPath, map,
                 strokeColor: ROUTE_COLORS[(ri + si) % ROUTE_COLORS.length],
-                strokeWeight: 3, strokeOpacity: 0.5,
+                strokeWeight: 4, strokeOpacity: 0.75, // 片区线要在全区域缩放下仍看得出是"一段"
+                lineJoin: 'round',
               });
               poly.hide(); // 只在选中这条主题游时显示
               if (currentRouteIdRef.current === route.id) poly.show(); // 深链首屏已选这条，先画出来
