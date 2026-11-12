@@ -1256,8 +1256,19 @@ Deno.serve(async (req: Request) => {
         // 并按真实里程重判交通方式——3km 以上不可能是徒步。
         if (Array.isArray(pathModel.stopKm) && pathModel.stopKm.length === (route.stops || []).length) {
           route.legs = (route.legs || []).map((leg: any, i: number) => {
-            const realM = Math.round((pathModel.stopKm[i + 1] - pathModel.stopKm[i]) * 1000);
+            let realM = Math.round((pathModel.stopKm[i + 1] - pathModel.stopKm[i]) * 1000);
             if (!Number.isFinite(realM) || realM <= 0) return leg;
+            // 景区里两点若没有直达公路，驾车路径会绕大半圈：庐山五老峰→三叠泉
+            // 直线 3.6km，驾车 49.6km（知识层写的是"观光车约 4 公里至入口"）。
+            // 这种里程按直线 × 1.3 估，避免把绕行噪声写进库。
+            const a = stopCoords[i];
+            const b2 = stopCoords[i + 1];
+            if (a && b2) {
+              const straight = haversineM(a, b2);
+              if (realM > 20000 && straight < 8000 && realM > straight * 5) {
+                realM = Math.round(straight * 1.3);
+              }
+            }
             let mode = leg.mode;
             if (mode === "walk" && realM > WALK_MAX_M) {
               mode = realM > SCENIC_SHUTTLE_MAX_M ? "car" : "shuttle";

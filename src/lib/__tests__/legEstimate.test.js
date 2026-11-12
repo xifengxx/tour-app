@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { ascentBetweenProf, legDistanceM, parseElevM, walkMinutes } from '../legEstimate';
+import { ascentBetweenProf, detourCorrected, legDistanceM, parseElevM, walkMinutes } from '../legEstimate';
 
 describe('parseElevM', () => {
   it('解析中文海拔写法', () => {
@@ -50,5 +50,17 @@ describe('legDistanceM', () => {
   });
   it('没有 path 时退回直线距离', () => {
     expect(legDistanceM({}, 0, 280)).toBe(280);
+  });
+});
+
+describe('detourCorrected', () => {
+  it('驾车绕大半圈的里程按直线估：庐山五老峰→三叠泉 49.6km → 约 4.7km', () => {
+    expect(detourCorrected(49600, 3632)).toBe(4722);
+  });
+  it('正常山区盘山路不误改：恒山天峰岭→悬空寺 7.2km 保留', () => {
+    expect(detourCorrected(7200, 1950)).toBe(7200);
+  });
+  it('短段不动', () => {
+    expect(detourCorrected(3000, 2500)).toBe(3000);
   });
 });

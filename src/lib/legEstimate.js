@@ -70,6 +70,23 @@ export const walkMinutes = (meters, ascent = 0, descent = 0) => {
  * 取第 idx 站到第 idx+1 站的距离（米）：
  * 真实路径里程差（path.stopKm）> leg.distanceM（多为直线）> 两点直连。
  */
+/**
+ * 绕行噪声修正。非徒步段原先是按驾车路径采样的里程，但景区里两点若没有直达公路，
+ * 高德会给出"绕大半圈"的公路线：庐山五老峰→三叠泉直线 3.6km，驾车 49.6km，
+ * 而知识层写的是"观光车约 4 公里至三叠泉景区入口"。
+ * 判据：驾车里程 >20km、直线 <8km、且超过直线 5 倍 → 认定是绕行噪声，
+ * 按直线 × 1.3（景区摆渡的正常绕行）估里程。正常的山区盘山路（恒山天峰岭→悬空寺
+ * 直线 1.95km、驾车 7.2km）不满足"绝对里程 >20km"，不会被误改。
+ */
+export const detourCorrected = (meters, straightM) => {
+  if (!Number.isFinite(meters) || meters <= 0) return meters;
+  if (!Number.isFinite(straightM) || straightM <= 0) return meters;
+  if (meters > 20000 && straightM < 8000 && meters > straightM * 5) {
+    return Math.round(straightM * 1.3);
+  }
+  return meters;
+};
+
 export const legDistanceM = (route, idx, straightM = null) => {
   const stopKm = route?.path?.stopKm;
   if (Array.isArray(stopKm) && Number.isFinite(stopKm[idx]) && Number.isFinite(stopKm[idx + 1])) {

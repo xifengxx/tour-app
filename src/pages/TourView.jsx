@@ -11,7 +11,7 @@ import RouteBar from '../components/RouteBar';
 import ContentCard from '../components/ContentCard';
 import ElevationProfile from '../components/ElevationProfile';
 import ThemeSectionDeck from '../components/ThemeSectionDeck';
-import { ascentBetweenProf, legDistanceM, walkMinutes } from '../lib/legEstimate';
+import { ascentBetweenProf, detourCorrected, legDistanceM, walkMinutes } from '../lib/legEstimate';
 import DetailModal from '../components/DetailModal';
 import FavStampButton from '../components/FavStampButton';
 import ShareModal from '../components/ShareModal';
@@ -162,7 +162,7 @@ const nextLegInfo = (route, stopIdx, locById) => {
   const a = locById[fromId];
   const b = locById[toId];
   const straightM = a && b ? havKm(a, b) * 1000 : null;
-  const meters = legDistanceM(route, stopIdx, straightM);
+  const meters = detourCorrected(legDistanceM(route, stopIdx, straightM), straightM);
 
   // 存量导览的 legs.mode 是管线按"直线距离"判的：天峰岭→悬空寺直线 1.95km < 3km
   // 被判成徒步，实际 7.2km 山路。真实里程一旦超过直线 2 倍且本身超过 3km，
