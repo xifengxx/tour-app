@@ -170,6 +170,9 @@ const nextLegInfo = (route, stopIdx, locById) => {
   if (mode === 'walk' && meters > 3000 && straightM > 0 && meters > straightM * 2) {
     mode = meters > 12000 ? 'car' : 'shuttle';
   }
+  // 里程本身也决定交通方式：景区摆渡跑不了 12 公里以上（庐山五老峰→三叠泉
+  // 真实 49.6km 仍标"观光车 135 分钟"，实际是山路专车）。只升不降。
+  if (meters > 12000 && (mode === 'shuttle' || mode === 'walk')) mode = 'car';
 
   // 时间：徒步段按剖面里的真实爬升折算（Naismith），机动车段仍按均速。
   const kmA = stopKmInRoute(route, fromId, locById);
