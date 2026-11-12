@@ -331,12 +331,19 @@ export function planRoutes(locs: any[], ctx: PlanRoutesContext) {
       const stops = (tr.stops || []) as any[];
       if (stops.length < 5) continue;
       const ids: string[] = [];
+      // 知识步道改用全量可排站地点匹配：步道站点由 injectTrailSeeds 建出来，scenic 不一定
+      // 落在"核心景区"标签里，用 routeCorePool/coherentCorePool 都会漏，一漏就退回启发式，
+      // 三清山实测 6 站的知识环线因此反复掉到 3~4 站。
+      const pool = tr.destinationBound ? locs.filter(canRoute) : coherentCorePool;
       for (const st of stops) {
         const keys = [st.name, ...(st.aliases || [])].map(normalizeStopName).filter(Boolean) as string[];
         if (!keys.length) continue;
-        const hit = coherentCorePool.find((l: any) => !ids.includes(l.id) && keys.some((k) => {
+        // 同名优先："禹皇顶" 在池里既有精确同名点，也有 "玉台-禹皇顶栈道"（包含关系），
+        // 直接 includes 匹配会让 AI 的拼接名顶替掉知识里的规范站名。
+        const exact = pool.find((l: any) => !ids.includes(l.id) && keys.includes(normalizeStopName(l.name)));
+        const hit = exact ?? pool.find((l: any) => !ids.includes(l.id) && keys.some((k) => {
           const lk = normalizeStopName(l.name);
-          return !!lk && (lk === k || lk.includes(k) || k.includes(lk));
+          return !!lk && (lk.includes(k) || k.includes(lk));
         }));
         if (hit) ids.push(hit.id);
       }

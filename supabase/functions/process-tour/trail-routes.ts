@@ -181,12 +181,21 @@ export function injectTrailSeeds(
   // 目的地知识里的步道天然属于该目的地，即使 AI 抽取一个站都没命中，
   // 也必须用它把整条步道补进核心池——否则知识永远只是"参考资料"，
   // 而 1 日线的站点集合只能继续由重要性启发式决定。
-  const boundFallback = trails
+  const picked = selectTrail(destName, locs, trails);
+  // 三清山有 4 条知识步道（6 站主环线、3 站南线、4 站两日、1 站玉京峰支线），selectTrail 按
+  // 别名匹配可能选中只有 3 站的南线，于是主环线的三清宫/禹皇顶压根没被建出来，
+  // 1 日线随之掉站。目的地步道里，站数最多的那条就是这个目的地的主线，优先用它。
+  const longestBound = trails
     .filter(trail => trail.destinationBound && trail.stops.length >= 1)
     .sort((a, b) => b.stops.length - a.stops.length)[0];
-  const selected = selectTrail(destName, locs, trails)
-    ?? (boundFallback ? { route: boundFallback, matches: new Map<number, LocLike>() } : null);
-  if (!selected) return [];
+  const chosenRoute = (() => {
+    const pickedLen = picked?.route.stops.length ?? 0;
+    const boundLen = longestBound?.stops.length ?? 0;
+    if (boundLen > pickedLen && boundLen >= 5) return longestBound!;
+    return picked?.route ?? longestBound;
+  })();
+  if (!chosenRoute) return [];
+  const selected = { route: chosenRoute, matches: picked?.matches ?? new Map<number, LocLike>() };
   const added: string[] = [];
   const stops = selected.route.stops;
   stops.forEach((stop, stopIndex) => {
@@ -242,6 +251,7 @@ export function applyTrailGroups(locs: any[], destName: string, trails: TrailRou
     for (const matched of matches.values()) {
       const loc = locs.find(l => l.id === matched.id);
       if (!loc) continue;
+      if (claimed.has(loc.id)) continue;
       claimed.add(loc.id);
       if (loc.scenic !== route.scenicName) {
         loc.scenic = route.scenicName;
