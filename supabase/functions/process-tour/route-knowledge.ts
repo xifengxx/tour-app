@@ -45,7 +45,10 @@ export function selectRouteKnowledge(
         destinationName: row.destination_name || destName,
         aliases: row.aliases || [],
         zones: row.model?.zones || [],
-        trails: row.model!.trails!,
+        // 这一行是按 destination_name/aliases 命中才挑出来的，步道天然属于该目的地。
+        // 打上 destinationBound，避免 isDestinationTrail 再拿线路别名与山名匹配、
+        // 把整份知识静默筛空（三清山 curated 知识的 4 条步道曾全部失效）。
+        trails: row.model!.trails!.map(trail => ({ ...trail, destinationBound: true })),
         edges: row.model?.edges || [],
         source: row.source || "database",
         confidence: Number(row.confidence || 0),

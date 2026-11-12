@@ -12,6 +12,13 @@ export type TrailRoute = {
   id?: string;
   aliases: string[];
   stops: TrailStop[];
+  /**
+   * 这条步道来自"按目的地名查到的那一行知识"，本身已绑定该目的地。
+   * 知识行的 trails 里 aliases 存的是线路别名（"一日精华线"），不含山名，
+   * 若仍按 aliases 与 destName 互相包含来判定，整份知识会被全部筛掉——
+   * 三清山 curated 知识的 4 条步道就是这样一条都没参与过排序。
+   */
+  destinationBound?: boolean;
   // 嵩山=太室山+少室山这类多徒步区需要把已知线路分到不同景区池；
   // 恒山这类单主线目的地可以不填。
   scenicName?: string;

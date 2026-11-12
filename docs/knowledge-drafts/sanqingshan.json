@@ -95,14 +95,6 @@
         ],
         "stops": [
           {
-            "name": "南清园",
-            "lat": 28.905285,
-            "lng": 118.070215,
-            "mode": "walk",
-            "duration": "约 90 分钟",
-            "required": true
-          },
-          {
             "name": "巨蟒出山",
             "aliases": [
               "巨蟒出山石柱"
@@ -179,13 +171,6 @@
         ],
         "stops": [
           {
-            "name": "南清园",
-            "lat": 28.905285,
-            "lng": 118.070215,
-            "mode": "walk",
-            "required": true
-          },
-          {
             "name": "西海岸",
             "mode": "walk",
             "lat": 28.904391,
@@ -223,13 +208,6 @@
           "看日出线"
         ],
         "stops": [
-          {
-            "name": "南清园",
-            "lat": 28.905285,
-            "lng": 118.070215,
-            "mode": "walk",
-            "required": true
-          },
           {
             "name": "西海岸",
             "mode": "walk",

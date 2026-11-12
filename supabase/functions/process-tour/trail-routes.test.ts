@@ -165,3 +165,49 @@ describe("步道种子补全只接受游览点（v90）", () => {
     expect(locs.filter((l: any) => /候车厅|售票处/.test(l.name))).toEqual([]);
   });
 });
+
+// 目的地知识（curated 行）里的 trails：aliases 存的是线路别名（"一日精华线"），
+// 不含山名。此前 isDestinationTrail 用 aliases 与 destName 互相包含判定，
+// 整份三清山知识被静默筛空，1 日线只能由重要性启发式决定。
+describe("目的地知识里的步道", () => {
+  const sqsTrail = {
+    id: "sqs-classic-loop-east",
+    aliases: ["一日精华线", "东上西下环线"],
+    destinationBound: true,
+    stops: [
+      { name: "巨蟒出山", lat: 28.905746, lng: 118.069954, required: true },
+      { name: "东方女神", aliases: ["司春女神"], lat: 28.907475, lng: 118.074681, required: true },
+      { name: "禹皇顶", lat: 28.903852, lng: 118.069122, required: true },
+      { name: "阳光海岸", lat: 28.910513, lng: 118.065059, required: true },
+      { name: "三清宫", lat: 28.915824, lng: 118.05922, required: true },
+      { name: "西海岸", lat: 28.904391, lng: 118.06025, required: true },
+    ],
+  };
+
+  it("线路别名不含山名时，知识步道仍然生效并决定站序", () => {
+    const locs = [
+      loc("ju", "巨蟒出山", 118.069954, 28.905746),
+      loc("nv", "东方女神（司春女神）", 118.074681, 28.907475),
+      loc("yu", "禹皇顶", 118.069122, 28.903852),
+      loc("yh", "阳光海岸栈道", 118.065059, 28.910513),
+      loc("gong", "三清宫", 118.05922, 28.915824),
+      loc("xh", "西海岸栈道", 118.06025, 28.904391),
+    ];
+    const ids = ["xh", "gong", "yh", "yu", "nv", "ju"]; // 打乱的输入
+    const ordered = orderStopsByTrail(ids, locs, null, "三清山", [sqsTrail]);
+    expect(ordered).toEqual(["ju", "nv", "yu", "yh", "gong", "xh"]);
+  });
+
+  it("AI 一个站都没命中时，仍用最长的一条知识步道补齐景点", () => {
+    const locs = [loc("umbrella", "三清山风景区", 118.06578, 28.895559)];
+    const added = injectTrailSeeds(locs, "三清山", "三清山", [sqsTrail]);
+    expect(added).toEqual(expect.arrayContaining(["巨蟒出山", "东方女神", "禹皇顶", "阳光海岸", "三清宫", "西海岸"]));
+  });
+
+  it("没有 destinationBound 的旧策展步道行为不变", () => {
+    const legacy = { ...sqsTrail, destinationBound: false };
+    const locs = [loc("umbrella", "三清山风景区", 118.06578, 28.895559)];
+    const added = injectTrailSeeds(locs, "三清山", "三清山", [legacy]);
+    expect(added).toEqual([]);
+  });
+});

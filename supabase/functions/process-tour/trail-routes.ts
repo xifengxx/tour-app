@@ -115,6 +115,9 @@ const hasCoords = (loc: LocLike | undefined): loc is LocLike & { lat: number; ln
 const trailAliases = (stop: TrailStop) => [stop.name, ...(stop.aliases || [])].map(normalizeName).filter(Boolean);
 
 const isDestinationTrail = (route: TrailRoute, destName: string) => {
+  // 来自目的地知识行的步道已经按目的地筛选过，aliases 里是线路名而非山名，
+  // 不能再拿它跟 destName 做包含匹配（否则整份知识被静默丢弃）。
+  if (route.destinationBound) return true;
   const target = normalizeName(destName);
   return route.aliases.some(alias => target.includes(normalizeName(alias)) || normalizeName(alias).includes(target));
 };
@@ -175,7 +178,14 @@ export function injectTrailSeeds(
   coreScenicName: string,
   trails: TrailRoute[] = CURATED_TRAILS,
 ): string[] {
-  const selected = selectTrail(destName, locs, trails);
+  // 目的地知识里的步道天然属于该目的地，即使 AI 抽取一个站都没命中，
+  // 也必须用它把整条步道补进核心池——否则知识永远只是"参考资料"，
+  // 而 1 日线的站点集合只能继续由重要性启发式决定。
+  const boundFallback = trails
+    .filter(trail => trail.destinationBound && trail.stops.length >= 1)
+    .sort((a, b) => b.stops.length - a.stops.length)[0];
+  const selected = selectTrail(destName, locs, trails)
+    ?? (boundFallback ? { route: boundFallback, matches: new Map<number, LocLike>() } : null);
   if (!selected) return [];
   const added: string[] = [];
   const stops = selected.route.stops;

@@ -26,7 +26,12 @@ describe('storySeed 自动注册', () => {
         expect(id.length).toBeGreaterThan(4)
         expect(loc.name).toBeTruthy()
         expect((loc.timeline ?? []).length).toBeGreaterThanOrEqual(2)
-        expect((loc.figures ?? []).length).toBeGreaterThanOrEqual(1)
+        // 人物可以留空：纯地质/工程景观点（巨蟒出山之外的东西海岸栈道、禹皇顶这类）
+        // 没有可核实的关联人物，硬挂"文化背景人物"就是编造。
+        // 留空时用更严的时间轴（≥2 条）承接，避免"没人物也没内容"的残缺案头。
+        if ((loc.figures ?? []).length === 0) {
+          expect((loc.timeline ?? []).length).toBeGreaterThanOrEqual(2)
+        }
         expect((loc.shot ?? []).length).toBeGreaterThanOrEqual(1)
         for (const step of loc.timeline ?? []) {
           expect(step.era).toBeTruthy()

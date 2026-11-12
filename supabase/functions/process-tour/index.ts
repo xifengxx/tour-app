@@ -211,7 +211,7 @@ Deno.serve(async (req: Request) => {
       try {
         const rr2 = await deepseek([
           { role: "system", content: "你是中国旅游专家。只返回JSON。" },
-          { role: "user", content: `目的地：${destName}（${destRegion}）。列出该地区除\"${destName}\"自身外、最值得一游的著名独立景点，以及 ${destName} 所在知名景区的著名子景点。只列真实存在、广为人知的著名景点。**若该知名景区有多个广为人知的著名子景点，必须全部列出、一个都不能漏，不要只挑最出名的几个**（示例：张家界武陵源的著名子景点为 天子山、黄石寨、杨家界、袁家界、金鞭溪、十里画廊、百龙天梯、水绕四门，若涉及武陵源必须全部包含）。独立景点（如宝峰湖、黄龙洞、张家界大峡谷）也一并列出。8-15 个，宁多勿漏。JSON: {\"attractions\":[\"名称1\",\"名称2\"]}` },
+          { role: "user", content: `目的地：${destName}（${destRegion}）。列出该地区除"${destName}"自身外、最值得一游的著名独立景点，以及 ${destName} 所在知名景区的著名子景点。只列真实存在、广为人知的著名景点。**若该知名景区有多个广为人知的著名子景点，必须全部列出、一个都不能漏，不要只挑最出名的几个**（示例：张家界武陵源的著名子景点为 天子山、黄石寨、杨家界、袁家界、金鞭溪、十里画廊、百龙天梯、水绕四门，若涉及武陵源必须全部包含）。独立景点（如宝峰湖、黄龙洞、张家界大峡谷）也一并列出。8-15 个，宁多勿漏。JSON: {"attractions":["名称1","名称2"]}` },
         ], { temperature: 0.2 });
         aiFromPrep = (rr2.attractions || []).map(String).filter(Boolean);
       } catch { /* AI 提议失败不阻断 */ }
@@ -622,6 +622,45 @@ Deno.serve(async (req: Request) => {
     // but locations.id / routes.id are global primary keys. Scope them per tour
     // or writes collide with other tours (409 duplicate key).
     const scope = tourId.slice(0, 8);
+    // 创作者手工补的地点（tags 含"人工策展"）不是 AI 抽取产物，而写库是 deleteRows 全删重建，
+    // 重跑一次就会把它们连同四层文本、时间轴一起抹掉。L3 下先把它们并回地点池：
+    // id 取去掉导览前缀的 slug，写库时 slugToDbId 会映射回同一个 db id。
+    try {
+      const oldRes = await fetch(`${SUPABASE_URL}/rest/v1/locations?tour_id=eq.${tourId}&select=*`, { headers: hdr });
+      if (oldRes.ok) {
+        const oldRows: any[] = await oldRes.json();
+        const norm = (v: unknown) => String(v ?? "").trim().toLowerCase();
+        const existing = new Set(locs.map((l: any) => norm(l.name)));
+        let restored = 0;
+        for (const row of Array.isArray(oldRows) ? oldRows : []) {
+          if (!(row.tags || []).includes("人工策展") || !row.lat || !row.lng) continue;
+          const name = String(row.name || "");
+          if (!name || existing.has(norm(name))) continue;
+          const rawId = String(row.id || "");
+          const slug = rawId.startsWith(`${scope}-`) ? rawId.slice(scope.length + 1) : rawId;
+          locs.push({
+            id: slug,
+            name,
+            lat: row.lat,
+            lng: row.lng,
+            elevation: row.elevation || "",
+            importance: row.importance || 4,
+            tags: row.tags || [],
+            layers: row.layers || {},
+            reflection: row.reflection || "",
+            practical: row.practical || {},
+            timeline: row.timeline || [],
+            figures: row.figures || [],
+            shot: row.shot || [],
+            scenic: coreScenicName,
+            sort_order: locs.length,
+          });
+          existing.add(norm(name));
+          restored++;
+        }
+        if (restored) warnings.push(`🗂 恢复 ${restored} 个创作者手工地点（AI 抽取不会产出，原本会被重跑抹掉）`);
+      }
+    } catch { /* 读旧行失败不阻塞本次生成 */ }
     const slugToDbId = new Map(locs.map(l => [l.id, `${scope}-${l.id}`]));
     // 数据库 id 视图的地点列表（供地理排序用：stops 存的是 db id）
     const dbLocs = locs.map(l => ({ ...l, id: slugToDbId.get(l.id) || l.id }));
@@ -1014,7 +1053,7 @@ Deno.serve(async (req: Request) => {
     console.log(`Writing ${locs.length} locs + ${routes.length} routes`);
     await deleteRows("locations", tourId);
     await deleteRows("routes", tourId);
-    await postRows("locations", locs.map(l => ({ id: slugToDbId.get(l.id), tour_id: tourId, name: l.name, lat: l.lat, lng: l.lng, elevation: l.elevation, importance: l.importance, tags: l.tags, layers: l.layers, reflection: l.reflection, practical: l.practical, sort_order: l.sort_order })));
+    await postRows("locations", locs.map(l => ({ id: slugToDbId.get(l.id), tour_id: tourId, name: l.name, lat: l.lat, lng: l.lng, elevation: l.elevation, importance: l.importance, tags: l.tags, layers: l.layers, reflection: l.reflection, practical: l.practical, sort_order: l.sort_order, timeline: l.timeline || [], figures: l.figures || [], shot: l.shot || [] })));
     await deleteRows("content_layers", tourId);
     await postRows("content_layers", [
       { layer_key: "novel", name: "文学意境", icon: "📖", color: "#c0392b", sort_order: 0 },
