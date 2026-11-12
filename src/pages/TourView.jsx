@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button';
 import RouteBar from '../components/RouteBar';
 import ContentCard from '../components/ContentCard';
 import ElevationProfile from '../components/ElevationProfile';
-import ThemeSections from '../components/ThemeSections';
+import ThemeSectionDeck from '../components/ThemeSectionDeck';
 import DetailModal from '../components/DetailModal';
 import FavStampButton from '../components/FavStampButton';
 import ShareModal from '../components/ShareModal';
@@ -20,7 +20,7 @@ import TourPrologue from '../components/TourPrologue';
 import { summarizeStory, applyStorySeed } from '../lib/story';
 import { storySeedFor, hasSeedStory } from '../lib/storySeed';
 import { fetchVisits, fetchFavorites, hydrateStampCache } from '../lib/visits';
-import { Share2, Check, Heart, MessageCircle, MapPinned, CornerDownRight, ListTree, ChevronRight, Navigation, ScrollText } from 'lucide-react';
+import { Share2, Check, Heart, MessageCircle, MapPinned, CornerDownRight, ListTree, ChevronRight, ChevronLeft, Navigation, ScrollText } from 'lucide-react';
 import { extractMarkerLoc, findNearestLocation, buildPinIcon } from '../lib/mapUtils';
 import { ROUTE_COLORS, cnOrdinal } from '../lib/routeColors';
 import { routeLegsSummary } from '../lib/routeLegs.js';
@@ -317,6 +317,9 @@ export default function TourView() {
   const [currentRouteId, setCurrentRouteId] = useState(null);
   currentRouteIdRef.current = currentRouteId;
   const [showCard, setShowCard] = useState(true);
+  // 主题游的一级视图是"片区卡"：展开哪个片区、是否已从片区点进单点详情。
+  const [themeSectionKey, setThemeSectionKey] = useState(null);
+  const [themeSpotOpen, setThemeSpotOpen] = useState(false);
   // P2-1 概览三档：0 收起 / 1 半开 / 2 全开。点「行程」逐档循环，卡片高度跟着走
   const [overviewStage, setOverviewStage] = useState(0);
   const cycleOverview = () => setOverviewStage(v => (v + 1) % 3);
@@ -486,6 +489,15 @@ export default function TourView() {
       const activeRoute = tour?.routes?.find(route => route.id === currentRouteIdRef.current);
       cancelRouteProgressAnimation();
       setRouteProgressKm(stopKmInRoute(activeRoute, loc.id, locByIdRef.current));
+      // 主题游：点进某个点＝进入该片区的单点详情（二级），并记住属于哪个片区
+      const secs = (activeRoute?.sections || []).filter(s => (s.stops || []).length);
+      if (secs.length >= 2) {
+        const sec = secs.find(s => (s.stops || []).includes(loc.id));
+        if (sec) {
+          setThemeSectionKey(sec.key);
+          setThemeSpotOpen(true);
+        }
+      }
     }
     setCurrentLoc(loc);
     setCurrentLayer(firstLayerIdRef.current);
@@ -497,6 +509,27 @@ export default function TourView() {
       map.setZoom(16);
     }
   }, [tour, cancelRouteProgressAnimation]);
+
+  // 主题游：展开一个片区时把地图缩到该片区。全区域视图下每个片区只有几个像素，
+  // 看图等于没看；片区才是主题游里"一次要玩的地方"。
+  const focusSection = useCallback((section) => {
+    const map = mapInstance.current;
+    if (!map || !section?.stops?.length) return;
+    const pts = section.stops
+      .map(id => locByIdRef.current[id])
+      .filter(l => l && Number.isFinite(l.lng) && Number.isFinite(l.lat))
+      .map(l => [l.lng, l.lat]);
+    if (!pts.length) return;
+    if (pts.length === 1) { map.setZoomAndCenter(15, pts[0]); return; }
+    const lngs = pts.map(p => p[0]); const lats = pts.map(p => p[1]);
+    const sw = [Math.min(...lngs), Math.min(...lats)];
+    const ne = [Math.max(...lngs), Math.max(...lats)];
+    if (window.AMap?.Bounds) {
+      map.setBounds(new window.AMap.Bounds(sw, ne), false, [60, 60, 160, 60]);
+    } else {
+      map.setFitView();
+    }
+  }, []);
 
   const toggleFav = async () => {
     if (!user) {
@@ -794,8 +827,15 @@ export default function TourView() {
       );
     } catch { /* 忽略沙箱环境下的 history 异常 */ }
     const firstStop = newId ? locByIdRef.current[route.stops[0]] : null;
-    setCurrentLoc(firstStop);
-    if (firstStop) { setCurrentLayer(firstLayerIdRef.current); setShowCard(true); }
+    // 主题游首屏不预选任何单点：一级视图是片区卡，单点详情是点进去之后的二级。
+    const themeRoute = (route?.sections || []).filter(s => (s.stops || []).length).length >= 2;
+    if (themeRoute) {
+      setThemeSectionKey(null);
+      setThemeSpotOpen(false);
+    }
+    setCurrentLoc(themeRoute ? null : firstStop);
+    if (!themeRoute && firstStop) { setCurrentLayer(firstLayerIdRef.current); setShowCard(true); }
+    if (themeRoute) setShowCard(true);
 
     Object.entries(routePolylinesRef.current).forEach(([rid, rp]) => {
       if (!newId || rid === newId) {
@@ -1016,8 +1056,8 @@ export default function TourView() {
 
         {showCard && (
           <div className="anim-content flex flex-col flex-1 min-h-0">
-            {/* 当前站条：第几站 / 下一站多远、怎么去 */}
-            {activeRoute && (
+            {/* 当前站条：第几站 / 下一站多远、怎么去。主题游不适用——它没有"当前站" */}
+            {!isThemeRoute && activeRoute && (
               <StopBar
                 route={activeRoute}
                 loc={currentLoc}
@@ -1029,17 +1069,22 @@ export default function TourView() {
               />
             )}
 
-            {/* v93 + 回归修复：主题游按片区呈现，必须常显。
-                4d33f3a「行程概览三档」把它和卷首语一起塞进 overviewStage>0，
-                默认收起后，主题游在屏幕上又变成"一堆点连成一条线"的老样子，
-                而它本来不是一条线。 */}
-            <div className="shrink-0 overflow-y-auto overscroll-contain max-h-[38vh]">
-              <ThemeSections
+            {/* 主题游一级视图：片区卡（片区 → 片区内玩法），单点详情退成二级 */}
+            {isThemeRoute && (
+              <ThemeSectionDeck
                 sections={activeRoute?.sections}
                 locationsById={locByIdRef.current}
+                legs={activeRoute?.legs || []}
+                activeKey={themeSectionKey}
+                spotId={themeSpotOpen ? currentLoc?.id : null}
+                onSelectSection={(key, group) => {
+                  setThemeSectionKey(key);
+                  setThemeSpotOpen(false);
+                  if (key) focusSection(group);
+                }}
                 onSelectSpot={(id) => { const loc = locByIdRef.current[id]; if (loc) selectLoc(loc); }}
               />
-            </div>
+            )}
 
             {/* 行程概览（卷首语 / 交通分段）：默认收起，把高度让给正文 */}
             {overviewStage > 0 && (
@@ -1107,7 +1152,19 @@ export default function TourView() {
             </div>
             )}
 
-            {currentLoc ? (
+            {/* 主题游：单点详情是二级视图，顶部给一条"返回片区"的退路 */}
+            {isThemeRoute && themeSpotOpen && currentLoc && (
+              <button
+                type="button"
+                onClick={() => setThemeSpotOpen(false)}
+                className="mx-4 mb-1 self-start inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground"
+              >
+                <ChevronLeft className="h-3 w-3" />
+                返回片区{activeRoute?.sections?.find(s => s.key === themeSectionKey)?.name ? ` · ${activeRoute.sections.find(s => s.key === themeSectionKey).name}` : ''}
+              </button>
+            )}
+
+            {currentLoc && (isThemeRoute ? themeSpotOpen : true) ? (
               <ContentCard
                 key={currentLoc.id}
                 loc={currentLoc}
@@ -1117,7 +1174,7 @@ export default function TourView() {
                 onShowDetail={setShowDetail}
                 tourId={tourId}
               />
-            ) : (
+            ) : isThemeRoute ? null : (
               <div className="flex-1 flex items-center justify-center text-center px-4 pb-6">
                 <div>
                   <div className="w-14 h-14 mx-auto mb-3 rounded-full border border-border bg-background flex items-center justify-center">
