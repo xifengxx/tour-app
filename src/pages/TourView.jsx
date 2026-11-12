@@ -1202,8 +1202,8 @@ export default function TourView() {
               const prev = pos > 0 ? locByIdRef.current[ids[pos - 1]] : null;
               const next = pos >= 0 && pos < ids.length - 1 ? locByIdRef.current[ids[pos + 1]] : null;
               const navBtn = 'flex h-full w-10 shrink-0 items-center justify-center rounded-xl border border-border bg-background text-foreground active:bg-black/[0.04] disabled:opacity-30 disabled:active:bg-background';
+              // 宽度收到 26rem：桌面宽屏下不再横贯整行，移动端仍自动收缩占满。
               return (
-                {/* 宽度收到 26rem：桌面宽屏下不再横贯整行，移动端仍自动收缩占满。 */}
                 <div className="mx-3 mb-2 flex w-[calc(100%-1.5rem)] max-w-[26rem] items-stretch gap-1.5">
                   <button
                     type="button"
