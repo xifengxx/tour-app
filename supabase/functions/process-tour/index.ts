@@ -623,12 +623,21 @@ Deno.serve(async (req: Request) => {
     // or writes collide with other tours (409 duplicate key).
     const scope = tourId.slice(0, 8);
     let renamed = 0;
+    // v104：上一轮的路线要读出来，供"路线继承"用（重跑不许换线路）
+    let oldRoutes: any[] = [];
     // 创作者手工补的地点（tags 含"人工策展"）不是 AI 抽取产物，而写库是 deleteRows 全删重建，
     // 重跑一次就会把它们连同四层文本、时间轴一起抹掉。
     // v100：按语义合并而不是同名判断。AI 常抽成"东方女神"、人工写成"东方女神（司春女神）"，
     // 同名判断会把同一个景点留成两份，路线里并排出现（三清山线上实测库内 20→32 点）。
     try {
-      const oldRes = await fetch(`${SUPABASE_URL}/rest/v1/locations?tour_id=eq.${tourId}&select=*`, { headers: hdr });
+      const [oldRes, oldRouteRes] = await Promise.all([
+        fetch(`${SUPABASE_URL}/rest/v1/locations?tour_id=eq.${tourId}&select=*`, { headers: hdr }),
+        fetch(`${SUPABASE_URL}/rest/v1/routes?tour_id=eq.${tourId}&select=day_label,stops`, { headers: hdr }),
+      ]);
+      if (oldRouteRes.ok) {
+        const rows = await oldRouteRes.json();
+        oldRoutes = Array.isArray(rows) ? rows : [];
+      }
       if (oldRes.ok) {
         const oldRows: any[] = await oldRes.json();
         const curated: any[] = (Array.isArray(oldRows) ? oldRows : []).filter(
@@ -842,6 +851,24 @@ Deno.serve(async (req: Request) => {
     });
     for (const sp of suppressedPlans) {
       warnings.push(`🔐 未生成${sp.plan}：${sp.reason}。创作者确认一条路线后即可解锁。`);
+    }
+
+    // v104 路线继承：同一导览重跑时，上一条「1日精华游 / 2日全景游」的站点若大部分仍在，
+    // 就沿用它的站点与顺序。AI 每轮会新抽出几个点（飞石窟、北岳寝宫…），
+    // 按重要性重排会把既有线路挤掉——用户看到的就是"每跑一次一日线都不一样"。
+    // 既有站点残存不足 80% 才重新规划（那说明知识或地点集真的变了）。
+    {
+      const dbToSlug = new Map(locs.map(l => [`${scope}-${l.id}`, l.id]));
+      for (const plan of plans) {
+        if (plan.label !== "1日精华游" && plan.label !== "2日全景游") continue;
+        const prev = oldRoutes.find(r => r.day_label === plan.label);
+        if (!prev || !Array.isArray(prev.stops) || prev.stops.length < 5) continue;
+        const slugs = (prev.stops as string[]).map(db => dbToSlug.get(db)).filter((v): v is string => !!v);
+        if (slugs.length < prev.stops.length * 0.8) continue;
+        if (plan.allow && slugs.length === plan.allow.length && slugs.every(s => plan.allow!.includes(s))) continue;
+        warnings.push(`🧷 沿用上一条「${plan.label}」的 ${slugs.length} 个站点（重跑不再换线路）`);
+        plan.allow = slugs;
+      }
     }
     if (routeKnowledge.zones.length && !capabilities.zoneDriven) {
       warnings.push(`🔐 1日精华游未采用未经核实的分区选点，改按核心池重要性取点`);
