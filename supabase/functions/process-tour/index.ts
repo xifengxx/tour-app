@@ -1206,15 +1206,6 @@ Deno.serve(async (req: Request) => {
     console.log(`Writing ${locs.length} locs + ${routes.length} routes`);
     // v105：先覆盖写、再删多余，避免函数被网关掐断时留下空表
     await upsertRows("locations", locs.map(l => ({ id: slugToDbId.get(l.id), tour_id: tourId, name: l.name, lat: l.lat, lng: l.lng, elevation: l.elevation, importance: l.importance, tags: l.tags, layers: l.layers, reflection: l.reflection, practical: l.practical, sort_order: l.sort_order, timeline: l.timeline || [], figures: l.figures || [], shot: l.shot || [] })));
-    // 内容层也用固定 id 覆盖写（原来是先删后写，中断会让四层 Tab 全空）
-    const layerRows = [
-      { layer_key: "novel", name: "文学意境", icon: "📖", color: "#c0392b", sort_order: 0 },
-      { layer_key: "history", name: "历史掌故", icon: "🏛", color: "#d35400", sort_order: 1 },
-      { layer_key: "folklore", name: "民间传说", icon: "🐉", color: "#27ae60", sort_order: 2 },
-      { layer_key: "customs", name: "地域文化", icon: "🎭", color: "#2980b9", sort_order: 3 },
-    ].map(ly => ({ ...ly, id: `${scope}-layer-${ly.layer_key}`, tour_id: tourId }));
-    await upsertRows("content_layers", layerRows);
-    await deleteRowsExcept("content_layers", tourId, layerRows.map(ly => ly.id));
     // v86a: 路线海拔剖面。每条路线一次 OpenTopoData 采样，失败静默跳过。
     const routeProfiles = new Map<string, any[]>();
     // v99：真实路径 + 海拔剖面共用同一几何。路线沿高德步行/驾车路径成线
@@ -1249,6 +1240,15 @@ Deno.serve(async (req: Request) => {
     await deleteRowsExcept("routes", tourId, routes.map((r: any) => String(r.id)));
     // 最后才删旧地点：此时新路线已经写好，不会再出现"路线指向已删地点"或空表
     await deleteRowsExcept("locations", tourId, locs.map(l => slugToDbId.get(l.id) as string).filter(Boolean));
+    // content_layers.id 是 uuid 列，塞不进字符串 id 做 upsert，仍走"先删后写"。
+    // 但它排在 locations/routes 写完之后，中断也只会短暂缺四层文案，不会让页面没路线。
+    await deleteRows("content_layers", tourId);
+    await postRows("content_layers", [
+      { layer_key: "novel", name: "文学意境", icon: "📖", color: "#c0392b", sort_order: 0 },
+      { layer_key: "history", name: "历史掌故", icon: "🏛", color: "#d35400", sort_order: 1 },
+      { layer_key: "folklore", name: "民间传说", icon: "🐉", color: "#27ae60", sort_order: 2 },
+      { layer_key: "customs", name: "地域文化", icon: "🎭", color: "#2980b9", sort_order: 3 },
+    ].map(ly => ({ ...ly, tour_id: tourId })));
 
     // Quality report
     const report = {
