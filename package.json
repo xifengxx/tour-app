@@ -8,7 +8,8 @@
     "build": "vite build",
     "lint": "oxlint",
     "test": "vitest run",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "dryrun": "node scripts/dry-run-pipeline.mjs"
   },
   "dependencies": {
     "@fontsource/noto-serif-sc": "^5.2.8",

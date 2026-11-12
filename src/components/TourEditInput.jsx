@@ -7,11 +7,15 @@ import { ClipboardList, BookOpen, Save, Sparkles, Loader2 } from 'lucide-react';
 export default function TourEditInput({
   title, setTitle, subtitle, setSubtitle, primaryColor, setPrimaryColor,
   destName, setDestName, destRegion, setDestRegion, isPublic, setIsPublic,
+  destType, setDestType, destTypes = [], checkResult, setCheckResult, checking,
   novelTitle, setNovelTitle, novelAuthor, setNovelAuthor, novelEra, setNovelEra,
   novelSynopsis, setNovelSynopsis, sourceText, setSourceText,
   draftTourId, saving, handleSaveBasic, handleSaveDraft,
 }) {
   const inputCls = "w-full bg-background text-foreground rounded-lg px-3 py-2.5 text-sm border border-border mt-1 outline-none focus:border-primary";
+  // 规范名与用户输入只差标点时不必提示「改用」
+  const normForUi = s => String(s || '').replace(/[\s·省市区县]/g, '');
+  const normAndDiff = (a, b) => normForUi(a) !== normForUi(b);
   return (
     <div className="space-y-4">
       {/* Step indicator · 壹贰叁 */}
@@ -38,14 +42,59 @@ export default function TourEditInput({
         </div>
         <div className="flex gap-3">
           <div className="flex-1">
-            <label className="text-muted-foreground text-xs">目的地</label>
-            <input value={destName} onChange={e => setDestName(e.target.value)} className={inputCls} placeholder="如：南岳衡山" />
+            <label className="text-muted-foreground text-xs">目的地 *</label>
+            <input value={destName} onChange={e => { setDestName(e.target.value); setCheckResult?.(null); }} className={inputCls} placeholder="如：南岳衡山" />
           </div>
           <div className="flex-1">
-            <label className="text-muted-foreground text-xs">地区</label>
-            <input value={destRegion} onChange={e => setDestRegion(e.target.value)} className={inputCls} placeholder="如：湖南省衡阳市" />
+            <label className="text-muted-foreground text-xs">地区 *</label>
+            <input value={destRegion} onChange={e => { setDestRegion(e.target.value); setCheckResult?.(null); }} className={inputCls} placeholder="如：湖南省衡阳市" />
           </div>
         </div>
+
+        {/* 目的地类型：原先硬编码 mountain，城市/湖泊导览也被按山岳动线排 */}
+        <div>
+          <label className="text-muted-foreground text-xs">目的地类型 *</label>
+          <div className="flex flex-wrap gap-1.5 mt-1">
+            {destTypes.map(t => (
+              <button
+                key={t.value}
+                type="button"
+                onClick={() => setDestType(t.value)}
+                className={`px-2.5 py-1 rounded-md text-xs border transition-colors ${
+                  destType === t.value
+                    ? 'border-primary bg-primary/10 text-primary'
+                    : 'border-border text-muted-foreground hover:border-primary/40'
+                }`}
+              >{t.label}</button>
+            ))}
+          </div>
+          <p className="text-[10px] text-muted-foreground mt-1 leading-relaxed">
+            类型决定管线用哪套锚点与动线逻辑。选「山岳」才会按步道、分区、高差规则排；城市与湖泊选错会让路线出现假的登山段。
+          </p>
+        </div>
+
+        {/* 提交前核对结果 */}
+        {checking && (
+          <div className="text-[11px] text-muted-foreground flex items-center gap-1.5">
+            <Loader2 className="h-3 w-3 animate-spin" /> 正在核对目的地坐标与地区…
+          </div>
+        )}
+        {!checking && checkResult && (
+          <div className={`text-[11px] leading-relaxed rounded-md px-2.5 py-2 border ${
+            checkResult.level === 'fail' ? 'border-primary/40 bg-primary/[0.06] text-primary'
+              : checkResult.level === 'warn' ? 'border-gamboge/40 bg-gamboge/[0.06] text-gamboge'
+                : 'border-pine/40 bg-pine/[0.06] text-pine'
+          }`}>
+            {checkResult.message}
+            {checkResult.level !== 'fail' && checkResult.canonical && normAndDiff(checkResult.canonical, destRegion) && (
+              <button
+                type="button"
+                onClick={() => { setDestRegion(checkResult.canonical); setCheckResult?.(null); }}
+                className="ml-2 underline underline-offset-2 hover:opacity-80"
+              >改用「{checkResult.canonical}」</button>
+            )}
+          </div>
+        )}
         <div className="flex gap-3 items-center">
           <div>
             <label className="text-muted-foreground text-xs">主题色</label>

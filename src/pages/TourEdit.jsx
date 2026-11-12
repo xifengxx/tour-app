@@ -10,6 +10,7 @@ import ProcessingPhase from '../components/ProcessingPhase';
 import TourEditInput from '../components/TourEditInput';
 import TourEditReview from '../components/TourEditReview';
 import { sectionsForDb } from '../lib/routeSections';
+import { checkDestination, DEST_TYPES } from '../lib/geoCheck';
 import { MapPinned, CloudOff, RefreshCw } from 'lucide-react';
 
 const DEFAULT_LAYERS = [
@@ -38,6 +39,11 @@ export default function TourEdit() {
   const [primaryColor, setPrimaryColor] = useState('#c0392b');
   const [destName, setDestName] = useState('');
   const [destRegion, setDestRegion] = useState('');
+  // A 层：目的地类型必选，不再硬编码 mountain（管线按类型决定锚点/分区逻辑）
+  const [destType, setDestType] = useState('mountain');
+  // A 层：提交前的地名校验结果（pass / warn / fail），null = 还没校验
+  const [checkResult, setCheckResult] = useState(null);
+  const [checking, setChecking] = useState(false);
   const [isPublic, setIsPublic] = useState(false);
 
   // Source material
@@ -76,6 +82,7 @@ export default function TourEdit() {
     setPrimaryColor(tour.theme?.primaryColor || '#c0392b');
     setDestName(tour.destination?.name || '');
     setDestRegion(tour.destination?.region || '');
+    setDestType(tour.destination?.type || 'mountain');
     setIsPublic(tour.isPublic || false);
     setNovelTitle(tour.source?.title || '');
     setNovelAuthor(tour.source?.author || '');
@@ -96,6 +103,12 @@ export default function TourEdit() {
   const handleSaveDraft = async () => {
     if (!user) { flash('请先登录'); return; }
     if (!title.trim()) { flash('请输入标题'); return; }
+    // A 层：先校验「目的地 + 地区」能不能被高德解析、坐标是否落在填写的地区
+    setChecking(true);
+    const chk = await checkDestination(destName, destRegion);
+    setChecking(false);
+    setCheckResult(chk);
+    if (!chk.ok) { flash(chk.message); return; }
     setSaving(true);
     setSaveMsg('');
 
@@ -111,7 +124,7 @@ export default function TourEdit() {
         synopsis: novelSynopsis,
         rawText: sourceText,
       },
-      destination: { name: destName, region: destRegion, type: 'mountain' },
+      destination: { name: destName, region: destRegion, type: destType },
       is_public: false,
       status: 'processing',
     };
@@ -161,7 +174,7 @@ export default function TourEdit() {
         synopsis: novelSynopsis,
         rawText: sourceText,
       },
-      destination: { name: destName, region: destRegion, type: 'mountain' },
+      destination: { name: destName, region: destRegion, type: destType },
       is_public: isPublic,
     };
     try {
@@ -181,6 +194,12 @@ export default function TourEdit() {
   const handleReprocess = async () => {
     if (!user) { flash('请先登录'); return; }
     if (!draftTourId) { flash('尚未保存草稿'); return; }
+    // 重新分析会整条重跑，地区不对同样会白跑一次，先校验
+    setChecking(true);
+    const chk = await checkDestination(destName, destRegion);
+    setChecking(false);
+    setCheckResult(chk);
+    if (!chk.ok) { flash(chk.message); return; }
     try {
       const { error } = await supabase.from('tours').update({ status: 'processing' }).eq('id', draftTourId);
       if (error) throw error;
@@ -260,7 +279,7 @@ export default function TourEdit() {
         synopsis: novelSynopsis,
         rawText: sourceText,
       },
-      destination: { name: destName, region: destRegion, type: 'mountain' },
+      destination: { name: destName, region: destRegion, type: destType },
       is_public: isPublic,
     };
 
@@ -366,6 +385,8 @@ export default function TourEdit() {
             title={title} setTitle={setTitle} subtitle={subtitle} setSubtitle={setSubtitle}
             primaryColor={primaryColor} setPrimaryColor={setPrimaryColor}
             destName={destName} setDestName={setDestName} destRegion={destRegion} setDestRegion={setDestRegion}
+            destType={destType} setDestType={setDestType} destTypes={DEST_TYPES}
+            checkResult={checkResult} setCheckResult={setCheckResult} checking={checking}
             isPublic={isPublic} setIsPublic={setIsPublic}
             novelTitle={novelTitle} setNovelTitle={setNovelTitle} novelAuthor={novelAuthor} setNovelAuthor={setNovelAuthor}
             novelEra={novelEra} setNovelEra={setNovelEra} novelSynopsis={novelSynopsis} setNovelSynopsis={setNovelSynopsis}
