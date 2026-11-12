@@ -968,7 +968,9 @@ export default function TourView() {
       {/* Map */}
       <div className="relative flex-1 min-h-0">
         <div ref={mapRef} className="absolute inset-0 h-full w-full" />
-        {activeRoute?.prof?.length > 1 && (
+        {/* 主题游不画海拔剖面：它不是一个连续行程（恒山主题游把 6 个片区串成 392km），
+            画出来会读成"一天走了 392 公里、爬升 2.7km"，与事实相反。 */}
+        {activeRoute?.prof?.length > 1 && !isThemeRoute && (
           <div className="absolute bottom-0 left-0 right-0 z-10 pointer-events-auto">
             <ElevationProfile
               prof={activeRoute.prof}
