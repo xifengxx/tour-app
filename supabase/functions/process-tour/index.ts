@@ -3,7 +3,7 @@
 // Secrets: supabase secrets set DEEPSEEK_API_KEY=sk-... GAODE_KEY=2ff1... --project-ref qxunedraoviaonjdanag
 
 import { GAODE_KEY, hdr, SUPABASE_URL } from "./config.ts";
-import { cors, deleteRows, json, postRows, setStatus } from "./http.ts";
+import { cors, deleteRows, deleteRowsExcept, json, postRows, setStatus, upsertRows } from "./http.ts";
 import { deepseek, mapLimit } from "./ai.ts";
 import { regeo } from "./gaode-validation.ts";
 import { canonicalizeMechanicalName, gaodeNearbyCulturalPOIs, isDestinationUmbrella, JUNK_RE, landmarkKey, semanticDedupLocations } from "./gaode-scan.ts";
@@ -1204,16 +1204,17 @@ Deno.serve(async (req: Request) => {
 
     // 5. Write
     console.log(`Writing ${locs.length} locs + ${routes.length} routes`);
-    await deleteRows("locations", tourId);
-    await deleteRows("routes", tourId);
-    await postRows("locations", locs.map(l => ({ id: slugToDbId.get(l.id), tour_id: tourId, name: l.name, lat: l.lat, lng: l.lng, elevation: l.elevation, importance: l.importance, tags: l.tags, layers: l.layers, reflection: l.reflection, practical: l.practical, sort_order: l.sort_order, timeline: l.timeline || [], figures: l.figures || [], shot: l.shot || [] })));
-    await deleteRows("content_layers", tourId);
-    await postRows("content_layers", [
+    // v105：先覆盖写、再删多余，避免函数被网关掐断时留下空表
+    await upsertRows("locations", locs.map(l => ({ id: slugToDbId.get(l.id), tour_id: tourId, name: l.name, lat: l.lat, lng: l.lng, elevation: l.elevation, importance: l.importance, tags: l.tags, layers: l.layers, reflection: l.reflection, practical: l.practical, sort_order: l.sort_order, timeline: l.timeline || [], figures: l.figures || [], shot: l.shot || [] })));
+    // 内容层也用固定 id 覆盖写（原来是先删后写，中断会让四层 Tab 全空）
+    const layerRows = [
       { layer_key: "novel", name: "文学意境", icon: "📖", color: "#c0392b", sort_order: 0 },
       { layer_key: "history", name: "历史掌故", icon: "🏛", color: "#d35400", sort_order: 1 },
       { layer_key: "folklore", name: "民间传说", icon: "🐉", color: "#27ae60", sort_order: 2 },
       { layer_key: "customs", name: "地域文化", icon: "🎭", color: "#2980b9", sort_order: 3 },
-    ].map(ly => ({ ...ly, tour_id: tourId })));
+    ].map(ly => ({ ...ly, id: `${scope}-layer-${ly.layer_key}`, tour_id: tourId }));
+    await upsertRows("content_layers", layerRows);
+    await deleteRowsExcept("content_layers", tourId, layerRows.map(ly => ly.id));
     // v86a: 路线海拔剖面。每条路线一次 OpenTopoData 采样，失败静默跳过。
     const routeProfiles = new Map<string, any[]>();
     // v99：真实路径 + 海拔剖面共用同一几何。路线沿高德步行/驾车路径成线
@@ -1244,7 +1245,10 @@ Deno.serve(async (req: Request) => {
       const prof = await elevationProfile(profileCoords as { lng: number; lat: number }[], pathModel ? 100 : 80);
       if (prof) routeProfiles.set(route.id, prof);
     });
-    await postRows("routes", routes.map(r => ({ id: r.id, tour_id: tourId, day_label: r.day_label, title: r.title, stops: r.stops, sections: r.sections || [], legs: r.legs || [], path: r.path || null, prof: routeProfiles.get(r.id) || [], narrative: r.narrative, sort_order: r.sort_order })));
+    await upsertRows("routes", routes.map(r => ({ id: r.id, tour_id: tourId, day_label: r.day_label, title: r.title, stops: r.stops, sections: r.sections || [], legs: r.legs || [], path: r.path || null, prof: routeProfiles.get(r.id) || [], narrative: r.narrative, sort_order: r.sort_order })));
+    await deleteRowsExcept("routes", tourId, routes.map((r: any) => String(r.id)));
+    // 最后才删旧地点：此时新路线已经写好，不会再出现"路线指向已删地点"或空表
+    await deleteRowsExcept("locations", tourId, locs.map(l => slugToDbId.get(l.id) as string).filter(Boolean));
 
     // Quality report
     const report = {
