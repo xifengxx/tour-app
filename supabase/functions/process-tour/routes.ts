@@ -197,15 +197,21 @@ export function buildThemeSections(
   limits: { maxSections?: number; maxPerSection?: number; maxTotal?: number } = {},
 ): RouteSection[] {
   const maxSections = limits.maxSections ?? 6;
-  const maxPerSection = limits.maxPerSection ?? 6;
-  const maxTotal = limits.maxTotal ?? 20;
+  // v100：一个片区最多 8 个点（原 6）。片区大小本来就该随景区丰俭，核心景区尤甚。
+  const maxPerSection = limits.maxPerSection ?? 8;
+  const maxTotal = limits.maxTotal ?? 24;
   const byImp = (a: any, b: any) => (b.importance || 3) - (a.importance || 3);
   const coreIds = new Set(corePool.map((l: any) => l.id));
   const sections: RouteSection[] = [];
   let used = 0;
 
   if (corePool.length) {
-    const ids = corePool.slice(0, Math.min(maxPerSection, 4)).map((l: any) => l.id);
+    // v100：核心片区的点数不再钉死 4 个——恒山核心池只有 4 个点可用，
+    // 一旦某座山有十几处可玩点就被截成 4，看起来像"景点太少"。
+    // 改为按重要性取前 N（上限 maxPerSection，默认 8），再用地理最近邻串成动线，
+    // 避免"重要性排序"直接变成地图上的锯齿线。它也不必与一日游那条线一致。
+    const picked = corePool.slice().sort(byImp).slice(0, maxPerSection).map((l: any) => l.id);
+    const ids = orderStopsGeographic(picked, corePool, null);
     used += ids.length;
     sections.push({
       key: "core",

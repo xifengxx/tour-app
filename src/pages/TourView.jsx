@@ -23,6 +23,7 @@ import { fetchVisits, fetchFavorites, hydrateStampCache } from '../lib/visits';
 import { Share2, Check, Heart, MessageCircle, MapPinned, CornerDownRight, ListTree, ChevronRight, ChevronLeft, Navigation, ScrollText } from 'lucide-react';
 import { extractMarkerLoc, findNearestLocation, buildPinIcon } from '../lib/mapUtils';
 import { ROUTE_COLORS, cnOrdinal } from '../lib/routeColors';
+import { sectionPathPoints } from '../lib/routePath';
 import { routeLegsSummary } from '../lib/routeLegs.js';
 
 const DEFAULT_PIN_COLOR = '#a39d8c'; // 未选中标记：暖灰
@@ -709,10 +710,15 @@ export default function TourView() {
         if (themeSecs.length >= 2) {
           themePolylinesRef.current[route.id] = [];
           themeSecs.forEach((sec, si) => {
-            const secPath = sec.stops.map(id => {
-              const l = locByIdRef.current[id];
-              return l ? [l.lng, l.lat] : null;
-            }).filter(Boolean);
+            // 优先切真实路径（path.geom），切开后才是山路/道路上的线，
+            // 而不是穿过山体的三角形；没有路径数据才回退站点直连。
+            const realPath = sectionPathPoints(route, sec, locByIdRef.current);
+            const secPath = realPath && realPath.length > 1
+              ? realPath
+              : sec.stops.map(id => {
+                  const l = locByIdRef.current[id];
+                  return l ? [l.lng, l.lat] : null;
+                }).filter(Boolean);
             if (secPath.length > 1) {
               const poly = new window.AMap.Polyline({
                 path: secPath, map,
@@ -1152,17 +1158,34 @@ export default function TourView() {
             </div>
             )}
 
-            {/* 主题游：单点详情是二级视图，顶部给一条"返回片区"的退路 */}
-            {isThemeRoute && themeSpotOpen && currentLoc && (
-              <button
-                type="button"
-                onClick={() => setThemeSpotOpen(false)}
-                className="mx-4 mb-1 self-start inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground"
-              >
-                <ChevronLeft className="h-3 w-3" />
-                返回片区{activeRoute?.sections?.find(s => s.key === themeSectionKey)?.name ? ` · ${activeRoute.sections.find(s => s.key === themeSectionKey).name}` : ''}
-              </button>
-            )}
+            {/* 主题游：单点详情是二级视图，顶部给一条明确的"返回片区"导航。
+                原来只有一行 10px 灰字，和下面的四层 Tab 一比几乎没有存在感，
+                用户找不到回去的路，所以做成整行可点的按钮条。 */}
+            {isThemeRoute && themeSpotOpen && currentLoc && (() => {
+              const secs = activeRoute?.sections || [];
+              const idx = secs.findIndex(s => s.key === themeSectionKey);
+              const sec = idx >= 0 ? secs[idx] : null;
+              return (
+                <button
+                  type="button"
+                  onClick={() => setThemeSpotOpen(false)}
+                  className="mx-3 mb-2 flex items-center gap-2.5 rounded-xl border border-primary/25 bg-primary/[0.05] px-3 py-2.5 active:bg-primary/10 transition-colors"
+                >
+                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/15">
+                    <ChevronLeft className="h-4 w-4 text-primary" />
+                  </span>
+                  <span className="flex-1 min-w-0 text-left leading-tight">
+                    <span className="block text-[10px] text-muted-foreground">返回片区</span>
+                    <span className="block text-xs font-serif font-semibold text-foreground truncate">
+                      {sec ? `${cnOrdinal(idx)} ${sec.name}` : '全部片区'}
+                    </span>
+                  </span>
+                  <span className="shrink-0 text-[10px] text-primary/70">
+                    {sec ? `${(sec.stops || []).length} 个点 · 换一个` : '看全部'}
+                  </span>
+                </button>
+              );
+            })()}
 
             {currentLoc && (isThemeRoute ? themeSpotOpen : true) ? (
               <ContentCard
