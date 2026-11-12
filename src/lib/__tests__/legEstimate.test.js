@@ -25,6 +25,10 @@ describe('ascentBetweenProf', () => {
   it('无剖面时返回 0', () => {
     expect(ascentBetweenProf(null, 0, 1)).toEqual({ ascent: 0, descent: 0 });
   });
+  it('支持前端归一化后的 [km, m] 数组对', () => {
+    expect(ascentBetweenProf([[0, 1500], [0.2, 1560], [0.4, 1540], [0.6, 1620]], 0.2, 0.6))
+      .toEqual({ ascent: 80, descent: 20 });
+  });
 });
 
 describe('walkMinutes', () => {

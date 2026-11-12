@@ -24,8 +24,11 @@ export const ascentBetweenProf = (prof, kmA, kmB) => {
   if (!Array.isArray(prof) || prof.length < 2) return { ascent: 0, descent: 0 };
   const lo = Math.min(kmA, kmB);
   const hi = Math.max(kmA, kmB);
+  // 剖面有两种形态：管线写库的 {km, m}，前端 hook 归一化后的 [km, m] 数组对。
   const pts = prof
-    .map(p => ({ km: Number(p?.km), m: parseElevM(p?.m) }))
+    .map(p => (Array.isArray(p)
+      ? { km: Number(p[0]), m: parseElevM(p[1]) }
+      : { km: Number(p?.km), m: parseElevM(p?.m) }))
     .filter(p => Number.isFinite(p.km) && p.m != null);
   if (pts.length < 2) return { ascent: 0, descent: 0 };
   let ascent = 0;
