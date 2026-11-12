@@ -1069,8 +1069,8 @@ export default function TourView() {
               />
             )}
 
-            {/* 主题游一级视图：片区卡（片区 → 片区内玩法），单点详情退成二级 */}
-            {isThemeRoute && (
+            {/* 主题游一级视图：片区卡。点进单点后收起，让详情独占卡片，返回时再展开。 */}
+            {isThemeRoute && !themeSpotOpen && (
               <ThemeSectionDeck
                 sections={activeRoute?.sections}
                 locationsById={locByIdRef.current}
