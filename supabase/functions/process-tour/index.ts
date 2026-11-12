@@ -625,6 +625,7 @@ Deno.serve(async (req: Request) => {
     let renamed = 0;
     // v104：上一轮的路线要读出来，供"路线继承"用（重跑不许换线路）
     let oldRoutes: any[] = [];
+    let oldAll: any[] = [];
     // 创作者手工补的地点（tags 含"人工策展"）不是 AI 抽取产物，而写库是 deleteRows 全删重建，
     // 重跑一次就会把它们连同四层文本、时间轴一起抹掉。
     // v100：按语义合并而不是同名判断。AI 常抽成"东方女神"、人工写成"东方女神（司春女神）"，
@@ -640,6 +641,7 @@ Deno.serve(async (req: Request) => {
       }
       if (oldRes.ok) {
         const oldRows: any[] = await oldRes.json();
+        oldAll = Array.isArray(oldRows) ? oldRows : [];
         const curated: any[] = (Array.isArray(oldRows) ? oldRows : []).filter(
           row => (row.tags || []).includes("人工策展") && row.lat && row.lng && row.name,
         );
@@ -769,6 +771,28 @@ Deno.serve(async (req: Request) => {
           keptRows++;
         }
         if (keptRows) warnings.push(`🔒 沿用 ${keptRows} 个本景区既有地点（重跑不再换血，路线才稳定）`);
+
+        // v106：id 必须跟着景点名走，而不是跟着 AI 那轮的英文译名走。
+        // 同一个"三清殿"这轮是 sanqingdian、下轮是 sanqing-dian，两条不同 id 并存，
+        // 旧路线的 stops 引用其中一条，另一条被删后继承就失效（实测继承因此从未触发）。
+        const oldByName = new Map<string, string>();
+        for (const row of oldAll) {
+          const n = String(row.name || "");
+          if (!n || !row.id) continue;
+          const rawId = String(row.id);
+          const slug = rawId.startsWith(`${scope}-`) ? rawId.slice(scope.length + 1) : rawId;
+          const key = norm(n);
+          if (key && !oldByName.has(key)) oldByName.set(key, slug);
+        }
+        let idLocked = 0;
+        for (const l of locs) {
+          const slug = oldByName.get(norm(l.name));
+          if (!slug || slug === l.id) continue;
+          if (locs.some((x: any) => x !== l && x.id === slug)) continue;
+          l.id = slug;
+          idLocked++;
+        }
+        if (idLocked) warnings.push(`🆔 ${idLocked} 个地点沿用旧 id（同景点不同译名不再产生重复行）`);
       }
     } catch { /* 读旧行失败不阻塞本次生成 */ }
     // 知识分区名（南清园、西海岸）是"片区"而不是景点。AI 会把"景区-片区"整串抽成一个点，
