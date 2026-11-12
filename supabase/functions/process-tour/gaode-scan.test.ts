@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isDestinationUmbrella, landmarkKey, semanticDedupLocations } from "./gaode-scan.ts";
+import { canonicalizeMechanicalName, isDestinationUmbrella, landmarkKey, semanticDedupLocations } from "./gaode-scan.ts";
 
 describe("地名语义清洗", () => {
   it("剥掉目的地和景区后缀后识别同一地标", () => {
@@ -12,6 +12,28 @@ describe("地名语义清洗", () => {
     expect(isDestinationUmbrella("武功山", "武功山")).toBe(true);
     expect(isDestinationUmbrella("萍乡武功山国家级风景名胜区", "武功山")).toBe(true);
     expect(isDestinationUmbrella("武功山风景名胜区金顶", "武功山")).toBe(false);
+  });
+
+  it("景区伞形名 + 片区 仍是泛指，不因为带「-」就算景点", () => {
+    // 三清山线上实测："三清山国家级旅游" importance=5，直接进了 2 日线第 2 站
+    expect(isDestinationUmbrella("三清山国家级旅游", "三清山")).toBe(true);
+    // 形态上无法区分「风景名胜区-碧霞祠」和「风景区-南清园」，所以不按形态判定：
+    // 片区由知识层 zones 标记（index.ts markKnowledgeZones），这里只守住真实景点不被误杀
+    expect(isDestinationUmbrella("三清山-三清宫", "三清山")).toBe(false);
+    expect(isDestinationUmbrella("三清宫", "三清山")).toBe(false);
+    expect(isDestinationUmbrella("西海岸栈道", "三清山")).toBe(false);
+  });
+
+  it("剥掉 AI 的「目的地-地标」机械拼接名，优先用策展知识里的规范名", () => {
+    const known = ["三清宫", "风雷塔", "禹皇顶", "西海岸栈道"];
+    expect(canonicalizeMechanicalName("三清山-三清宫", "三清山", known)).toBe("三清宫");
+    expect(canonicalizeMechanicalName("三清山国家级旅游风景区-风雷塔", "三清山", known)).toBe("风雷塔");
+    // 知识里没有的，至少把目的地前缀剥掉
+    expect(canonicalizeMechanicalName("三清山-冰玉洞", "三清山", known)).toBe("冰玉洞");
+    // 伞形名保持原样，交给 isDestinationUmbrella 判
+    expect(canonicalizeMechanicalName("三清山国家级旅游", "三清山", known)).toBe("三清山国家级旅游");
+    // 不含目的地前缀的名称不动
+    expect(canonicalizeMechanicalName("玉台-禹皇顶栈道", "三清山", known)).toBe("玉台-禹皇顶栈道");
   });
 
   it("合并同名地标，并保留非路线补全的高重要性点", () => {

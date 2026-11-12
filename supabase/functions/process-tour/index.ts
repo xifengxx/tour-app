@@ -6,7 +6,7 @@ import { GAODE_KEY, hdr, SUPABASE_URL } from "./config.ts";
 import { cors, deleteRows, json, postRows, setStatus } from "./http.ts";
 import { deepseek, mapLimit } from "./ai.ts";
 import { regeo } from "./gaode-validation.ts";
-import { gaodeNearbyCulturalPOIs, isDestinationUmbrella, JUNK_RE, semanticDedupLocations } from "./gaode-scan.ts";
+import { canonicalizeMechanicalName, gaodeNearbyCulturalPOIs, isDestinationUmbrella, JUNK_RE, landmarkKey, semanticDedupLocations } from "./gaode-scan.ts";
 import { AMUSE_RE, FACILITY_RE, gaode, gaodeRegionScenics, regeoRegion, regionMatches } from "./gaode-search.ts";
 import { haversineM } from "./geo.ts";
 import { corePoolDiagnostics, filterRouteStops, isRouteStopEligible, mapSectionsToDbIds, orderStopsGeographic, planRoutes as planRoutesModule } from "./routes.ts";
@@ -622,20 +622,54 @@ Deno.serve(async (req: Request) => {
     // but locations.id / routes.id are global primary keys. Scope them per tour
     // or writes collide with other tours (409 duplicate key).
     const scope = tourId.slice(0, 8);
+    let renamed = 0;
     // 创作者手工补的地点（tags 含"人工策展"）不是 AI 抽取产物，而写库是 deleteRows 全删重建，
-    // 重跑一次就会把它们连同四层文本、时间轴一起抹掉。L3 下先把它们并回地点池：
-    // id 取去掉导览前缀的 slug，写库时 slugToDbId 会映射回同一个 db id。
+    // 重跑一次就会把它们连同四层文本、时间轴一起抹掉。
+    // v100：按语义合并而不是同名判断。AI 常抽成"东方女神"、人工写成"东方女神（司春女神）"，
+    // 同名判断会把同一个景点留成两份，路线里并排出现（三清山线上实测库内 20→32 点）。
     try {
       const oldRes = await fetch(`${SUPABASE_URL}/rest/v1/locations?tour_id=eq.${tourId}&select=*`, { headers: hdr });
       if (oldRes.ok) {
         const oldRows: any[] = await oldRes.json();
-        const norm = (v: unknown) => String(v ?? "").trim().toLowerCase();
-        const existing = new Set(locs.map((l: any) => norm(l.name)));
-        let restored = 0;
-        for (const row of Array.isArray(oldRows) ? oldRows : []) {
-          if (!(row.tags || []).includes("人工策展") || !row.lat || !row.lng) continue;
+        const curated: any[] = (Array.isArray(oldRows) ? oldRows : []).filter(
+          row => (row.tags || []).includes("人工策展") && row.lat && row.lng && row.name,
+        );
+        const norm = (v: unknown) => String(v ?? "").trim().toLowerCase().replace(/[，。、·—\-_\s（）()《》"]/g, "");
+        // 1) 先把手写点与策展步道的规范名当作权威，剥掉 AI 的"目的地-地标"机械拼接前缀
+        const knownNames = [
+          ...curated.map(row => String(row.name)),
+          ...routeKnowledge.trails.flatMap(t => t.stops.flatMap(s => [s.name, ...(s.aliases || [])])),
+        ];
+        for (const loc of locs) {
+          const next = canonicalizeMechanicalName(loc.name, destName, knownNames);
+          if (next !== loc.name && next) {
+            loc.name = next;
+            renamed++;
+          }
+        }
+        // 2) 再把手写内容并进已有地点；没有对应点才新增
+        let merged = 0;
+        for (const row of curated) {
           const name = String(row.name || "");
-          if (!name || existing.has(norm(name))) continue;
+          const manualKey = norm(name);
+          const hit = locs.find((l: any) => {
+            const key = norm(l.name);
+            return !!key && (key === manualKey || key.includes(manualKey) || manualKey.includes(key));
+          });
+          if (hit) {
+            // 手写名比 AI 名更长时（"东方女神（司春女神）" vs "东方女神"）用信息更全的那个
+            if (norm(name).length > norm(hit.name).length) hit.name = name;
+            if (Object.keys(hit.layers || {}).length === 0) hit.layers = row.layers || {};
+            if (!(hit.timeline || []).length) hit.timeline = row.timeline || [];
+            if (!(hit.figures || []).length) hit.figures = row.figures || [];
+            if (!(hit.shot || []).length) hit.shot = row.shot || [];
+            if (!hit.elevation) hit.elevation = row.elevation || "";
+            if (row.reflection && !hit.reflection) hit.reflection = row.reflection;
+            if (row.practical && Object.keys(hit.practical || {}).length === 0) hit.practical = row.practical;
+            hit.tags = [...new Set([...(hit.tags || []), ...(row.tags || [])])];
+            merged++;
+            continue;
+          }
           const rawId = String(row.id || "");
           const slug = rawId.startsWith(`${scope}-`) ? rawId.slice(scope.length + 1) : rawId;
           locs.push({
@@ -655,12 +689,37 @@ Deno.serve(async (req: Request) => {
             scenic: coreScenicName,
             sort_order: locs.length,
           });
-          existing.add(norm(name));
-          restored++;
+          merged++;
         }
-        if (restored) warnings.push(`🗂 恢复 ${restored} 个创作者手工地点（AI 抽取不会产出，原本会被重跑抹掉）`);
+        if (merged) warnings.push(`🗂 保留 ${merged} 个创作者手工地点（AI 抽取不会产出，原本会被重跑抹掉）`);
+        if (renamed) warnings.push(`🏷 清理 ${renamed} 个"目的地-地标"拼接名（路线里不该出现机器名）`);
       }
     } catch { /* 读旧行失败不阻塞本次生成 */ }
+    // 知识分区名（南清园、西海岸）是"片区"而不是景点。AI 会把"景区-片区"整串抽成一个点，
+    // 剥掉前缀只剩片区名却给到 importance=5，于是排进 2 日线第 2 站（三清山线上实测）。
+    // 同时出现在步道站点里的分区名（西海岸、玉京峰）确实是景点，不动。
+    {
+      const zoneMark = (v: unknown) => landmarkKey(v, destName);
+      const trailLandmarks = new Set(
+        routeKnowledge.trails
+          .flatMap(t => t.stops.flatMap(s => [s.name, ...(s.aliases || [])]))
+          .map(zoneMark)
+          .filter(Boolean),
+      );
+      const zoneLandmarks = new Set(routeKnowledge.zones.map(z => zoneMark(z.name)).filter(Boolean));
+      let zoneTagged = 0;
+      for (const loc of locs) {
+        const key = zoneMark(loc.name);
+        if (!key || trailLandmarks.has(key) || !zoneLandmarks.has(key)) continue;
+        const tags: string[] = loc.tags || [];
+        if (!tags.includes("景区泛指")) {
+          loc.tags = [...tags, "景区泛指"];
+          zoneTagged++;
+        }
+        loc.importance = Math.min(loc.importance || 3, 3);
+      }
+      if (zoneTagged) warnings.push(`🏞 标记 ${zoneTagged} 个知识分区名为"景区泛指"（片区不是景点，不进路线）`);
+    }
     const slugToDbId = new Map(locs.map(l => [l.id, `${scope}-${l.id}`]));
     // 数据库 id 视图的地点列表（供地理排序用：stops 存的是 db id）
     const dbLocs = locs.map(l => ({ ...l, id: slugToDbId.get(l.id) || l.id }));

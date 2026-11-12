@@ -26,7 +26,7 @@ export function landmarkKey(name: unknown, destination?: unknown): string {
   if (dest && value.includes(dest)) value = value.replace(dest, "");
   for (let i = 0; i < 3; i++) {
     const next = value
-      .replace(/国家级|国家重点|国家|重点|世界|地质公园|森林公园|风景名胜区|风景名胜|风景区|景区|旅游区|公园/g, "")
+      .replace(/国家级|国家重点|国家|重点|世界自然遗产|世界|自然遗产|地质公园|森林公园|风景名胜区|风景名胜|风景区|景区|旅游度假区|旅游区|度假区|自然保护区|保护区|旅游|公园/g, "")
       .trim();
     if (next === value) break;
     value = next;
@@ -44,9 +44,47 @@ export function isDestinationUmbrella(name: unknown, destination?: unknown): boo
   // 会被误判成泛指；这里显式区分“泛指残留”和“真实地标词”。
   // 泛指名通常是“[城市] + 目的地 + 景区后缀”。只取目的地之后的部分，
   // “萍乡武功山国家级风景名胜区”归空；“武功山风景名胜区金顶”保留“金顶”。
+  // 注意：不能按“景区伞形名-XXX”的形态判定——泰山「风景名胜区-碧霞祠」、
+  // 黄山「风景区-光明顶」都是真实站点，形态上没有区别。片区问题交给知识层
+  // （routeKnowledge.zones）判定，见 index.ts 的 markKnowledgeZones。
   const key = landmarkKey(dest && raw.includes(dest) ? raw.slice(raw.indexOf(dest) + dest.length) : raw, destination);
   if (!key) return true;
   return false;
+}
+
+/**
+ * 机械拼接名归一（v100）。AI 抽取常把“目的地名 + 分隔符 + 地标名”拼成一个名字，
+ * 例如“三清山-三清宫”“三清山国家级旅游风景区-风雷塔”。同一个地标在策展知识或
+ * 创作者手工点里已有规范名时，路线里不该出现这串机器名。
+ * 只在剩余部分仍带真实地标词时剥前缀——否则“三清山国家级旅游”会剥成“国家级旅游”，
+ * 比原名更糟，这类交给 isDestinationUmbrella 处理。
+ */
+export function canonicalizeMechanicalName(
+  name: unknown,
+  destination?: unknown,
+  known: Iterable<string> = [],
+): string {
+  const raw = String(name || "").trim();
+  const dest = String(destination || "").trim();
+  if (!raw || !dest || !raw.startsWith(dest)) return raw;
+  let rest = raw.slice(dest.length).replace(/^[-—－·、:：\s]+/, "").trim();
+  // "三清山国家级旅游风景区-风雷塔"：目的地之后还夹着一段景区伞形名，先剥掉再比对，
+  // 否则剩下的"国家级旅游风景区-风雷塔"匹配不到知识里的"风雷塔"。
+  for (let i = 0; i < 3; i++) {
+    const head = rest.match(
+      /^(?:国家级|国家|世界|省|市)?(?:重点)?(?:旅游风景区|风景名胜区|风景名胜|风景区|景区|旅游度假区|旅游区|度假区|自然保护区|地质公园|森林公园)\s*[-—－·]\s*/,
+    );
+    if (!head) break;
+    rest = rest.slice(head[0].length).trim();
+  }
+  if (!rest || rest === raw) return raw;
+  if (!landmarkKey(rest)) return raw;
+  const norm = (v: unknown) => String(v || "").toLowerCase().replace(/[，。、·—\-_\s（）()《》"]/g, "");
+  for (const candidate of known) {
+    const key = norm(candidate);
+    if (key && key === norm(rest)) return String(candidate);
+  }
+  return rest;
 }
 
 /**
