@@ -11,6 +11,7 @@ import RouteBar from '../components/RouteBar';
 import ContentCard from '../components/ContentCard';
 import ElevationProfile from '../components/ElevationProfile';
 import ThemeSectionDeck from '../components/ThemeSectionDeck';
+import { ascentBetweenProf, legDistanceM, walkMinutes } from '../lib/legEstimate';
 import DetailModal from '../components/DetailModal';
 import FavStampButton from '../components/FavStampButton';
 import ShareModal from '../components/ShareModal';
@@ -156,27 +157,35 @@ const nextLegInfo = (route, stopIdx, locById) => {
   const leg = legs.find(l => l.fromId === fromId && l.toId === toId) || legs[stopIdx] || null;
   const mode = leg?.mode || 'walk';
 
-  let meters = Number(leg?.distanceM);
-  if (!Number.isFinite(meters) || meters <= 0) {
-    const kmA = stopKmInRoute(route, fromId, locById);
-    const kmB = stopKmInRoute(route, toId, locById);
-    if (kmB > kmA) meters = (kmB - kmA) * 1000;
-  }
-  if (!Number.isFinite(meters) || meters <= 0) {
-    const a = locById[fromId];
-    const b = locById[toId];
-    if (a && b) meters = havKm(a, b) * 1000;
-  }
+  // 距离：真实路径里程差优先（与剖面同一坐标系）。leg.distanceM 是两点直线距离，
+  // 山地场景会严重偏小——恒山会仙府→天峰岭直线 280m，实际步道 560m。
+  const a = locById[fromId];
+  const b = locById[toId];
+  const straightM = a && b ? havKm(a, b) * 1000 : null;
+  const meters = legDistanceM(route, stopIdx, straightM);
 
-  const speed = MODE_SPEED_KMH[mode] || MODE_SPEED_KMH.walk;
-  const minutes = Number.isFinite(meters) && meters > 0 ? Math.max(1, Math.round((meters / 1000) / speed * 60)) : null;
+  // 时间：徒步段按剖面里的真实爬升折算（Naismith），机动车段仍按均速。
+  const kmA = stopKmInRoute(route, fromId, locById);
+  const kmB = stopKmInRoute(route, toId, locById);
+  const { ascent, descent } = ascentBetweenProf(route?.prof, kmA, kmB);
+  let minutes = null;
+  if (Number.isFinite(meters) && meters > 0) {
+    if (mode === 'walk') {
+      minutes = walkMinutes(meters, ascent, descent);
+    } else {
+      const speed = MODE_SPEED_KMH[mode] || MODE_SPEED_KMH.walk;
+      minutes = Math.max(1, Math.round((meters / 1000) / speed * 60));
+    }
+  }
 
   return {
     nextLoc,
     meters: Number.isFinite(meters) && meters > 0 ? meters : null,
     minutes,
+    ascent: mode === 'walk' ? ascent : 0,
     mode,
-    durationText: leg?.duration || '',
+    // 徒步段一律用剖面算出的时间：AI 写的"约 X 分钟"同样是平地口径，会把爬坡写成 4 分钟。
+    durationText: mode === 'walk' ? '' : (leg?.duration || ''),
     note: leg?.note || '',
   };
 };
@@ -251,7 +260,7 @@ function StopBar({ route, loc, locById, tourId, overviewStage = 0, onToggleOverv
                 </span>
                 {info.meters && <span className="shrink-0">· {fmtDistance(info.meters)}</span>}
                 <span className="shrink-0">
-                  · {MODE_TEXT[info.mode] || MODE_TEXT.other} {info.durationText || (info.minutes ? `约${info.minutes}分钟` : '')}
+                  · {MODE_TEXT[info.mode] || MODE_TEXT.other} {info.durationText || (info.minutes ? `约${info.minutes}分钟${info.ascent >= 30 ? `（爬升${Math.round(info.ascent)}m）` : ''}` : '')}
                 </span>
                 <ChevronRight className="h-3 w-3 shrink-0 self-center" />
               </button>

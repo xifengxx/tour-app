@@ -15,7 +15,7 @@ import { loadOrResearchRouteKnowledge } from "./route-knowledge.ts";
 import { buildRoutePath } from "./route-paths.ts";
 import { capabilitiesFor, TIER_LABEL } from "./knowledge-tier.ts";
 import { qualityGaps } from "./knowledge-quality.ts";
-import { blockingIssues, buildRouteLegs, estimateRouteDuration, normalizeName, parseElevationM, planGraphStops, repairPlanStops, repairTransportHours, routeGraphIssues, routeGraphNotes, routeLegsText } from "./route-graph.ts";
+import { blockingIssues, buildRouteLegs, estimateRouteDuration, normalizeName, parseElevationM, planGraphStops, repairPlanStops, repairTransportHours, routeGraphIssues, routeGraphNotes, routeLegsText, SCENIC_SHUTTLE_MAX_M, WALK_MAX_M } from "./route-graph.ts";
 import { resolveCoreDestination } from "./destination.ts";
 import { isNonSitePOI, rejectReasonForPOI } from "./poi-filter.ts";
 import { dedupeRoutes } from "./route-dedup.ts";
@@ -1250,6 +1250,21 @@ Deno.serve(async (req: Request) => {
       } catch { /* 路径规划整体异常 → 直线剖面兜底 */ }
       if (pathModel && pathModel.planned > 0) {
         route.path = pathModel;
+        // v107：legs 里的距离是两点直线（会仙府→天峰岭 281m，实际步道 560m；
+        // 天峰岭→悬空寺直线 1950m，实际 7.2km），前端因此把"走了 7 公里山路"
+        // 显示成"1.9 公里徒步 28 分钟"。真实路径算出来后回填每一步的里程，
+        // 并按真实里程重判交通方式——3km 以上不可能是徒步。
+        if (Array.isArray(pathModel.stopKm) && pathModel.stopKm.length === (route.stops || []).length) {
+          route.legs = (route.legs || []).map((leg: any, i: number) => {
+            const realM = Math.round((pathModel.stopKm[i + 1] - pathModel.stopKm[i]) * 1000);
+            if (!Number.isFinite(realM) || realM <= 0) return leg;
+            let mode = leg.mode;
+            if (mode === "walk" && realM > WALK_MAX_M) {
+              mode = realM > SCENIC_SHUTTLE_MAX_M ? "car" : "shuttle";
+            }
+            return { ...leg, distanceM: realM, mode };
+          });
+        }
         warnings.push(pathModel.fellBack
           ? `🛣 路线"${route.day_label}"真实路径覆盖 ${pathModel.planned}/${pathModel.planned + pathModel.fellBack} 段，${pathModel.fellBack} 段回退直线（索道或规划失败）`
           : `🛣 路线"${route.day_label}"全程按高德真实路径成线（${pathModel.totalKm} km）`);
