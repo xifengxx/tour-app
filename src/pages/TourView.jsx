@@ -186,18 +186,33 @@ function StopBar({ route, loc, locById, tourId, overviewStage = 0, onToggleOverv
   const idx = loc ? route.stops.indexOf(loc.id) : -1;
   const info = idx >= 0 ? nextLegInfo(route, idx, locById) : null;
   const isLast = idx >= 0 && idx === total - 1;
+  // 主题游不是线性行程，"第 N 站 / 共 14 站"会把它读成一条线；改报"哪个片区、片区内第几点"。
+  const sections = (route?.sections || []).filter(s => (s.stops || []).length);
+  const section = loc ? sections.find(s => (s.stops || []).includes(loc.id)) : null;
+  const withinSec = section && loc ? section.stops.indexOf(loc.id) : -1;
+  const nextSection = section && info?.nextLoc
+    ? sections.find(s => (s.stops || []).includes(info.nextLoc.id))
+    : null;
+  const crossingSection = !!section && !!nextSection && nextSection !== section;
 
   return (
     <div className="mx-4 mb-2 rounded-lg bg-background border border-border/60 border-l-2 border-l-primary px-3 py-2">
       <div className="flex items-center gap-1.5 min-w-0">
-        {idx >= 0 ? (
+        {section ? (
+          <>
+            <span className="font-serif text-[11px] font-semibold text-primary shrink-0">{section.name}</span>
+            <span className="text-[10px] text-muted-foreground shrink-0">
+              · 片区内第 {withinSec + 1}/{section.stops.length} 点
+            </span>
+          </>
+        ) : idx >= 0 ? (
           <span className="font-serif text-[11px] font-semibold text-primary shrink-0">
             第{cnOrdinal(idx)}站
           </span>
         ) : (
           <span className="font-serif text-[11px] font-semibold text-primary shrink-0">路线</span>
         )}
-        <span className="text-[10px] text-muted-foreground shrink-0">/ 共 {total} 站</span>
+        {!section && <span className="text-[10px] text-muted-foreground shrink-0">/ 共 {total} 站</span>}
         <span className="text-xs font-semibold text-foreground truncate flex-1 min-w-0">
           {loc?.name || route?.title || ''}
         </span>
@@ -218,7 +233,9 @@ function StopBar({ route, loc, locById, tourId, overviewStage = 0, onToggleOverv
       {(info || isLast) && (
         <div className="flex items-center gap-1 mt-1 text-[11px] text-muted-foreground min-w-0">
           {isLast ? (
-            <span className="text-foreground/70">已到终点站 · 本路线到此结束</span>
+            <span className="text-foreground/70">
+              {section ? '本片区到此结束 · 可继续看其他片区' : '已到终点站 · 本路线到此结束'}
+            </span>
           ) : (
             <>
               {/* 点这一行＝跳到下一站（现场最常用的动作），右侧另给一个直接导航的入口 */}
@@ -228,7 +245,9 @@ function StopBar({ route, loc, locById, tourId, overviewStage = 0, onToggleOverv
                 className="flex items-baseline gap-1 min-w-0 flex-1 text-left hover:text-foreground"
               >
                 <CornerDownRight className="h-3 w-3 text-dai/80 shrink-0 self-center" />
-                <span className="truncate text-foreground/80">下一站 {info.nextLoc.name}</span>
+                <span className="truncate text-foreground/80">
+                  {crossingSection ? `下一片区 ${nextSection.name} · ${info.nextLoc.name}` : `下一站 ${info.nextLoc.name}`}
+                </span>
                 {info.meters && <span className="shrink-0">· {fmtDistance(info.meters)}</span>}
                 <span className="shrink-0">
                   · {MODE_TEXT[info.mode] || MODE_TEXT.other} {info.durationText || (info.minutes ? `约${info.minutes}分钟` : '')}
@@ -647,6 +666,27 @@ export default function TourView() {
       // Draw routes
       (tour.routes || []).forEach((route, ri) => {
         if (route.id === 'extra') return;
+        // 主题游不是一条线性动线：把一个片区内的点连起来、片区之间不连。
+        // 原来所有站点共用一条 60km 的连续路径，"一日游的点 + 周边景区"在地图上被画成
+        // 一条线，读起来就是"一趟走完"，与它的语义（几个景区可以连着玩）相反。
+        const themeSecs = (route.sections || []).filter(sec => (sec.stops || []).length >= 2);
+        if (themeSecs.length >= 2) {
+          themeSecs.forEach((sec, si) => {
+            const secPath = sec.stops.map(id => {
+              const l = locByIdRef.current[id];
+              return l ? [l.lng, l.lat] : null;
+            }).filter(Boolean);
+            if (secPath.length > 1) {
+              new window.AMap.Polyline({
+                path: secPath, map,
+                strokeColor: ROUTE_COLORS[(ri + si) % ROUTE_COLORS.length],
+                strokeWeight: 3, strokeOpacity: 0.5,
+              });
+            }
+          });
+          // 片区之间不画线：那是车程/接驳，不是步行动线。
+          return;
+        }
         // v99：优先用服务端规划的高德真实路径（routes.path.geom），
         // 旧数据/回退时才用站点直连。
         const path = (Array.isArray(route.path?.geom) && route.path.geom.length > 1)
@@ -794,6 +834,8 @@ export default function TourView() {
         .map(id => locByIdRef.current[id]).filter(Boolean)
     : (tour?.locations || []);
   const activeRoute = currentRouteId ? (tour?.routes || []).find(r => r.id === currentRouteId) : null;
+  // 主题游有 ≥2 个片区 = 它不是一条线性行程，UI 要按片区呈现，且不再显示 1..N 站条。
+  const isThemeRoute = (activeRoute?.sections || []).filter(s => (s.stops || []).length).length >= 2;
 
   // 案头摘要从 tour.locations 派生（不能用 locByIdRef：可变 ref 不会触发重渲染）。
   // 库里的 timeline/figures 还没建列时，用仓库 JSON 兜底，保证本地就能看到完整案头。
@@ -972,7 +1014,19 @@ export default function TourView() {
               />
             )}
 
-            {/* 行程概览（卷首语 / 交通分段 / 主题分区）：默认收起，把高度让给正文 */}
+            {/* v93 + 回归修复：主题游按片区呈现，必须常显。
+                4d33f3a「行程概览三档」把它和卷首语一起塞进 overviewStage>0，
+                默认收起后，主题游在屏幕上又变成"一堆点连成一条线"的老样子，
+                而它本来不是一条线。 */}
+            <div className="shrink-0 overflow-y-auto overscroll-contain max-h-[38vh]">
+              <ThemeSections
+                sections={activeRoute?.sections}
+                locationsById={locByIdRef.current}
+                onSelectSpot={(id) => { const loc = locByIdRef.current[id]; if (loc) selectLoc(loc); }}
+              />
+            </div>
+
+            {/* 行程概览（卷首语 / 交通分段）：默认收起，把高度让给正文 */}
             {overviewStage > 0 && (
             <div className={`pb-2 shrink-0 overflow-y-auto overscroll-contain ${overviewStage === 2 ? 'max-h-[62vh]' : 'max-h-[30vh]'}`}>
             {/* Route narrative · 卷首语：完整行程描述（入口/交通方式/出口） */}
@@ -981,12 +1035,6 @@ export default function TourView() {
                 <p className="font-kai text-xs text-muted-foreground leading-relaxed bg-background rounded-lg p-3 border-l-2 border-dai">{activeRoute.narrative}</p>
               </div>
             )}
-            {/* v93：主题游按片区呈现（片区 → 片区内游览点），与线性行程区分开 */}
-            <ThemeSections
-              sections={activeRoute?.sections}
-              locationsById={locByIdRef.current}
-              onSelectSpot={(id) => { const loc = locByIdRef.current[id]; if (loc) selectLoc(loc); }}
-            />
             {activeRoute?.legs?.length > 0 && (
               <div className="px-4 pb-2">
                 <p className="text-[11px] leading-relaxed text-muted-foreground bg-background rounded-lg p-2 border border-border/60">
@@ -1024,7 +1072,10 @@ export default function TourView() {
                 )}
               </div>
             )}
-            {/* Location strip · 壹贰叁编号 — 右缘渐变提示可横向滚动查看更多 */}
+            {/* Location strip · 壹贰叁编号 — 右缘渐变提示可横向滚动查看更多。
+                主题游不渲染：它不是一个 1..N 的线性序列，编号会把人误读成"一条线路"，
+                片区内的点由上面的分区视图承载。 */}
+            {!isThemeRoute && (
             <div className="flex gap-2 px-4 pb-2 overflow-x-auto"
                  style={{ WebkitMaskImage: 'linear-gradient(to right, black calc(100% - 28px), transparent)', maskImage: 'linear-gradient(to right, black calc(100% - 28px), transparent)' }}>
               {filteredLocations.map((loc, i) => (
@@ -1039,6 +1090,7 @@ export default function TourView() {
                 </button>
               ))}
             </div>
+            )}
 
             {currentLoc ? (
               <ContentCard
