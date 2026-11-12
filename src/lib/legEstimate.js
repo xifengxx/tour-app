@@ -58,9 +58,9 @@ export const flatMinutes = (meters, speedKmh = 4.5) => {
  * 每下降 100m 加 4 分钟。山地游客的配速比越野跑保守，这样才不会把
  * "560 米 + 爬升 130 米"算成 4 分钟。
  */
-export const walkMinutes = (meters, ascent = 0, descent = 0) => {
+export const walkMinutes = (meters, ascent = 0, descent = 0, speedKmh = 4.5) => {
   if (!Number.isFinite(meters) || meters <= 0) return null;
-  const base = (meters / 1000) / 4.5 * 60;
+  const base = (meters / 1000) / (speedKmh || 4.5) * 60;
   const up = Math.max(0, ascent) / 100 * 10;
   const down = Math.max(0, descent) / 100 * 4;
   return Math.max(2, Math.round(base + up + down));

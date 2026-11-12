@@ -181,13 +181,18 @@ const nextLegInfo = (route, stopIdx, locById) => {
   if (noRoadLink) mode = 'walk';
 
   // 时间：徒步段按剖面里的真实爬升折算（Naismith），机动车段仍按均速。
+  // 里程经绕行修正的段，剖面本身就是那条绕山公路的剖面，爬升/下降不可信
+  // （庐山五老峰→三叠泉会算出"爬升 695m"，实际是下行），故不参与计时，
+  // 改按山地栈道配速 3.5km/h 计。
   const kmA = stopKmInRoute(route, fromId, locById);
   const kmB = stopKmInRoute(route, toId, locById);
-  const { ascent, descent } = ascentBetweenProf(route?.prof, kmA, kmB);
+  const { ascent, descent } = noRoadLink
+    ? { ascent: 0, descent: 0 }
+    : ascentBetweenProf(route?.prof, kmA, kmB);
   let minutes = null;
   if (Number.isFinite(meters) && meters > 0) {
     if (mode === 'walk') {
-      minutes = walkMinutes(meters, ascent, descent);
+      minutes = walkMinutes(meters, ascent, descent, noRoadLink ? 3.5 : 4.5);
     } else {
       const speed = MODE_SPEED_KMH[mode] || MODE_SPEED_KMH.walk;
       minutes = Math.max(1, Math.round((meters / 1000) / speed * 60));
