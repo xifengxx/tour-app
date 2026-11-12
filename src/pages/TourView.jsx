@@ -1195,25 +1195,53 @@ export default function TourView() {
               const secs = activeRoute?.sections || [];
               const idx = secs.findIndex(s => s.key === themeSectionKey);
               const sec = idx >= 0 ? secs[idx] : null;
+              // 片区内的邻点：按片区自己的顺序走，不跨片区。
+              const ids = (sec?.stops || []).filter(id => locByIdRef.current[id]);
+              const pos = ids.indexOf(currentLoc.id);
+              const prev = pos > 0 ? locByIdRef.current[ids[pos - 1]] : null;
+              const next = pos >= 0 && pos < ids.length - 1 ? locByIdRef.current[ids[pos + 1]] : null;
+              const navBtn = 'flex h-full w-11 shrink-0 items-center justify-center rounded-xl border border-border bg-background text-foreground active:bg-black/[0.04] disabled:opacity-30 disabled:active:bg-background';
               return (
-                <button
-                  type="button"
-                  onClick={() => setThemeSpotOpen(false)}
-                  className="mx-3 mb-2 flex items-center gap-2.5 rounded-xl border border-primary/25 bg-primary/[0.05] px-3 py-2.5 active:bg-primary/10 transition-colors"
-                >
-                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/15">
-                    <ChevronLeft className="h-4 w-4 text-primary" />
-                  </span>
-                  <span className="flex-1 min-w-0 text-left leading-tight">
-                    <span className="block text-[10px] text-muted-foreground">返回片区</span>
-                    <span className="block text-xs font-serif font-semibold text-foreground truncate">
-                      {sec ? `${cnOrdinal(idx)} ${sec.name}` : '全部片区'}
+                <div className="mx-3 mb-2 flex items-stretch gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setThemeSpotOpen(false)}
+                    className="flex flex-1 min-w-0 items-center gap-2.5 rounded-xl border border-primary/25 bg-primary/[0.05] px-3 py-2.5 active:bg-primary/10 transition-colors"
+                  >
+                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/15">
+                      <ChevronLeft className="h-4 w-4 text-primary" />
                     </span>
-                  </span>
-                  <span className="shrink-0 text-[10px] text-primary/70">
-                    {sec ? `${(sec.stops || []).length} 个点 · 换一个` : '看全部'}
-                  </span>
-                </button>
+                    <span className="flex-1 min-w-0 text-left leading-tight">
+                      <span className="block text-[10px] text-muted-foreground">返回片区</span>
+                      <span className="block text-xs font-serif font-semibold text-foreground truncate">
+                        {sec ? `${cnOrdinal(idx)} ${sec.name}` : '全部片区'}
+                      </span>
+                    </span>
+                    {sec && pos >= 0 && (
+                      <span className="shrink-0 text-[10px] tabular-nums text-muted-foreground">
+                        {pos + 1}/{ids.length}
+                      </span>
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => prev && selectLoc(prev)}
+                    disabled={!prev}
+                    aria-label="上一个地点"
+                    className={navBtn}
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => next && selectLoc(next)}
+                    disabled={!next}
+                    aria-label="下一个地点"
+                    className={navBtn}
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </button>
+                </div>
               );
             })()}
 
