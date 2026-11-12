@@ -162,7 +162,11 @@ const nextLegInfo = (route, stopIdx, locById) => {
   const a = locById[fromId];
   const b = locById[toId];
   const straightM = a && b ? havKm(a, b) * 1000 : null;
-  const meters = detourCorrected(legDistanceM(route, stopIdx, straightM), straightM);
+  const rawMeters = legDistanceM(route, stopIdx, straightM);
+  const meters = detourCorrected(rawMeters, straightM);
+  // 里程被按直线估过，说明这两点之间没有可用的公路连接（否则驾车路径不会绕那么多），
+  // 那就不该配车：庐山五老峰→三叠泉直线 3.6km，却是徒步下行（可乘小火车），不是专车。
+  const noRoadLink = Number.isFinite(rawMeters) && Number.isFinite(meters) && meters !== rawMeters;
 
   // 存量导览的 legs.mode 是管线按"直线距离"判的：天峰岭→悬空寺直线 1.95km < 3km
   // 被判成徒步，实际 7.2km 山路。真实里程一旦超过直线 2 倍且本身超过 3km，
@@ -173,6 +177,8 @@ const nextLegInfo = (route, stopIdx, locById) => {
   // 里程本身也决定交通方式：景区摆渡跑不了 12 公里以上（庐山五老峰→三叠泉
   // 真实 49.6km 仍标"观光车 135 分钟"，实际是山路专车）。只升不降。
   if (meters > 12000 && (mode === 'shuttle' || mode === 'walk')) mode = 'car';
+  // 没有合理公路连接的山路段按徒步处理，覆盖上面按里程做的升格。
+  if (noRoadLink) mode = 'walk';
 
   // 时间：徒步段按剖面里的真实爬升折算（Naismith），机动车段仍按均速。
   const kmA = stopKmInRoute(route, fromId, locById);
