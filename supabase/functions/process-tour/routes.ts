@@ -288,6 +288,16 @@ export function planRoutes(locs: any[], ctx: PlanRoutesContext) {
   const coreN = centerPool.length || 1;
   const cc = { lng: coreCenter.lng / coreN, lat: coreCenter.lat / coreN };
   const routeCenter = ctx.destLoc || cc;
+  // v103：核心池排序确定性化。原来只按 importance 排，importance 相同的点顺序取决于
+  // 上一轮 AI 抽取的先后——同一座山重跑两次，一日线的第 1..N 站就会换。
+  // 补两级稳定判据：离目的地越近越前，再按 id 字典序。这样给定同一批地点，
+  // 排序结果完全可复现（地点集本身由 index.ts 的「沿用既有地点」保证）。
+  const byImpStable = (a: any, b: any) =>
+    (b.importance || 3) - (a.importance || 3)
+    || haversineM(routeCenter, a) - haversineM(routeCenter, b)
+    || String(a.id).localeCompare(String(b.id));
+  corePool.sort(byImpStable);
+  rawCorePool.sort(byImpStable);
   const coherentCorePool = rawCorePool.filter(l => haversineM(routeCenter, l) <= CORE_ROUTE_RADIUS_M);
   // v97：景区标签分组是整条管线里最脆的一环（AI 叫法、锚点清洗名、策展 zone 名
   // 三套语义，黄山线上实测 coreScenic 被 loose 匹配到"温泉景区"这种 1 点子区，

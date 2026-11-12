@@ -696,6 +696,61 @@ Deno.serve(async (req: Request) => {
         }
         if (merged) warnings.push(`🗂 保留 ${merged} 个创作者手工地点（AI 抽取不会产出，原本会被重跑抹掉）`);
         if (renamed) warnings.push(`🏷 清理 ${renamed} 个"目的地-地标"拼接名（路线里不该出现机器名）`);
+
+        // v103 地点集稳定化：AI 每轮抽取出的点名单并不一致，而写库是全删重建，
+        // 于是同一个导览重跑一次，一日线的站就会换一批——
+        // 恒山在"三元宫/真武庙/虎风口"与"魁星阁/恒宗"之间反复跳，用户看到的就是
+        // "每跑一次都不一样"。这里把**本景区内**的旧点全部按名字回填：
+        // 保留原 id 与四层内容，AI 这轮没抽到的点不丢。
+        // 只回填目的地 15km 内的点（地区景点/远处景区仍每轮重算，避免把旧垃圾永久固化）。
+        const coreR = 15000;
+        const coreCenterPt = destLoc || null;
+        let keptRows = 0;
+        for (const row of oldRows) {
+          const name = String(row.name || "");
+          if (!name || !(row.lat && row.lng)) continue;
+          if ((row.tags || []).includes("人工策展")) continue; // 上面已处理
+          if (isDestinationUmbrella(name, destName)) continue;
+          if (JUNK_RE.test(name)) continue;
+          // 没有目的地锚点时不做回填，避免把旧地区点永久固化
+          if (!coreCenterPt) continue;
+          if (haversineM(row, coreCenterPt) > coreR) continue;
+          const key = norm(name);
+          const hit = locs.find((l: any) => norm(l.name) === key);
+          if (hit) {
+            if (Object.keys(hit.layers || {}).length === 0) hit.layers = row.layers || {};
+            if (!(hit.timeline || []).length) hit.timeline = row.timeline || [];
+            if (!(hit.figures || []).length) hit.figures = row.figures || [];
+            if (!(hit.shot || []).length) hit.shot = row.shot || [];
+            if (!hit.elevation) hit.elevation = row.elevation || "";
+            if (row.reflection && !hit.reflection) hit.reflection = row.reflection;
+            if (row.practical && Object.keys(hit.practical || {}).length === 0) hit.practical = row.practical;
+            hit.tags = [...new Set([...(hit.tags || []), ...(row.tags || [])])];
+            keptRows++;
+            continue;
+          }
+          const rawId = String(row.id || "");
+          const slug = rawId.startsWith(`${scope}-`) ? rawId.slice(scope.length + 1) : rawId;
+          locs.push({
+            id: slug,
+            name,
+            lat: row.lat,
+            lng: row.lng,
+            elevation: row.elevation || "",
+            importance: row.importance || 4,
+            tags: row.tags || [],
+            layers: row.layers || {},
+            reflection: row.reflection || "",
+            practical: row.practical || {},
+            timeline: row.timeline || [],
+            figures: row.figures || [],
+            shot: row.shot || [],
+            scenic: coreScenicName,
+            sort_order: locs.length,
+          });
+          keptRows++;
+        }
+        if (keptRows) warnings.push(`🔒 沿用 ${keptRows} 个本景区既有地点（重跑不再换血，路线才稳定）`);
       }
     } catch { /* 读旧行失败不阻塞本次生成 */ }
     // 知识分区名（南清园、西海岸）是"片区"而不是景点。AI 会把"景区-片区"整串抽成一个点，
