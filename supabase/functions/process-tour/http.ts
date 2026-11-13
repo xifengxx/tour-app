@@ -33,10 +33,19 @@ export async function postRows(table: string, rows: any[]) {
 // upsert 利用主键 id 合并，未中断前旧行一直可读；最后再删掉本轮不再存在的 id。
 export async function upsertRows(table: string, rows: any[]) {
   if (!rows.length) return;
+  // 同一批里出现重复 id（两个景点归一化后撞到同一行）时，Postgres 会整体拒绝：
+  // "ON CONFLICT DO UPDATE command cannot affect row a second time"。
+  // 之前用 ignore-duplicates 是静默丢行，换成 upsert 后才暴露成 500。
+  const seen = new Map<string, any>();
+  for (const r of rows) seen.set(String(r.id), r);
+  const deduped = [...seen.values()];
+  if (deduped.length !== rows.length) {
+    console.warn(`⚠️ ${table} 有 ${rows.length - deduped.length} 行 id 重复，已按 id 去重（保留最后一条）`);
+  }
   const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}`, {
     method: "POST",
     headers: { ...hdr, Prefer: "resolution=merge-duplicates,return=minimal" },
-    body: JSON.stringify(rows),
+    body: JSON.stringify(deduped),
   });
   if (!res.ok) throw new Error(`UPSERT ${table}: ${res.status} ${await res.text()}`);
 }
