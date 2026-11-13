@@ -1214,9 +1214,13 @@ export default function TourView() {
                       <ChevronLeft className="h-4 w-4 text-primary" />
                     </span>
                     <span className="flex-1 min-w-0 text-left leading-tight">
-                      <span className="block text-[10px] text-muted-foreground">返回片区</span>
+                      {/* 上行说明点它回哪儿，下行是当前地点——切上一个/下一个时下行要跟着变，
+                          否则用户点了箭头，看到标题没动，会以为没切成功。 */}
+                      <span className="block text-[10px] text-muted-foreground truncate">
+                        返回片区{sec ? ` · ${cnOrdinal(idx)} ${sec.name}` : ''}
+                      </span>
                       <span className="block text-xs font-serif font-semibold text-foreground truncate">
-                        {sec ? `${cnOrdinal(idx)} ${sec.name}` : '全部片区'}
+                        {currentLoc.name}
                       </span>
                     </span>
                     {sec && pos >= 0 && (
