@@ -34,6 +34,23 @@ describe("gaode 限流处理", () => {
     expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 
+  it("POI 检索无结果时用地理编码的非行政级结果兜底", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        geocodes: [{
+          location: "114.365446,30.561506",
+          level: "兴趣点",
+          province: "湖北省",
+          city: "武汉市",
+          formatted_address: "湖北省武汉市武昌区东湖路",
+        }],
+      })))
+      .mockImplementation(() => Promise.resolve(new Response(JSON.stringify({ pois: [] }))));
+    const r = await gaode("听涛景区", "湖北省武汉市");
+    expect(r).toEqual({ lng: 114.365446, lat: 30.561506, name: "湖北省武汉市武昌区东湖路" });
+    expect(fetchMock).toHaveBeenCalledTimes(5); // 1 geocode + 4 次 POI 检索（均空）
+  });
+
   it("持续限流时耗尽重试并放弃", async () => {
     vi.useFakeTimers();
     const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(() => Promise.resolve(limited()));

@@ -31,7 +31,10 @@ async function geocodeAddress(name: string, destCity: string): Promise<{ lng: nu
     const d = await res.json();
     const g = (d.geocodes || [])[0];
     if (!g?.location || !g?.level) return null;
-    if (!ADMIN_LEVELS.has(g.level)) return null;
+    // v108：非行政级（兴趣点/住宅区/村庄/道路）结果不再直接丢弃——POI 检索因配额
+    // 打满而全部失败时，这是唯一还能拿到坐标的通道（东湖/天门山实测）。
+    // 精度略低于 POI 点，但已过省市一致性校验，不会跨城漂移。
+    const adminOk = ADMIN_LEVELS.has(g.level);
     // v99.1：geocode 的 city 参数不限制结果——线上实测 geocode("五台山",city=山西)
     // 首条是"江苏省南京市鼓楼区五台山"，level=乡镇 恰好命中白名单，锚点直接漂到
     // 南京并污染整条管线（地区列表/半径闸/子景点扫描三级连穿）。
@@ -43,7 +46,7 @@ async function geocodeAddress(name: string, destCity: string): Promise<{ lng: nu
     if (/^(?:[\u4e00-\u9fa5]{1,10}省)?[\u4e00-\u9fa5]{1,10}市(?:[\u4e00-\u9fa5]{1,10}[区县市])?$/.test(addr)) return null;
     const [lng, lat] = g.location.split(",").map(Number);
     if (!Number.isFinite(lng) || !Number.isFinite(lat)) return null;
-    return { lng, lat, name: addr || name, level: g.level };
+    return { lng, lat, name: addr || name, level: g.level, adminOk };
   } catch {
     return null;
   }
@@ -53,7 +56,7 @@ export async function gaode(name: string, destCity: string, bias?: { lng: number
   // v86a: 行政区名（省/市/区县/乡镇）先走地理编码；编码命中高层级直接返回。
   // 景区名和 POI 名编码会落"兴趣点"级 → 不在 ADMIN_LEVELS → 继续走原有 POI 搜索。
   const geo = await geocodeAddress(name, destCity);
-  if (geo) return { lng: geo.lng, lat: geo.lat, name: cleanName(geo.name) };
+  if (geo?.adminOk) return { lng: geo.lng, lat: geo.lat, name: cleanName(geo.name) };
   const kw = encodeURIComponent(name);
   const biasParam = bias ? `&location=${bias.lng},${bias.lat}` : "";
   const rawCity = (splitRegion(destCity).city || destCity).replace(/[市]$/g, "");
@@ -86,7 +89,13 @@ export async function gaode(name: string, destCity: string, bias?: { lng: number
     matched = overlaps(await query("风景名胜|旅游景点", false));
     if (!matched.length) matched = overlaps(await query(null, false));
   }
-  if (!matched.length) return null;
+  if (!matched.length) {
+    // POI 检索（含重试）全军覆没时的兜底：用地理编码的非行政级结果。
+    // 触发场景主要是高德日配额打满（USER_DAILY_QUERY_OVER_LIMIT），此前会让
+    // 整份导览以「全部地点被拒」失败；坐标已过省市校验，可安全用于定位。
+    if (geo) return { lng: geo.lng, lat: geo.lat, name: cleanName(geo.name) };
+    return null;
+  }
   const top = preferScenic(matched)[0];
   const [lng, lat] = top.location.split(",").map(Number);
   return { lng, lat, name: cleanName(top.name) };
