@@ -249,7 +249,9 @@ Deno.serve(async (req: Request) => {
 
     if (locs.length === 0) {
       // 防御：全部地点被坐标校验拒绝时不静默成功，置 status=error 便于用户看到失败原因
-      throw new Error(`未识别出任何有效地点：AI 提议名单全部被地区坐标校验拒绝。目的地地区「${destRegion}」可能不是规范省/市名（如景点在县级市，请填其上级市，如"河南省郑州市"而非"登封"）。`);
+      // 把逐点原因带出来：否则只看到"全部被拒"，分不清是高德配额、坐标缺失还是地区不匹配
+      const detail = warnings.filter(w => w.includes("已跳过")).slice(0, 6).join(" / ");
+      throw new Error(`未识别出任何有效地点：AI 提议名单全部被地区坐标校验拒绝。目的地地区「${destRegion}」可能不是规范省/市名（如景点在县级市，请填其上级市，如"河南省郑州市"而非"登封"）。${detail ? " 详情：" + detail : ""}`);
     }
     if (locs.length < 3) {
       // v70：1-2 个地点也"成功"等于产出一个空导览 → 按失败处理并给出可操作的提示
