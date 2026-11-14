@@ -46,7 +46,9 @@ async function geocodeAddress(name: string, destCity: string): Promise<{ lng: nu
     if (/^(?:[\u4e00-\u9fa5]{1,10}省)?[\u4e00-\u9fa5]{1,10}市(?:[\u4e00-\u9fa5]{1,10}[区县市])?$/.test(addr)) return null;
     const [lng, lat] = g.location.split(",").map(Number);
     if (!Number.isFinite(lng) || !Number.isFinite(lat)) return null;
-    return { lng, lat, name: addr || name, level: g.level, adminOk };
+    // 兜底路径必须保留原景点名：addr 是「湖北省武汉市武昌区东湖」这类行政区串，
+    // 交给下游会被 poi-filter 的行政区闸判成"行政区名而非景点"整条剔除（东湖实测）。
+    return { lng, lat, name: adminOk ? (addr || name) : name, level: g.level, adminOk };
   } catch {
     return null;
   }

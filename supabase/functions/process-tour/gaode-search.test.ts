@@ -47,7 +47,7 @@ describe("gaode 限流处理", () => {
       })))
       .mockImplementation(() => Promise.resolve(new Response(JSON.stringify({ pois: [] }))));
     const r = await gaode("听涛景区", "湖北省武汉市");
-    expect(r).toEqual({ lng: 114.365446, lat: 30.561506, name: "湖北省武汉市武昌区东湖路" });
+    expect(r).toEqual({ lng: 114.365446, lat: 30.561506, name: "听涛" }); // cleanName 去掉"景区"后缀，保留景点名，避免被行政区闸误杀
     expect(fetchMock).toHaveBeenCalledTimes(5); // 1 geocode + 4 次 POI 检索（均空）
   });
 
