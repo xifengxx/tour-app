@@ -9,7 +9,7 @@ import { regeo } from "./gaode-validation.ts";
 import { canonicalizeMechanicalName, gaodeNearbyCulturalPOIs, isDestinationUmbrella, JUNK_RE, landmarkKey, semanticDedupLocations } from "./gaode-scan.ts";
 import { AMUSE_RE, FACILITY_RE, gaode, gaodeRegionScenics, regeoRegion, regionMatches } from "./gaode-search.ts";
 import { haversineM } from "./geo.ts";
-import { corePoolDiagnostics, filterRouteStops, isRouteStopEligible, mapSectionsToDbIds, orderStopsGeographic, planRoutes as planRoutesModule } from "./routes.ts";
+import { clusterOrderStops, corePoolDiagnostics, filterRouteStops, isRouteStopEligible, mapSectionsToDbIds, orderStopsGeographic, planRoutes as planRoutesModule } from "./routes.ts";
 import { applyTrailGroups, getPrimaryTrailScenicName, getTrailNotes, injectTrailSeeds, orderStopsByTrail } from "./trail-routes.ts";
 import { loadOrResearchRouteKnowledge } from "./route-knowledge.ts";
 import { buildRoutePath } from "./route-paths.ts";
@@ -854,7 +854,11 @@ Deno.serve(async (req: Request) => {
       const trailOrdered = graphOrdered.length
         ? graphOrdered
         : orderStopsByTrail(stopIds, source, routeLoc, destName, routeKnowledge.trails);
-      return trailOrdered.length ? trailOrdered : orderStopsGeographic(stopIds, source, routeLoc);
+      const base = trailOrdered.length ? trailOrdered : orderStopsGeographic(stopIds, source, routeLoc);
+      // 以上三层只按"知识分区"或"最近邻"排序，跨片区仍可能来回穿——东湖实测
+      // 磨山→落雁(东)→省博(西)→绿道(西)→吹笛(东)，9km 折返两次。
+      // 统一在最后做一次地理收口：同片区内连续 + 片区按质心全局最优串联。
+      return base.length >= 4 ? clusterOrderStops(base, source) : base;
     };
 
     // DeepSeek's route step may reference stops by slug, Chinese name, or a
