@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { minimizeOpenPath, orderStopsGeographic } from "./routes.ts";
+import { clusterOrderStops, minimizeOpenPath, orderStopsGeographic } from "./routes.ts";
 
 // 近似的米制距离，用于断言总里程下降
 const pathM = (order: string[], locs: any[]) => {
@@ -66,6 +66,22 @@ describe("minimizeOpenPath 开放链全局优化", () => {
     expect(out[out.length - 1]).toBe("ghost");
     expect(out.slice(0, 2)).toEqual(["a", "b"]);
     expect(Math.abs(out.indexOf("c") - out.indexOf("d"))).toBe(1);
+  });
+
+  it("同一片区的点连续游完，不被别的片区隔开", () => {
+    // 磨山景区 4 点（相距 ~150m）+ 湖西 1 点 + 湖东 1 点
+    const locs = [
+      { id: "sakura", lat: 30.548, lng: 114.406 },
+      { id: "chutian", lat: 30.5477, lng: 114.4071 },
+      { id: "meiyuan", lat: 30.5483, lng: 114.4056 },
+      { id: "zhiwuyuan", lat: 30.5468, lng: 114.4082 },
+      { id: "shengbo", lat: 30.5614, lng: 114.3655 },
+      { id: "chuidi", lat: 30.5767, lng: 114.4323 },
+    ];
+    const out = clusterOrderStops(["sakura", "shengbo", "chuidi", "chutian", "meiyuan", "zhiwuyuan"], locs);
+    const moshan = ["sakura", "chutian", "meiyuan", "zhiwuyuan"].map(id => out.indexOf(id)).sort((a, b) => a - b);
+    expect(moshan[3] - moshan[0]).toBe(3); // 磨山 4 点占据连续 4 个位置
+    expect(out[0]).toBe("sakura"); // 入口最近点起步
   });
 
   it("orderStopsGeographic 的输出已是全局优化后的顺序", () => {

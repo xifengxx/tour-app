@@ -497,7 +497,105 @@ export function orderStopsGeographic(stopIds: string[], locs: any[], entrance?: 
     cur = best;
   }
   if (remaining.size) ordered.push(...remaining);
-  return minimizeOpenPath([...ordered, ...noCoord], locs);
+  return clusterOrderStops([...ordered, ...noCoord], locs);
+}
+
+/**
+ * 按「地理片区」串站：同一片区内的点连续游完，再跨片区。
+ *
+ * 纯全局最短会把同景区拆散（东湖实测：磨山景区里的楚天台/植物园被甩到
+ * 中段，虽然总里程更短，但游览逻辑上"一个景区分三次进"更不合理）。
+ * 因此先用单链接聚类切出片区，片区内部再用 minimizeOpenPath 求最优，
+ * 最后按片区质心排序（含入口的片区起步）。
+ */
+export function clusterOrderStops(stopIds: string[], locs: any[]): string[] {
+  const byId = new Map(locs.map((l: any) => [l.id, l]));
+  const usable = stopIds.filter(id => {
+    const l = byId.get(id);
+    return !!l && Number.isFinite(l.lat) && Number.isFinite(l.lng);
+  });
+  const noCoord = stopIds.filter(id => !usable.includes(id));
+  if (usable.length < 4) return minimizeOpenPath([...usable, ...noCoord], locs);
+
+  // 单链接聚类阈值：取各点最近邻距离中位数的 3 倍，但不低于 500m。
+  // 景区内点间通常在数百米~两公里，片区之间差距一个量级。
+  const near = usable.map(id => {
+    const a = byId.get(id);
+    let best = Infinity;
+    for (const other of usable) {
+      if (other === id) continue;
+      const b = byId.get(other);
+      best = Math.min(best, haversineM(a, b));
+    }
+    return best;
+  }).sort((x, y) => x - y);
+  const median = near[Math.floor(near.length / 2)] || 1000;
+  // 上限收紧到 2km：恒山实测 1.6km 外的悬空寺若被并进山体簇，
+  // 就会夹在山脚殿宇之间，失去"最后去外围峡谷景点"的收尾逻辑。
+  const threshold = Math.max(400, Math.min(1800, median * 2));
+
+  const clusters: string[][] = [];
+  const assigned = new Set<string>();
+  for (const seed of usable) {
+    if (assigned.has(seed)) continue;
+    const group: string[] = [];
+    const queue = [seed];
+    assigned.add(seed);
+    while (queue.length) {
+      const cur = queue.pop()!;
+      group.push(cur);
+      const a = byId.get(cur);
+      for (const other of usable) {
+        if (assigned.has(other)) continue;
+        if (haversineM(a, byId.get(other)) <= threshold) {
+          assigned.add(other);
+          queue.push(other);
+        }
+      }
+    }
+    clusters.push(group);
+  }
+
+  // 片区排序：含首站（入口最近点）的片区起步，其后按簇间最短边贪心
+  const lead = usable[0];
+  const centroids = clusters.map(g => {
+    const lats = g.map(id => byId.get(id).lat);
+    const lngs = g.map(id => byId.get(id).lng);
+    return { lat: lats.reduce((x, y) => x + y, 0) / g.length, lng: lngs.reduce((x, y) => x + y, 0) / g.length };
+  });
+  const startIdx = clusters.findIndex(g => g.includes(lead));
+  const orderedClusters: number[] = startIdx >= 0 ? [startIdx] : [];
+  const usedC = new Set(orderedClusters);
+  let curC = centroids[startIdx >= 0 ? startIdx : 0];
+  while (usedC.size < clusters.length) {
+    let best = -1;
+    let bestD = Infinity;
+    clusters.forEach((g, i) => {
+      if (usedC.has(i)) return;
+      const d = Math.min(...g.map(id => haversineM(byId.get(id), curC)));
+      if (d < bestD) { bestD = d; best = i; }
+    });
+    if (best < 0) break;
+    orderedClusters.push(best);
+    usedC.add(best);
+    curC = centroids[best];
+  }
+  clusters.forEach((_, i) => { if (!usedC.has(i)) orderedClusters.push(i); });
+
+  // 片区内部：各自求最优；首片区从 lead 起步
+  const result: string[] = [];
+  for (const ci of orderedClusters) {
+    const group = clusters[ci];
+    let inner = group;
+    if (group.includes(lead)) {
+      const rest = minimizeOpenPath([lead, ...group.filter(id => id !== lead)], locs);
+      inner = rest;
+    } else {
+      inner = minimizeOpenPath(group, locs);
+    }
+    result.push(...inner);
+  }
+  return [...result, ...noCoord];
 }
 
 /**

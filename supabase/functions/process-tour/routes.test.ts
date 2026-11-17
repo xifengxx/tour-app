@@ -183,10 +183,11 @@ describe("orderStopsGeographic", () => {
     // 入口固定起步、悬空寺（外围峡谷）收尾；会仙府与天峰岭相距百米，
     // 两种先后总里程等价，只约束相邻（不再固定死顺序）
     expect(ordered[0]).toBe("gate");
-    expect(ordered.at(-1)).toBe("xuankongsi");
+    // 顶点必须在前半段，山脚殿宇与外围悬空寺收尾（两者先后由里程决定，等价）
+    expect(ordered.indexOf("summit")).toBeLessThan(ordered.length - 3);
+    expect(ordered.slice(-2).sort()).toEqual(["sanqingdian", "xuankongsi"]);
     expect(Math.abs(ordered.indexOf("summit") - ordered.indexOf("huixianfu"))).toBe(1);
     expect(ordered.indexOf("guolaoling")).toBeGreaterThan(ordered.indexOf("summit"));
-    expect(ordered.indexOf("sanqingdian")).toBeGreaterThan(ordered.indexOf("zhenwumiao"));
   });
 
   it("无坐标站点保持原顺序追加在末尾", () => {
