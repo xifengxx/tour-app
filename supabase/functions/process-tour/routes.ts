@@ -582,6 +582,15 @@ export function clusterOrderStops(stopIds: string[], locs: any[]): string[] {
   }
   clusters.forEach((_, i) => { if (!usedC.has(i)) orderedClusters.push(i); });
 
+  // 片区级也要全局优化，不能只贪心：东湖实测 磨山→落雁→省博(西)→绿道→吹笛(东)，
+  // 西岸串完又折回东岸 9.3km。把片区质心当作点再跑一次 minimizeOpenPath。
+  if (orderedClusters.length >= 4) {
+    const pseudoLocs = clusters.map((g, i) => ({ id: `c${i}`, lat: centroids[i].lat, lng: centroids[i].lng }));
+    const pseudoOrder = minimizeOpenPath(orderedClusters.map(i => `c${i}`), pseudoLocs);
+    orderedClusters.length = 0;
+    for (const pid of pseudoOrder) orderedClusters.push(Number(String(pid).slice(1)));
+  }
+
   // 片区内部：各自求最优；首片区从 lead 起步
   const result: string[] = [];
   for (const ci of orderedClusters) {
