@@ -497,7 +497,66 @@ export function orderStopsGeographic(stopIds: string[], locs: any[], entrance?: 
     cur = best;
   }
   if (remaining.size) ordered.push(...remaining);
-  return [...ordered, ...noCoord];
+  return minimizeOpenPath([...ordered, ...noCoord], locs);
+}
+
+/**
+ * 开放链全局优化（2-opt + 单点重定位 / Or-opt）。
+ *
+ * 贪心最近邻只保证"下一步最近"，在站点分成几簇时会留下一次很远的收尾跳：
+ * 东湖一日线实测 落雁(湖东)→省博(湖西)→绿道→吹笛(湖东) 来回穿湖，
+ * 单段 16.6km，用户看到的就是"路线在绕、来回穿插"。
+ *
+ * 这里以首个站点（已按入口最近点选定）为固定起点，对剩余序列做局部改进：
+ * 反转子段、单点搬位，直到总里程不再下降。点数 ≤ 20，O(n^3) 可接受。
+ * 无坐标站点保持原顺序追加在末尾。
+ */
+export function minimizeOpenPath(stopIds: string[], locs: any[]): string[] {
+  if (stopIds.length < 4) return stopIds;
+  const byId = new Map(locs.map((l: any) => [l.id, l]));
+  const usable = (id: string) => {
+    const l = byId.get(id);
+    return !!l && Number.isFinite(l.lat) && Number.isFinite(l.lng);
+  };
+  const head = stopIds.slice(0, 1);
+  const body = stopIds.slice(1).filter(usable);
+  const noCoord = stopIds.slice(1).filter(id => !usable(id));
+  if (body.length < 2) return [...head, ...body, ...noCoord];
+  const anchor = usable(stopIds[0]) ? stopIds[0] : null;
+  let order = body.slice();
+  const dist = (a: string, b: string) => haversineM(byId.get(a), byId.get(b));
+  const lenOf = (seq: string[]) => {
+    let total = 0;
+    if (anchor) total += dist(anchor, seq[0]);
+    for (let i = 0; i + 1 < seq.length; i++) total += dist(seq[i], seq[i + 1]);
+    return total;
+  };
+  let best = lenOf(order);
+  let improved = true;
+  let guard = 0;
+  while (improved && guard++ < 40) {
+    improved = false;
+    // 2-opt：反转 [i..j]
+    for (let i = 0; i < order.length - 1; i++) {
+      for (let j = i + 1; j < order.length; j++) {
+        const cand = [...order.slice(0, i), ...order.slice(i, j + 1).reverse(), ...order.slice(j + 1)];
+        const len = lenOf(cand);
+        if (len < best - 1) { order = cand; best = len; improved = true; }
+      }
+    }
+    // Or-opt：把一个点搬到别的位置（前进或后退）
+    for (let i = 0; i < order.length; i++) {
+      for (let j = 0; j < order.length; j++) {
+        if (i === j) continue;
+        const cand = order.slice();
+        const [moved] = cand.splice(i, 1);
+        cand.splice(j, 0, moved);
+        const len = lenOf(cand);
+        if (len < best - 1) { order = cand; best = len; improved = true; }
+      }
+    }
+  }
+  return [...(anchor ? [anchor] : head), ...order, ...noCoord];
 }
 
 // ── 路线站点资格（v88）──────────────────────────────────────────────
